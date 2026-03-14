@@ -256,13 +256,34 @@ Pre-configured webhook notifications triggered on Claude Code lifecycle events:
 
 ### Webhook Configuration
 
-Hooks require environment variables to be set. Without them, hooks silently skip. See [`plugins/lazy2work/scripts/.env.example`](plugins/lazy2work/scripts/.env.example) for a template.
+Hooks require environment variables to be set. Without them, hooks silently skip.
 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `CLAUDE_WEBHOOK_URL` | Yes | Webhook endpoint URL |
 | `CLAUDE_WEBHOOK_TOKEN` | No | Auth token |
 | `CLAUDE_WEBHOOK_FORMAT` | No | Payload format (default: `generic`) |
+
+Add these to your shell profile (`~/.zshrc` or `~/.bashrc`) so they persist across sessions:
+
+```bash
+# ~/.zshrc or ~/.bashrc
+
+# Webhook endpoint URL (required — without this, hooks silently skip)
+export CLAUDE_WEBHOOK_URL="https://hooks.slack.com/services/T00/B00/xxx"
+
+# Auth token (optional)
+export CLAUDE_WEBHOOK_TOKEN="your-token-here"
+
+# Payload format: generic, slack, discord, or synology (optional, default: generic)
+export CLAUDE_WEBHOOK_FORMAT="slack"
+```
+
+After editing, apply the changes:
+
+```bash
+source ~/.zshrc   # or source ~/.bashrc
+```
 
 #### Supported Formats
 
