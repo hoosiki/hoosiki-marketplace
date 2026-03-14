@@ -1,0 +1,10 @@
+{
+  "extraKnownMarketplaces": {
+    "langchain-skills": {
+      "source": {
+        "source": "git",
+        "url": "https://github.com/langchain-ai/langchain-skills.git"
+      }
+    }
+  }
+}
