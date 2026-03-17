@@ -19,14 +19,14 @@ import socket
 import sys
 from pathlib import Path
 from urllib.error import URLError
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 from urllib.request import Request, urlopen
 
 # Supported webhook payload formats.
 SUPPORTED_FORMATS: tuple[str, ...] = ("generic", "slack", "discord", "synology")
 
-# Default HTTP request timeout in seconds (configurable via env).
-_REQUEST_TIMEOUT: int = int(os.environ.get("CLAUDE_WEBHOOK_TIMEOUT", "10"))
+# Default HTTP request timeout in seconds (configurable via env, clamped 1–60).
+_REQUEST_TIMEOUT: int = max(1, min(int(os.environ.get("CLAUDE_WEBHOOK_TIMEOUT", "10")), 60))
 
 
 def get_hostname() -> str:
@@ -128,9 +128,9 @@ def send_webhook(
     data: bytes
 
     if fmt == "synology":
-        form_parts: list[str] = [f"payload={json.dumps(payload)}"]
+        form_parts: list[str] = [f"payload={quote(json.dumps(payload))}"]
         if token:
-            form_parts.append(f"token={token}")
+            form_parts.append(f"token={quote(token)}")
         data = "&".join(form_parts).encode("utf-8")
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
     else:
