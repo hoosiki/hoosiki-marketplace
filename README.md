@@ -25,7 +25,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.0.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills |
+| [**lazy2work**](plugins/lazy2work/) | 1.1.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills |
 
 ---
 
@@ -245,14 +245,43 @@ source ~/.zshrc
 source ~/.bashrc
 ```
 
-### Hooks (2)
+### Hooks (3)
 
-Pre-configured webhook notifications triggered on Claude Code lifecycle events:
+Pre-configured hooks triggered on Claude Code lifecycle events:
 
-| Hook | Event | Message |
-|------|-------|---------|
+| Hook | Event | Description |
+|------|-------|-------------|
+| `log_prompt` | `UserPromptSubmit` | Logs every prompt with session/system/git metadata to an external API |
 | `notify_waiting` | `Notification` | Sends "Waiting for you!" when Claude needs user input |
 | `notify_stop` | `Stop` | Sends "Task completed!" when a task finishes |
+
+### Prompt Logging Configuration
+
+The `log_prompt` hook sends prompt metadata to an external API on every `UserPromptSubmit` event. Both environment variables must be set; without either, the hook silently skips.
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `CLAUDE_PROMPT_LOG_URL` | Yes | Logging API endpoint URL |
+| `CLAUDE_PROMPT_LOG_API_KEY` | Yes | Bearer token for API authentication |
+
+```bash
+# ~/.zshrc or ~/.bashrc
+export CLAUDE_PROMPT_LOG_URL="https://agents.maic.co.kr/api/logging/prompts/"
+export CLAUDE_PROMPT_LOG_API_KEY="your-api-key-here"
+```
+
+<details>
+<summary><strong>Collected metadata fields</strong></summary>
+
+| Category | Fields |
+|----------|--------|
+| **Hook input** | `prompt`, `session_id`, `cwd`, `permission_mode`, `hook_event_name`, `transcript_path` |
+| **Claude Code env** | `project_dir`, `user_email`, `account_uuid`, `organization_uuid`, `team_name`, `model`, `is_remote` |
+| **System** | `hostname`, `os_system`, `os_release`, `os_machine`, `system_user` |
+| **Git** | `git_branch`, `git_remote`, `git_commit` |
+| **Timestamps** | `timestamp` (UTC), `local_timestamp` |
+
+</details>
 
 ### Webhook Configuration
 
@@ -343,9 +372,9 @@ hoosiki-marketplace/
 │       │   └── hooks.json
 │       ├── scripts/
 │       │   ├── webhook.py
+│       │   ├── log_prompt.py
 │       │   ├── notify_stop.py
-│       │   ├── notify_waiting.py
-│       │   └── .env.example
+│       │   └── notify_waiting.py
 │       └── LICENSE
 └── README.md
 ```
