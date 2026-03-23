@@ -1,96 +1,333 @@
 # Python Style Rules
 
-> PEP 8 기반 코딩 스타일. ruff를 린터/포매터로 사용한다.
+> PEP 8 based coding style. Uses ruff as linter/formatter.
 
-## 기본 원칙
+## Core Principles
 
-- PEP 8을 기본 스타일 가이드로 따른다.
-- ruff로 자동 검사/수정 가능한 항목은 ruff에 위임한다.
-- ruff가 커버하지 않는 영역만 이 문서에서 명시한다.
+- Follow PEP 8 as the base style guide.
+- Delegate auto-fixable rules to ruff.
+- This document only specifies rules not covered by ruff.
+- All functions and classes must have Google style docstrings.
 
-## 포매팅
+## Formatting
 
-- 들여쓰기: 스페이스 4칸 (탭 금지)
-- 최대 줄 길이: 120자 (ruff `line-length = 120`)
-- 문자열: 큰따옴표(`"`) 기본 사용 (ruff `quote-style = "double"`)
-- trailing comma: 멀티라인 컬렉션에 항상 추가
+- Indentation: 4 spaces (no tabs)
+- Max line length: 120 characters (ruff `line-length = 120`)
+- Strings: double quotes (`"`) by default (ruff `quote-style = "double"`)
+- Trailing comma: always add in multiline collections
+- Blank lines: 2 between top-level definitions, 1 between methods in a class
 
-## 네이밍
+## Naming
 
-| 대상 | 규칙 | 예시 |
-|------|------|------|
-| 모듈/패키지 | `snake_case` | `webhook.py`, `notify_stop.py` |
-| 함수/변수 | `snake_case` | `build_message()`, `event_type` |
-| 클래스 | `PascalCase` | `WebhookClient`, `EventHandler` |
-| 상수 | `UPPER_SNAKE_CASE` | `MAX_RETRIES`, `DEFAULT_TIMEOUT` |
-| private | `_` 접두사 | `_validate_url()`, `_internal_state` |
+| Target | Convention | Example |
+|--------|-----------|---------|
+| Module/Package | `snake_case` | `webhook.py`, `notify_stop.py` |
+| Function/Variable | `snake_case` | `build_message()`, `event_type` |
+| Class | `PascalCase` | `WebhookClient`, `EventHandler` |
+| Constant | `UPPER_SNAKE_CASE` | `MAX_RETRIES`, `DEFAULT_TIMEOUT` |
+| Private | `_` prefix | `_validate_url()`, `_internal_state` |
+| Boolean variable | `is_`/`has_`/`can_` prefix | `is_valid`, `has_token`, `can_retry` |
 
-## Import 규칙
+## Import Rules
 
 ```python
-# 1. 표준 라이브러리
+# 1. Standard library
 import os
 import sys
 from pathlib import Path
 
-# 2. 서드파티
+# 2. Third-party
 import pytest
 from unittest.mock import patch
 
-# 3. 로컬/프로젝트
+# 3. Local/Project
 from webhook import build_message
 ```
 
-- import 그룹 사이에 빈 줄 1개
-- ruff의 `isort` 규칙(`I`)으로 자동 정렬
-- 와일드카드 import(`from x import *`) 금지
-- 순환 import 금지
+- One blank line between import groups
+- Auto-sort with ruff's `isort` rule (`I`)
+- No wildcard imports (`from x import *`)
+- No circular imports
+- No unused imports (`F401`)
 
-## 함수/메서드
+## Functions/Methods
 
-- 함수는 하나의 책임만 가진다.
-- 함수 길이는 50줄 이내를 권장한다.
-- 중첩 함수는 2단계까지만 허용한다.
-- 매개변수는 5개 이내를 권장한다. 초과 시 dataclass 또는 TypedDict 사용을 고려한다.
-
-## 주석 및 Docstring
-
-- 코드가 자명한 경우 주석을 달지 않는다.
-- 복잡한 비즈니스 로직이나 비직관적인 결정에만 주석을 단다.
-- public 함수/클래스에는 docstring을 작성한다 (Google style).
+- Each function has a single responsibility (Single Responsibility Principle).
+- Function length should be under 50 lines.
+- Nested functions limited to 2 levels.
+- Parameters limited to 5. Use dataclass or TypedDict if more are needed.
+- Prefer early return to reduce nesting.
 
 ```python
-def build_payload(message: str, format_type: str) -> dict:
-    """메시지를 지정된 포맷의 payload로 변환한다.
+# Good — early return
+def process_event(event: Event) -> str:
+    """Process an event and return a result message.
 
     Args:
-        message: 전송할 메시지 본문.
-        format_type: webhook 포맷 ("discord", "slack", "generic").
+        event: The event object to process.
 
     Returns:
-        포맷에 맞는 payload 딕셔너리.
+        A result message string.
+
+    Examples:
+        >>> process_event(Event(type="webhook", data="hello"))
+        "Processed: hello"
+        >>> process_event(Event(type="unknown", data=""))
+        "Skipped: unknown type"
+    """
+    if not event.data:
+        return "Skipped: empty data"
+    if event.type == "unknown":
+        return f"Skipped: {event.type} type"
+    return f"Processed: {event.data}"
+
+
+# Bad — deep nesting
+def process_event(event):
+    if event.data:
+        if event.type != "unknown":
+            return f"Processed: {event.data}"
+        else:
+            return f"Skipped: {event.type} type"
+    else:
+        return "Skipped: empty data"
+```
+
+## Docstring Rules (Google Style) — Required
+
+### Scope
+
+- **All functions** (public and private) must have docstrings.
+- **All classes** must have docstrings.
+- **Modules** should have a brief docstring at the top.
+
+### Structure
+
+Every docstring must include the following sections (where applicable):
+
+1. **Summary** (first line, required) — one-line description of what it does
+2. **Extended description** (optional) — additional details for complex logic
+3. **Args** (required if parameters exist) — description of each parameter
+4. **Returns** (required if return value exists) — description of return value
+5. **Raises** (required if exceptions are raised) — possible exceptions
+6. **Examples** (required) — concrete input/output examples
+
+### Full Example
+
+```python
+def build_payload(message: str, format_type: str) -> dict[str, str]:
+    """Convert a message into a format-specific payload.
+
+    Maps the message to the appropriate key name based on the
+    webhook service's expected format.
+
+    Args:
+        message: The message body to send. Empty strings are not allowed.
+        format_type: Webhook format. One of "discord", "slack", "generic".
+
+    Returns:
+        A payload dictionary matching the specified format.
 
     Raises:
-        ValueError: 지원하지 않는 format_type인 경우.
+        ValueError: If format_type is unsupported or message is empty.
+
+    Examples:
+        >>> build_payload("server started", "discord")
+        {"content": "server started"}
+
+        >>> build_payload("deploy complete", "slack")
+        {"text": "deploy complete"}
+
+        >>> build_payload("notification", "generic")
+        {"text": "notification"}
+
+        >>> build_payload("", "generic")
+        Traceback (most recent call last):
+            ...
+        ValueError: message must not be empty
     """
 ```
 
-## ruff 실행
+### Simple Functions
 
-```bash
-# 린트 검사
-ruff check .
+Even simple functions must have docstring + Examples:
 
-# 자동 수정
-ruff check --fix .
+```python
+def _validate_url(url: str) -> bool:
+    """Validate that a URL uses the http or https scheme.
 
-# 포매팅
-ruff format .
+    Args:
+        url: The URL string to validate.
+
+    Returns:
+        True if the URL is http/https, False otherwise.
+
+    Examples:
+        >>> _validate_url("https://example.com")
+        True
+        >>> _validate_url("ftp://example.com")
+        False
+        >>> _validate_url("not-a-url")
+        False
+    """
+    return url.startswith(("http://", "https://"))
 ```
 
-## 금지 사항
+### Class Docstrings
 
-- `print()` 디버깅 코드를 커밋하지 않는다 (로깅 사용).
-- mutable 기본 인자를 사용하지 않는다 (`def f(items=[])`).
-- bare `except:` 를 사용하지 않는다 (최소 `except Exception:`).
-- 글로벌 변수를 통한 상태 공유를 하지 않는다.
+```python
+class WebhookClient:
+    """Client for sending messages to external webhook services.
+
+    Supports multiple webhook formats (Discord, Slack, Generic)
+    with built-in retry logic and timeout handling.
+
+    Attributes:
+        base_url: The webhook endpoint URL.
+        timeout: Request timeout in seconds. Defaults to 30.
+        format_type: The webhook format type.
+
+    Examples:
+        >>> client = WebhookClient("https://hooks.example.com", format_type="slack")
+        >>> client.send("deploy complete")
+        True
+
+        >>> client = WebhookClient("https://invalid.url", timeout=5)
+        >>> client.send("test")
+        False
+    """
+
+    def __init__(self, base_url: str, timeout: int = 30, format_type: str = "generic") -> None:
+        """Initialize WebhookClient.
+
+        Args:
+            base_url: The webhook endpoint URL.
+            timeout: Request timeout in seconds. Defaults to 30.
+            format_type: Webhook format. Defaults to "generic".
+
+        Raises:
+            ValueError: If base_url does not use http/https scheme.
+
+        Examples:
+            >>> client = WebhookClient("https://hooks.slack.com/services/xxx")
+            >>> client.timeout
+            30
+        """
+```
+
+### Module Docstrings
+
+```python
+"""Webhook delivery module.
+
+Sends notifications to external webhook services when
+Claude Code events occur.
+
+Key functions:
+    - send_webhook: Send a payload to a webhook URL.
+    - build_payload: Create a format-specific payload.
+    - run: Read environment variables and execute webhook delivery.
+"""
+```
+
+## Error Handling
+
+- Catch specific exception types (`except ValueError:`, `except OSError:`).
+- Distinguish between recoverable errors and programming errors.
+- Always handle exceptions for external calls (network, filesystem, etc.).
+- Define custom exceptions per domain, inheriting from `Exception`.
+
+```python
+class WebhookError(Exception):
+    """Base exception for webhook delivery failures.
+
+    Examples:
+        >>> raise WebhookError("delivery failed")
+        Traceback (most recent call last):
+            ...
+        WebhookError: delivery failed
+    """
+
+
+class WebhookTimeoutError(WebhookError):
+    """Exception raised when a webhook request times out.
+
+    Examples:
+        >>> raise WebhookTimeoutError("exceeded 30s")
+        Traceback (most recent call last):
+            ...
+        WebhookTimeoutError: exceeded 30s
+    """
+```
+
+## Logging
+
+- Use the `logging` module instead of `print()`.
+- Create a logger per module: `logger = logging.getLogger(__name__)`
+- Log levels: `DEBUG` (development), `INFO` (operational), `WARNING` (caution), `ERROR` (failure)
+- Use `%s` formatting instead of f-strings (lazy evaluation).
+
+```python
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Good — lazy evaluation
+logger.info("Webhook sent to %s (status=%d)", url, status_code)
+
+# Bad — always formats
+logger.info(f"Webhook sent to {url} (status={status_code})")
+```
+
+## Recommended ruff Configuration
+
+Activate the following rules in `pyproject.toml` or `ruff.toml`:
+
+```toml
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific rules
+    "D",    # pydocstyle (enforce docstrings)
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+```
+
+## Running ruff
+
+```bash
+# Lint check
+ruff check .
+
+# Auto-fix
+ruff check --fix .
+
+# Format
+ruff format .
+
+# Docstring check only
+ruff check --select D .
+```
+
+## Prohibited
+
+- Do not commit `print()` debugging code (use logging).
+- Do not use mutable default arguments (`def f(items=[])`).
+- Do not use bare `except:` (at minimum use `except Exception:`).
+- Do not share state through global variables.
+- Do not commit functions/classes without docstrings.
+- Do not commit functions without an Examples section in the docstring.
+- `TODO` comments must include author and reason: `# TODO(hoosiki): reason`

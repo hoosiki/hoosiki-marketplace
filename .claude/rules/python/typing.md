@@ -1,78 +1,129 @@
 # Python Type Hints Rules
 
-> 점진적 타입 적용 정책. pyright + ruff로 검증한다.
+> Gradual typing policy. Validated with pyright + ruff.
 
-## 기본 원칙
+## Core Principles
 
-- 타입 힌트를 **점진적으로** 적용한다. 모든 코드에 한꺼번에 강제하지 않는다.
-- **새로 작성하는 코드**에는 타입 힌트를 필수로 적용한다.
-- **기존 코드**는 수정 시 해당 함수/클래스에 타입 힌트를 추가한다.
-- pyright를 type checker로, ruff의 type 관련 규칙을 보조로 사용한다.
+- Apply type hints **gradually**. Do not enforce on all code at once.
+- Type hints are **required** for all newly written code.
+- When modifying **existing code**, add type hints to the affected functions/classes.
+- Use pyright as the type checker with ruff's type-related rules as supplementary.
 
-## 적용 범위
+## Scope
 
-### 필수 (새 코드)
+### Required (New Code)
 
-- 모든 public 함수의 매개변수와 반환 타입
-- 클래스 속성 (특히 `__init__`에서 정의하는 인스턴스 변수)
-- 모듈 레벨 상수/변수
+- All function parameters and return types (public + private)
+- Class attributes (especially instance variables defined in `__init__`)
+- Module-level constants/variables
 
 ```python
 def send_webhook(url: str, token: str, payload: dict[str, str]) -> bool:
+    """Send a webhook notification.
+
+    Args:
+        url: The webhook endpoint URL.
+        token: Authentication token.
+        payload: Data to send.
+
+    Returns:
+        Whether the delivery was successful.
+
+    Examples:
+        >>> send_webhook("https://example.com/hook", "tok", {"text": "hi"})
+        True
+    """
     ...
 
+
 class WebhookClient:
+    """Webhook client.
+
+    Attributes:
+        base_url: The webhook endpoint URL.
+        timeout: Request timeout in seconds.
+
+    Examples:
+        >>> client = WebhookClient("https://hooks.example.com")
+        >>> client.timeout
+        30
+    """
+
     base_url: str
     timeout: int
 
     def __init__(self, base_url: str, timeout: int = 30) -> None:
+        """Initialize WebhookClient.
+
+        Args:
+            base_url: The webhook endpoint URL.
+            timeout: Request timeout in seconds. Defaults to 30.
+
+        Examples:
+            >>> client = WebhookClient("https://hooks.example.com", timeout=10)
+            >>> client.base_url
+            "https://hooks.example.com"
+        """
         self.base_url = base_url
         self.timeout = timeout
 ```
 
-### 권장 (기존 코드 수정 시)
+### Recommended (When Modifying Existing Code)
 
-- 수정하는 함수에 타입 힌트 추가
-- 해당 함수가 호출하는 내부 헬퍼에도 가능하면 추가
+- Add type hints to the function being modified
+- Add type hints to internal helpers called by that function when possible
 
-### 선택 (나중에)
+### Optional (Later)
 
-- 테스트 코드 (fixture 반환 타입 등)
-- 단순한 스크립트/일회성 코드
-- private 헬퍼 함수의 지역 변수
+- Test code (fixture return types, etc.)
+- Simple scripts / one-off code
+- Local variables (where pyright can infer the type)
 
-## 타입 표기 규칙
+## Type Annotation Rules
 
-### 모던 문법 사용 (Python 3.10+)
+### Use Modern Syntax (Python 3.10+)
 
 ```python
-# Good — 내장 타입 직접 사용
+# Good — use built-in types directly
 def process(items: list[str]) -> dict[str, int]:
+    """Process items and return a frequency dictionary.
+
+    Args:
+        items: List of strings to process.
+
+    Returns:
+        A dictionary mapping each string to its occurrence count.
+
+    Examples:
+        >>> process(["a", "b", "a"])
+        {"a": 2, "b": 1}
+    """
     result: str | None = None
     ...
 
-# Bad — typing 모듈에서 import
+
+# Bad — import from typing module
 from typing import List, Dict, Optional
 def process(items: List[str]) -> Dict[str, int]:
     result: Optional[str] = None
 ```
 
-### 주요 패턴
+### Common Patterns
 
 ```python
-from collections.abc import Callable, Sequence, Mapping
-from typing import Any, TypeAlias
+from collections.abc import Callable, Sequence, Mapping, Iterator
+from typing import Any, TypeAlias, TypeGuard
 
-# Union → | 연산자
+# Union → | operator
 value: str | int | None
 
 # Callable
 handler: Callable[[str, int], bool]
 
-# TypeAlias (복잡한 타입)
+# TypeAlias (complex types)
 Payload: TypeAlias = dict[str, str | int | list[str]]
 
-# TypedDict (구조화된 dict)
+# TypedDict (structured dicts)
 from typing import TypedDict
 
 class WebhookConfig(TypedDict):
@@ -82,9 +133,100 @@ class WebhookConfig(TypedDict):
     timeout: int
 ```
 
-## pyright 설정
+### Advanced Patterns
 
-프로젝트 루트에 `pyrightconfig.json`:
+#### Protocol (Structural Subtyping)
+
+Use Protocol instead of interfaces to express duck typing in a type-safe way:
+
+```python
+from typing import Protocol
+
+
+class Sendable(Protocol):
+    """Protocol for objects capable of sending messages.
+
+    Examples:
+        >>> class SlackSender:
+        ...     def send(self, message: str) -> bool:
+        ...         return True
+        >>> sender: Sendable = SlackSender()  # OK — structurally compatible
+    """
+
+    def send(self, message: str) -> bool: ...
+
+
+def notify(sender: Sendable, message: str) -> None:
+    """Send a message using any object implementing the Sendable protocol.
+
+    Args:
+        sender: An object with a send() method.
+        message: The message to send.
+
+    Examples:
+        >>> class MockSender:
+        ...     def send(self, message: str) -> bool:
+        ...         return True
+        >>> notify(MockSender(), "hello")  # works
+    """
+    sender.send(message)
+```
+
+#### TypeGuard (Type Narrowing)
+
+```python
+from typing import TypeGuard
+
+
+def is_string_list(val: list[object]) -> TypeGuard[list[str]]:
+    """Check whether all elements in a list are strings.
+
+    Args:
+        val: The list to check.
+
+    Returns:
+        True if all elements are str.
+
+    Examples:
+        >>> is_string_list(["a", "b"])
+        True
+        >>> is_string_list(["a", 1])
+        False
+    """
+    return all(isinstance(x, str) for x in val)
+```
+
+#### overload (Overloaded Signatures)
+
+```python
+from typing import overload
+
+
+@overload
+def get_value(key: str, default: None = None) -> str | None: ...
+@overload
+def get_value(key: str, default: str) -> str: ...
+def get_value(key: str, default: str | None = None) -> str | None:
+    """Return the value for the given key.
+
+    Args:
+        key: The key to look up.
+        default: Value to return if key is not found.
+
+    Returns:
+        The value for the key, or the default.
+
+    Examples:
+        >>> get_value("name")  # default=None → str | None
+        >>> get_value("name", "unknown")  # default=str → str
+        "unknown"
+    """
+    ...
+```
+
+## pyright Configuration
+
+Place `pyrightconfig.json` at the project root:
 
 ```json
 {
@@ -92,27 +234,41 @@ class WebhookConfig(TypedDict):
   "pythonVersion": "3.10",
   "reportMissingTypeStubs": false,
   "reportUnknownMemberType": false,
+  "reportUnnecessaryTypeIgnoreComment": true,
+  "reportUnusedImport": true,
   "include": ["plugins", "tests"],
-  "exclude": ["**/__pycache__", ".ruff_cache"]
+  "exclude": ["**/__pycache__", ".ruff_cache", ".pytest_cache"]
 }
 ```
 
-- `basic` 모드에서 시작하여 점진적으로 `standard`로 올린다.
-- 새 모듈을 추가할 때 `include`에 반영한다.
+- Start with `basic` mode, gradually upgrade to `standard`.
+- Update `include` when adding new modules.
+- `reportUnnecessaryTypeIgnoreComment` detects stale `type: ignore` comments.
 
-## ruff 연계 규칙
+## ruff Integration
 
-ruff에서 활성화할 type 관련 규칙:
+Type-related rules to activate in ruff:
 
-- `UP` (pyupgrade): 레거시 타입 표기를 모던 문법으로 자동 변환
-- `ANN` (flake8-annotations): 타입 힌트 누락 경고 (새 파일에만 적용 권장)
-- `TCH` (flake8-type-checking): `TYPE_CHECKING` 블록 최적화
+```toml
+[tool.ruff.lint]
+select = [
+    "UP",   # pyupgrade — auto-convert legacy type annotations to modern syntax
+    "ANN",  # flake8-annotations — warn on missing type hints
+    "TCH",  # flake8-type-checking — optimize TYPE_CHECKING blocks
+    "RET",  # flake8-return — return type consistency
+]
 
-## 금지 사항
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["ANN"]  # skip annotation warnings in test code
+```
 
-- `Any`를 편의를 위해 남용하지 않는다. 정말 any 타입이 필요한 경우에만 사용한다.
-- `# type: ignore`를 주석 없이 사용하지 않는다. 사유를 반드시 명시한다.
+## Prohibited
+
+- Do not overuse `Any` for convenience. Use it only when truly any type is needed.
+- Do not use `# type: ignore` without a reason. Always specify the justification.
   ```python
-  result = external_lib.call()  # type: ignore[no-untyped-call]  # 라이브러리에 스텁 없음
+  result = external_lib.call()  # type: ignore[no-untyped-call]  # library has no stubs
   ```
-- `cast()`를 남용하지 않는다. 타입 좁히기(`isinstance`, 패턴 매칭)를 우선 사용한다.
+- Do not overuse `cast()`. Prefer type narrowing (`isinstance`, pattern matching).
+- Do not overuse `dict[str, Any]`. Use `TypedDict` for dicts with known structure.
+- Do not omit `-> None` return type. Always make it explicit.

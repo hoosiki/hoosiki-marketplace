@@ -25,7 +25,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.1.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills |
+| [**lazy2work**](plugins/lazy2work/) | 1.2.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills |
 
 ---
 
@@ -347,16 +347,44 @@ export CLAUDE_WEBHOOK_FORMAT="synology"
 
 </details>
 
+## Coding Rules (`.claude/rules/`)
+
+Language-specific coding rules auto-loaded by Claude Code. Organized by language:
+
+```
+.claude/rules/
+├── python/
+│   ├── tdd.md              # TDD workflow (Red-Green-Refactor, pytest)
+│   ├── style.md            # PEP 8 + ruff, Google style docstrings with Examples
+│   └── typing.md           # Gradual typing (pyright + ruff, Protocol, TypeGuard)
+└── cpp/
+    ├── style.md            # Google C++ Style Guide, C++20, const correctness
+    ├── testing.md           # Google Test TDD, GMock, parameterized/typed/death tests
+    ├── build.md            # CMake 3.20+, presets, sanitizers, clang-tidy
+    └── memory-safety.md    # RAII, smart pointers, std::expected, concurrency safety
+```
+
 ## Repository Structure
 
 ```
 hoosiki-marketplace/
+├── .claude/
+│   └── rules/                          ← coding rules (auto-loaded by Claude Code)
+│       ├── python/
+│       │   ├── tdd.md
+│       │   ├── style.md
+│       │   └── typing.md
+│       └── cpp/
+│           ├── style.md
+│           ├── testing.md
+│           ├── build.md
+│           └── memory-safety.md
 ├── .claude-plugin/
-│   └── marketplace.json            ← marketplace manifest
+│   └── marketplace.json                ← marketplace manifest
 ├── plugins/
 │   └── lazy2work/
 │       ├── .claude-plugin/
-│       │   └── plugin.json         ← plugin manifest
+│       │   └── plugin.json             ← plugin manifest
 │       ├── skills/
 │       │   ├── analyze-arxiv/
 │       │   │   ├── SKILL.md
@@ -376,6 +404,8 @@ hoosiki-marketplace/
 │       │   ├── notify_stop.py
 │       │   └── notify_waiting.py
 │       └── LICENSE
+├── tests/
+│   └── test_log_prompt.py
 └── README.md
 ```
 
@@ -392,6 +422,27 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
   "category": "utilities"
 }
 ```
+
+## Changelog
+
+### v1.2.0 (2026-03-23)
+
+- **Coding rules**: Added language-specific rules under `.claude/rules/` (Python: TDD, style, typing; C++: style, testing, build, memory-safety)
+- **Python rules**: Google style docstrings with Examples required on all functions, gradual typing with pyright + ruff, PEP 8 enforcement via ruff `D` rules
+- **C++ rules**: Google C++ Style Guide with C++20 features (concepts, ranges, `std::expected`), Google Test TDD with GMock/parameterized/typed/death tests, CMake presets with sanitizer integration, RAII/smart pointer memory safety with concurrency guidelines
+- **Version bump**: 1.1.0 → 1.2.0
+
+### v1.1.0 (2026-03-17)
+
+- **Prompt logging**: Added `UserPromptSubmit` hook for logging prompts with session/system/git metadata to external APIs
+- **Python TDD**: Added TDD rules for test-driven development workflow
+
+### v1.0.0 (2026-03-14)
+
+- Initial release with lazy2work plugin
+- Skills: up2date, analyze-arxiv
+- Setup commands: 7 MCP server installers
+- Hooks: webhook notifications (notify_waiting, notify_stop)
 
 ## License
 

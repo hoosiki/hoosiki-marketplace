@@ -1,114 +1,208 @@
 # C++ Memory Safety Rules
 
-> RAII와 스마트 포인터 중심의 메모리 안전성 규칙. C++20 기준.
+> RAII and smart pointer-centric memory safety rules. Based on C++20.
 
-## 핵심 원칙
+## Core Principles
 
-- **RAII (Resource Acquisition Is Initialization)** 를 모든 리소스 관리의 기본으로 한다.
-- `new`/`delete`를 직접 사용하지 않는다.
-- 소유권(ownership)을 타입으로 명시한다.
+- **RAII (Resource Acquisition Is Initialization)** is the foundation for all resource management.
+- Never use `new`/`delete` directly.
+- Express ownership explicitly through types.
+- Prefer value semantics. Use the heap only when necessary.
 
-## 스마트 포인터
+## Smart Pointers
 
-### 소유권 모델
+### Ownership Model
 
-| 포인터 | 소유권 | 사용 시점 |
-|--------|--------|-----------|
-| `std::unique_ptr<T>` | 단독 소유 | 기본 선택. 대부분의 동적 할당 |
-| `std::shared_ptr<T>` | 공유 소유 | 진짜 공유 소유가 필요할 때만 |
-| `T*` (raw pointer) | 비소유 참조 | 소유하지 않는 관찰자. nullable 참조 |
-| `T&` (reference) | 비소유 참조 | 소유하지 않는 관찰자. non-null 보장 |
-| `std::weak_ptr<T>` | 약한 참조 | `shared_ptr` 순환 참조 방지 |
+| Pointer | Ownership | When to Use |
+|---------|-----------|-------------|
+| `std::unique_ptr<T>` | Exclusive | Default choice. Most dynamic allocations |
+| `std::shared_ptr<T>` | Shared | Only when true shared ownership is needed |
+| `T*` (raw pointer) | Non-owning | Observer that does not own. Nullable reference |
+| `T&` (reference) | Non-owning | Observer that does not own. Guaranteed non-null |
+| `std::weak_ptr<T>` | Weak | Breaking `shared_ptr` circular references |
 
-### 사용 규칙
+### Decision Flowchart
+
+```
+Need dynamic allocation?
+├── No → Use value semantics (stack allocation)
+└── Yes → Does ownership transfer?
+    ├── Single owner → std::unique_ptr
+    └── Multiple owners → std::shared_ptr
+        └── Observer only → raw T* or T&
+            └── Need to check if alive → std::weak_ptr
+```
+
+### Usage Rules
 
 ```cpp
-// Good — unique_ptr로 소유권 명시
+// Good — unique_ptr for exclusive ownership
 auto handler = std::make_unique<EventHandler>(config);
 
-// Good — 소유권 이전
+// Good — ownership transfer
 void RegisterHandler(std::unique_ptr<EventHandler> handler);
 registry.RegisterHandler(std::move(handler));
 
-// Good — 비소유 참조 (raw pointer 또는 reference)
+// Good — non-owning reference (raw pointer or reference)
 void ProcessEvent(const EventHandler& handler, const Event& event);
 EventHandler* FindHandler(const std::string& name);  // nullable
 
-// Bad — new/delete 직접 사용
+// Bad — direct new/delete
 EventHandler* handler = new EventHandler(config);
 delete handler;
 
-// Bad — 불필요한 shared_ptr
-auto handler = std::make_shared<EventHandler>(config);  // 공유 필요 없으면 unique_ptr
+// Bad — unnecessary shared_ptr
+auto handler = std::make_shared<EventHandler>(config);  // unique_ptr if not shared
 ```
 
-### make 함수 사용
+### Factory Functions
 
 ```cpp
-// Good
+// Good — always use make functions
 auto ptr = std::make_unique<MyClass>(arg1, arg2);
 auto sptr = std::make_shared<MyClass>(arg1, arg2);
 
-// Bad — 예외 안전성 문제 가능
+// Bad — exception safety issue possible
 std::unique_ptr<MyClass> ptr(new MyClass(arg1, arg2));
 ```
 
-## 컨테이너와 std::span
+## Value Semantics First
+
+Prefer stack allocation and value types. Use dynamic allocation only when needed:
 
 ```cpp
-// Good — std::span으로 배열/버퍼 전달 (소유하지 않음)
+// Good — value on stack
+EventHandler handler(config);
+
+// Good — value in container
+std::vector<Event> events;
+events.emplace_back("webhook", "test data");
+
+// Good — return by value (NRVO applies)
+EventHandler CreateHandler(const Config& config) {
+  EventHandler handler(config);
+  handler.Initialize();
+  return handler;  // Move or NRVO, no copy
+}
+
+// Bad — unnecessary heap allocation
+auto handler = std::make_unique<EventHandler>(config);  // Stack is fine here
+```
+
+## Containers and std::span
+
+```cpp
+// Good — std::span for non-owning view of contiguous memory
 void ProcessItems(std::span<const Item> items);
 
-// Good — 컨테이너가 메모리 관리
+// Good — container manages memory
 std::vector<Item> items;
-items.push_back(Item{.name = "test"});
+items.emplace_back(Item{.name = "test"});
 
-// Bad — C 스타일 배열과 크기 전달
+// Good — fixed-size array
+std::array<int, 4> values = {1, 2, 3, 4};
+
+// Bad — C-style array with size parameter
 void ProcessItems(const Item* items, size_t count);
 ```
 
-- 연속 메모리 참조에는 `std::span` 사용.
-- 동적 배열에는 `std::vector` 사용.
-- 고정 크기 배열에는 `std::array` 사용.
-- C 스타일 배열 (`T[]`, `T*` + size) 금지.
+- Use `std::span` for non-owning contiguous memory references.
+- Use `std::vector` for dynamic arrays.
+- Use `std::array` for fixed-size arrays.
+- C-style arrays (`T[]`, `T*` + size) are prohibited.
 
-## 문자열
+## Strings
 
 ```cpp
-// Good — std::string 소유, std::string_view 참조
+// Good — std::string owns, std::string_view references
 std::string BuildMessage(std::string_view hostname, std::string_view project);
 
-// Bad — C 문자열 직접 관리
+// Good — store as string, pass as string_view
+class Config {
+ public:
+  explicit Config(std::string name) : name_(std::move(name)) {}
+  [[nodiscard]] std::string_view Name() const { return name_; }
+
+ private:
+  std::string name_;  // Owns the string
+};
+
+// Bad — manual C string management
 char* message = (char*)malloc(256);
 sprintf(message, "[%s] %s", hostname, project);
 free(message);
 ```
 
-- 소유하는 문자열: `std::string`
-- 참조하는 문자열: `std::string_view`
-- `char*` 직접 관리 금지.
+- Owning strings: `std::string`
+- Non-owning string references: `std::string_view`
+- Manual `char*` management is prohibited.
+- **Warning**: Never store `std::string_view` that outlives the referenced string.
 
-## 리소스 관리 패턴
+## Optional and Expected
 
-### RAII 래퍼
+### std::optional — Nullable Values
 
 ```cpp
-// 파일 핸들 RAII 래퍼
+// Good — optional to express "value may not exist"
+[[nodiscard]] std::optional<Config> LoadConfig(const std::string& path);
+
+auto config = LoadConfig("config.json");
+if (config.has_value()) {
+  Initialize(*config);
+}
+
+// Good — with value_or for defaults
+const int timeout = config.value_or(DefaultConfig()).timeout;
+
+// Bad — nullptr to represent "absent"
+Config* LoadConfig(const std::string& path);  // Ownership unclear
+```
+
+### std::expected (C++23) — Error Handling
+
+```cpp
+// Good — explicit error type
+[[nodiscard]] std::expected<Config, std::string> LoadConfig(
+    const std::filesystem::path& path);
+
+auto result = LoadConfig("config.json");
+if (!result) {
+  LOG(ERROR) << "Failed: " << result.error();
+  return;
+}
+const auto& config = *result;
+
+// Good — monadic operations (C++23)
+auto timeout = LoadConfig("config.json")
+    .transform([](const Config& c) { return c.timeout; })
+    .value_or(kDefaultTimeout);
+```
+
+## RAII Patterns
+
+### RAII Wrapper
+
+```cpp
+// File handle RAII wrapper
 class FileHandle {
  public:
   explicit FileHandle(const std::filesystem::path& path)
       : file_(std::fopen(path.c_str(), "r")) {
-    if (!file_) throw std::runtime_error("Failed to open file");
+    if (!file_) {
+      throw std::runtime_error(
+          std::format("Failed to open file: {}", path.string()));
+    }
   }
 
   ~FileHandle() {
     if (file_) std::fclose(file_);
   }
 
-  // 복사 금지, 이동 허용
+  // Non-copyable, movable
   FileHandle(const FileHandle&) = delete;
   FileHandle& operator=(const FileHandle&) = delete;
-  FileHandle(FileHandle&& other) noexcept : file_(std::exchange(other.file_, nullptr)) {}
+  FileHandle(FileHandle&& other) noexcept
+      : file_(std::exchange(other.file_, nullptr)) {}
   FileHandle& operator=(FileHandle&& other) noexcept {
     if (this != &other) {
       if (file_) std::fclose(file_);
@@ -117,47 +211,126 @@ class FileHandle {
     return *this;
   }
 
+  [[nodiscard]] FILE* Get() const { return file_; }
+
  private:
   FILE* file_;
 };
 ```
 
-### std::optional로 nullable 대체
+### Scope Guard (for cleanup actions)
 
 ```cpp
-// Good — optional로 "값이 없을 수 있음" 표현
-std::optional<Config> LoadConfig(const std::string& path);
+// Simple scope guard for cleanup
+class ScopeGuard {
+ public:
+  explicit ScopeGuard(std::function<void()> cleanup)
+      : cleanup_(std::move(cleanup)) {}
+  ~ScopeGuard() { if (cleanup_) cleanup_(); }
 
-auto config = LoadConfig("config.json");
-if (config.has_value()) {
-  Initialize(*config);
+  ScopeGuard(const ScopeGuard&) = delete;
+  ScopeGuard& operator=(const ScopeGuard&) = delete;
+
+  void Dismiss() { cleanup_ = nullptr; }
+
+ private:
+  std::function<void()> cleanup_;
+};
+
+// Usage
+void ProcessFile(const std::filesystem::path& path) {
+  auto* resource = AcquireResource();
+  ScopeGuard guard([resource] { ReleaseResource(resource); });
+
+  // Work with resource...
+  // Automatically released even on exception
 }
-
-// Bad — nullptr로 "없음" 표현
-Config* LoadConfig(const std::string& path);  // 소유권 불명확
 ```
 
-## 위험 구역 (필요 시에만)
+## Concurrency Safety
 
-외부 C 라이브러리나 성능 최적화가 필요한 경우:
+### std::jthread — Preferred Thread Type
 
 ```cpp
-// 위험한 코드를 명확히 격리하고 주석을 단다
-// SAFETY: C 라이브러리 호출 — 반환된 포인터는 이 스코프에서만 유효
+// Good — jthread auto-joins and supports cooperative cancellation
+std::jthread worker([](std::stop_token stoken) {
+  while (!stoken.stop_requested()) {
+    ProcessNextItem();
+  }
+});
+// worker automatically joins when destroyed
+
+// Bad — std::thread requires manual join
+std::thread worker([] { /* ... */ });
+// Forgetting worker.join() is undefined behavior
+```
+
+### Mutex and Lock Guidelines
+
+```cpp
+// Good — scoped lock
+std::mutex mutex;
+{
+  const std::scoped_lock lock(mutex);
+  shared_data.Update();
+}
+
+// Good — shared_mutex for read-heavy workloads
+std::shared_mutex rw_mutex;
+{
+  const std::shared_lock read_lock(rw_mutex);  // Multiple readers OK
+  return shared_data.Read();
+}
+{
+  const std::unique_lock write_lock(rw_mutex);  // Exclusive writer
+  shared_data.Write(new_value);
+}
+
+// Bad — manual lock/unlock
+mutex.lock();
+shared_data.Update();
+mutex.unlock();  // Missed if exception thrown
+```
+
+## Unsafe Code Zones (Use Only When Necessary)
+
+For external C libraries or performance-critical code:
+
+```cpp
+// Clearly isolate unsafe code and document safety invariants
+// SAFETY: C library call — returned pointer is valid for the scope of `safe`
 auto* raw = c_library_create();
 auto safe = std::unique_ptr<CType, decltype(&c_library_destroy)>(
     raw, c_library_destroy);
 ```
 
-- raw pointer 사용 시 `// SAFETY:` 주석으로 안전성 근거를 명시한다.
-- C 라이브러리 자원은 커스텀 deleter를 가진 `unique_ptr`로 즉시 감싼다.
+- Document `// SAFETY:` when using raw pointers with safety justification.
+- Wrap C library resources in `unique_ptr` with custom deleter immediately.
 
-## 금지 사항
+## Sanitizer Usage
 
-- `new`/`delete` 직접 사용 금지 (`make_unique`/`make_shared` 사용).
-- `malloc`/`free`/`realloc` 금지 (C++ 컨테이너 사용).
-- dangling pointer/reference 생성 금지.
-- `std::shared_ptr` 남용 금지 (소유권이 명확하면 `unique_ptr`).
-- 초기화하지 않은 변수 사용 금지.
-- C 스타일 캐스트 `(int)x` 금지 (`static_cast<int>(x)` 사용).
-- `void*`로 타입 정보 우회 금지 (`std::variant`, `std::any` 사용).
+Run sanitizers regularly (see build.md for CMake integration):
+
+| Sanitizer | Detects | Flag |
+|-----------|---------|------|
+| AddressSanitizer (ASan) | Buffer overflows, use-after-free, double-free | `-fsanitize=address` |
+| UndefinedBehaviorSanitizer (UBSan) | Signed overflow, null deref, alignment | `-fsanitize=undefined` |
+| ThreadSanitizer (TSan) | Data races, deadlocks | `-fsanitize=thread` |
+| MemorySanitizer (MSan) | Uninitialized reads | `-fsanitize=memory` |
+
+- ASan + UBSan should be the default CI configuration.
+- TSan should be used for concurrent code.
+- ASan and TSan cannot be used together (separate CI jobs).
+
+## Prohibited
+
+- No direct `new`/`delete` (use `make_unique`/`make_shared`).
+- No `malloc`/`free`/`realloc` (use C++ containers).
+- No dangling pointers/references.
+- No `std::shared_ptr` overuse (use `unique_ptr` when ownership is clear).
+- No uninitialized variables.
+- No C-style casts `(int)x` (use `static_cast<int>(x)`).
+- No `void*` for type erasure (use `std::variant`, `std::any`, or templates).
+- No `std::thread` (use `std::jthread`).
+- No manual `mutex.lock()`/`mutex.unlock()` (use `scoped_lock` / `unique_lock`).
+- No storing `std::string_view` beyond the lifetime of the source string.
