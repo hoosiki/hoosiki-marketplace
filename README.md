@@ -25,7 +25,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.2.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills |
+| [**lazy2work**](plugins/lazy2work/) | 1.3.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills |
 
 ---
 
@@ -349,19 +349,23 @@ export CLAUDE_WEBHOOK_FORMAT="synology"
 
 ## Coding Rules (`.claude/rules/`)
 
-Language-specific coding rules auto-loaded by Claude Code. Organized by language:
+Language-specific coding rules auto-loaded by Claude Code. Each rule file includes path-based frontmatter so it only activates for matching file types.
 
 ```
 .claude/rules/
-├── python/
-│   ├── tdd.md              # TDD workflow (Red-Green-Refactor, pytest)
-│   ├── style.md            # PEP 8 + ruff, Google style docstrings with Examples
-│   └── typing.md           # Gradual typing (pyright + ruff, Protocol, TypeGuard)
-└── cpp/
-    ├── style.md            # Google C++ Style Guide, C++20, const correctness
-    ├── testing.md           # Google Test TDD, GMock, parameterized/typed/death tests
-    ├── build.md            # CMake 3.20+, presets, sanitizers, clang-tidy
-    └── memory-safety.md    # RAII, smart pointers, std::expected, concurrency safety
+├── python/                          # Activates for **/*.py, **/*.pyi
+│   ├── tdd.md                       # TDD workflow (Red-Green-Refactor, pytest)
+│   ├── style.md                     # PEP 8 + ruff, Google style docstrings with Examples
+│   └── typing.md                    # Gradual typing (pyright + ruff, Protocol, TypeGuard)
+├── cpp/                             # Activates for **/*.cpp, **/*.cc, **/*.h, **/*.hpp
+│   ├── style.md                     # Google C++ Style Guide, C++20, const correctness
+│   ├── testing.md                   # Google Test TDD, GMock, parameterized/typed/death tests
+│   ├── build.md                     # CMake 3.20+, presets, sanitizers, clang-tidy
+│   └── memory-safety.md            # RAII, smart pointers, std::expected, concurrency safety
+├── js/                              # Activates for **/*.js, **/*.mjs
+│   └── django-vanilla-js.md        # ES modules, CSRF fetch, event delegation, JSDoc
+└── html/                            # Activates for **/*.html, **/templates/**
+    └── django-template.md           # Django templates, HTMX, Tailwind CSS, accessibility
 ```
 
 ## Repository Structure
@@ -374,11 +378,15 @@ hoosiki-marketplace/
 │       │   ├── tdd.md
 │       │   ├── style.md
 │       │   └── typing.md
-│       └── cpp/
-│           ├── style.md
-│           ├── testing.md
-│           ├── build.md
-│           └── memory-safety.md
+│       ├── cpp/
+│       │   ├── style.md
+│       │   ├── testing.md
+│       │   ├── build.md
+│       │   └── memory-safety.md
+│       ├── js/
+│       │   └── django-vanilla-js.md
+│       └── html/
+│           └── django-template.md
 ├── .claude-plugin/
 │   └── marketplace.json                ← marketplace manifest
 ├── plugins/
@@ -424,6 +432,13 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.3.0 (2026-03-23)
+
+- **JS rules**: Added Vanilla JavaScript rules for Django + Tailwind CSS stack — ES modules, CSRF fetch wrapper, event delegation with `data-*` attributes, XSS prevention, Tailwind class management, JSDoc with `@example`
+- **HTML rules**: Added Django Template + HTMX rules — template inheritance, HTMX partials/OOB swaps, Tailwind CSS integration, semantic HTML, accessibility (ARIA), security (`json_script`, auto-escape)
+- **Path frontmatter**: All rule files now include YAML `paths:` frontmatter for automatic file-type scoping (Python: `*.py`/`*.pyi`, C++: `*.cpp`/`*.h`/`*.hpp`, JS: `*.js`/`*.mjs`, HTML: `*.html`/`templates/**`)
+- **Version bump**: 1.2.0 → 1.3.0
 
 ### v1.2.0 (2026-03-23)
 
