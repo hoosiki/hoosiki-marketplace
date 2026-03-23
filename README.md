@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.3.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.4.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.3.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills |
+| [**lazy2work**](plugins/lazy2work/) | 1.4.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills |
 
 ---
 
@@ -351,25 +351,53 @@ export CLAUDE_WEBHOOK_FORMAT="synology"
 
 </details>
 
-## Coding Rules (`.claude/rules/`)
+## Coding Rules
 
-Language-specific coding rules auto-loaded by Claude Code. Each rule file includes path-based frontmatter so it only activates for matching file types.
+Language-specific coding rules bundled inside the plugin and distributed on install. Each rule file includes path-based frontmatter so it only activates for matching file types.
 
 ```
-.claude/rules/
-├── python/                          # Activates for **/*.py, **/*.pyi
+plugins/lazy2work/rules/             ← Source of truth (distributed with plugin)
+├── python/                          # **/*.py, **/*.pyi
 │   ├── tdd.md                       # TDD workflow (Red-Green-Refactor, pytest)
 │   ├── style.md                     # PEP 8 + ruff, Google style docstrings with Examples
 │   └── typing.md                    # Gradual typing (pyright + ruff, Protocol, TypeGuard)
-├── cpp/                             # Activates for **/*.cpp, **/*.cc, **/*.h, **/*.hpp
+├── cpp/                             # **/*.cpp, **/*.cc, **/*.h, **/*.hpp
 │   ├── style.md                     # Google C++ Style Guide, C++20, const correctness
 │   ├── testing.md                   # Google Test TDD, GMock, parameterized/typed/death tests
 │   ├── build.md                     # CMake 3.20+, presets, sanitizers, clang-tidy
 │   └── memory-safety.md            # RAII, smart pointers, std::expected, concurrency safety
-├── js/                              # Activates for **/*.js, **/*.mjs
+├── js/                              # **/*.js, **/*.mjs
 │   └── django-vanilla-js.md        # ES modules, CSRF fetch, event delegation, JSDoc
-└── html/                            # Activates for **/*.html, **/templates/**
+└── html/                            # **/*.html, **/templates/**
     └── django-template.md           # Django templates, HTMX, Tailwind CSS, accessibility
+
+.claude/rules/                       ← Symlinks (auto-loaded by Claude Code)
+├── python → ../../plugins/lazy2work/rules/python
+├── cpp    → ../../plugins/lazy2work/rules/cpp
+├── js     → ../../plugins/lazy2work/rules/js
+└── html   → ../../plugins/lazy2work/rules/html
+```
+
+### Using Rules in Other Projects
+
+After installing the plugin, create symlinks from the cached rules to your project:
+
+```bash
+# Find the plugin cache path
+RULES_SRC=~/.claude/plugins/cache/hoosiki-marketplace/lazy2work/1.4.0/rules
+
+# Symlink into your project
+mkdir -p .claude/rules
+ln -s $RULES_SRC/python .claude/rules/python
+ln -s $RULES_SRC/cpp    .claude/rules/cpp
+ln -s $RULES_SRC/js     .claude/rules/js
+ln -s $RULES_SRC/html   .claude/rules/html
+```
+
+Or apply globally (all projects):
+
+```bash
+ln -s $RULES_SRC/python ~/.claude/rules/python
 ```
 
 ## Repository Structure
@@ -377,20 +405,11 @@ Language-specific coding rules auto-loaded by Claude Code. Each rule file includ
 ```
 hoosiki-marketplace/
 ├── .claude/
-│   └── rules/                          ← coding rules (auto-loaded by Claude Code)
-│       ├── python/
-│       │   ├── tdd.md
-│       │   ├── style.md
-│       │   └── typing.md
-│       ├── cpp/
-│       │   ├── style.md
-│       │   ├── testing.md
-│       │   ├── build.md
-│       │   └── memory-safety.md
-│       ├── js/
-│       │   └── django-vanilla-js.md
-│       └── html/
-│           └── django-template.md
+│   └── rules/                          ← symlinks to plugin rules
+│       ├── python → ../../plugins/lazy2work/rules/python
+│       ├── cpp    → ../../plugins/lazy2work/rules/cpp
+│       ├── js     → ../../plugins/lazy2work/rules/js
+│       └── html   → ../../plugins/lazy2work/rules/html
 ├── .claude-plugin/
 │   └── marketplace.json                ← marketplace manifest
 ├── plugins/
@@ -410,6 +429,11 @@ hoosiki-marketplace/
 │       │       └── (7 MCP install commands)
 │       ├── hooks/
 │       │   └── hooks.json
+│       ├── rules/                      ← coding rules (distributed with plugin)
+│       │   ├── python/
+│       │   ├── cpp/
+│       │   ├── js/
+│       │   └── html/
 │       ├── scripts/
 │       │   ├── webhook.py
 │       │   ├── log_prompt.py
@@ -436,6 +460,12 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.4.0 (2026-03-23)
+
+- **Rules distribution**: Moved all coding rules into `plugins/lazy2work/rules/` so they are distributed when the plugin is installed. `.claude/rules/` now uses symlinks pointing to the plugin directory
+- **Symlink guide**: Added instructions in README for symlinking rules into other projects from the plugin cache
+- **Version bump**: 1.3.0 → 1.4.0
 
 ### v1.3.0 (2026-03-23)
 
