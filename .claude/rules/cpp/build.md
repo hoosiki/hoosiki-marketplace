@@ -1,3 +1,15 @@
+---
+paths:
+  - "**/*.cpp"
+  - "**/*.cc"
+  - "**/*.cxx"
+  - "**/*.h"
+  - "**/*.hpp"
+  - "**/*.hxx"
+  - "**/CMakeLists.txt"
+  - "**/*.cmake"
+---
+
 # C++ Build Rules (CMake)
 
 > Uses CMake as the build system. C++20 standard.

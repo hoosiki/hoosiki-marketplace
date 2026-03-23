@@ -1,3 +1,9 @@
+---
+paths:
+  - "**/*.py"
+  - "**/*.pyi"
+---
+
 # Python TDD (Test-Driven Development) Rules
 
 > Apply TDD principles to all Python files in this project.

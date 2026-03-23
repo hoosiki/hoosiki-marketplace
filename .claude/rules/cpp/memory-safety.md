@@ -1,3 +1,13 @@
+---
+paths:
+  - "**/*.cpp"
+  - "**/*.cc"
+  - "**/*.cxx"
+  - "**/*.h"
+  - "**/*.hpp"
+  - "**/*.hxx"
+---
+
 # C++ Memory Safety Rules
 
 > RAII and smart pointer-centric memory safety rules. Based on C++20.

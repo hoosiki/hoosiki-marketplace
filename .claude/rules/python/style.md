@@ -1,3 +1,9 @@
+---
+paths:
+  - "**/*.py"
+  - "**/*.pyi"
+---
+
 # Python Style Rules
 
 > PEP 8 based coding style. Uses ruff as linter/formatter.

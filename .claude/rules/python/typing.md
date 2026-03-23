@@ -1,3 +1,9 @@
+---
+paths:
+  - "**/*.py"
+  - "**/*.pyi"
+---
+
 # Python Type Hints Rules
 
 > Gradual typing policy. Validated with pyright + ruff.

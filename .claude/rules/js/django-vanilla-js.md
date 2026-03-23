@@ -1,3 +1,9 @@
+---
+paths:
+  - "**/*.js"
+  - "**/*.mjs"
+---
+
 # Vanilla JavaScript Rules for Django Projects
 
 > Rules for `*.js` files in a Django + Tailwind CSS + Vanilla JS + Django Templates stack.

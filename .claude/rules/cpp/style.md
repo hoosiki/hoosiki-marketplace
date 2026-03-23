@@ -1,3 +1,13 @@
+---
+paths:
+  - "**/*.cpp"
+  - "**/*.cc"
+  - "**/*.cxx"
+  - "**/*.h"
+  - "**/*.hpp"
+  - "**/*.hxx"
+---
+
 # C++ Style Rules
 
 > Based on the Google C++ Style Guide. Uses the C++20 standard.

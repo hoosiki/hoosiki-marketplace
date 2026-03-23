@@ -1,3 +1,13 @@
+---
+paths:
+  - "**/*.cpp"
+  - "**/*.cc"
+  - "**/*.cxx"
+  - "**/*.h"
+  - "**/*.hpp"
+  - "**/*.hxx"
+---
+
 # C++ Testing Rules (Google Test)
 
 > TDD-based testing. Uses Google Test as the test framework.
