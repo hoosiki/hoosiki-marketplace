@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.4.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.5.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.4.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills |
+| [**lazy2work**](plugins/lazy2work/) | 1.5.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills |
 
 ---
 
@@ -44,12 +44,13 @@ claude plugin install lazy2work@hoosiki-marketplace
 - Python 3.10+ (for skills scripts and webhook hooks)
 - Node.js 18+ (for MCP setup commands that use `npx`)
 
-### Skills (2)
+### Skills (3)
 
 | Skill | Command | Description |
 |-------|---------|-------------|
 | **up2date** | `/lazy2work:up2date` | Unified updater — checks and updates Homebrew packages, Claude Code skills/plugins, and SuperClaude commands in one go (`--brew` for Homebrew only, `--skill` for skills only) |
 | **analyze-arxiv** | `/lazy2work:analyze-arxiv` | Study arXiv papers — fetches paper content, generates structured summaries, and creates prerequisite knowledge documents for deeper understanding |
+| **constitution-generator** | `/lazy2work:constitution-generator` | Generate optimized `/speckit.constitution` prompts — gathers project info (tech stack, architecture, conventions), detects brownfield patterns, and outputs a verifiable constitution with validation checklist |
 
 <details>
 <summary><strong>up2date — Usage Examples</strong></summary>
@@ -207,6 +208,52 @@ Prerequisites covered:
   - Positional Encoding
   - Sequence-to-Sequence Models
   - BLEU Score
+```
+
+</details>
+
+<details>
+<summary><strong>constitution-generator — Usage Examples</strong></summary>
+
+**Generate a constitution for a new project:**
+
+```
+/lazy2work:constitution-generator Django 6.x + Celery + HTMX project
+```
+
+**Brownfield project (auto-detects existing patterns):**
+
+```
+/lazy2work:constitution-generator analyze this existing codebase
+```
+
+Workflow:
+
+1. Gathers project info (name, tech stack, project type)
+2. For brownfield: reads project structure and detects conventions
+3. Generates a complete `/speckit.constitution` prompt with:
+   - Tech Stack (locked with versions)
+   - Architecture Principles
+   - Coding Conventions
+   - Testing Requirements
+   - Security Principles
+   - Prohibitions (minimum 3 items)
+   - Deployment Target
+4. Validates against anti-patterns (vague rules, missing versions, etc.)
+
+Output: A ready-to-use `/speckit.constitution` prompt text. Every rule is verifiable — no vague guidelines like "write good code."
+
+Validation checklist:
+
+```
+| Check                                          | Pass? |
+|------------------------------------------------|-------|
+| All rules are verifiable                       |  ✅   |
+| Tech stack has specific versions               |  ✅   |
+| Prohibitions section exists and is non-empty   |  ✅   |
+| No feature requirements (belongs in /specify)  |  ✅   |
+| No implementation details (belongs in /plan)   |  ✅   |
+| Each section has 3-7 rules                     |  ✅   |
 ```
 
 </details>
@@ -420,6 +467,9 @@ hoosiki-marketplace/
 │       │   ├── analyze-arxiv/
 │       │   │   ├── SKILL.md
 │       │   │   └── references/
+│       │   ├── constitution-generator/
+│       │   │   ├── SKILL.md
+│       │   │   └── references/
 │       │   └── up2date/
 │       │       ├── SKILL.md
 │       │       ├── scripts/
@@ -460,6 +510,12 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.5.0 (2026-03-24)
+
+- **New skill: constitution-generator** — generates optimized `/speckit.constitution` prompts from project information. Supports greenfield and brownfield projects with automatic convention detection, verifiable rules, and validation checklist
+- **English translation**: Converted all constitution-generator skill files from Korean to English
+- **Version bump**: 1.4.0 → 1.5.0
 
 ### v1.4.0 (2026-03-23)
 
