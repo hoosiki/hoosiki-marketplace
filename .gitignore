@@ -16,3 +16,4 @@ claude-toolkit-plugin-plan.md
 .claude/skills/
 .junie/
 skills-lock.json
+*.skill

@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.6.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.7.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.6.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills |
+| [**lazy2work**](plugins/lazy2work/) | 1.7.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills |
 
 ---
 
@@ -44,13 +44,14 @@ claude plugin install lazy2work@hoosiki-marketplace
 - Python 3.10+ (for skills scripts and webhook hooks)
 - Node.js 18+ (for MCP setup commands that use `npx`)
 
-### Skills (3)
+### Skills (4)
 
 | Skill | Command | Description |
 |-------|---------|-------------|
 | **up2date** | `/lazy2work:up2date` | Unified updater — checks and updates Homebrew packages, Claude Code skills/plugins, and SuperClaude commands in one go (`--brew` for Homebrew only, `--skill` for skills only) |
 | **analyze-arxiv** | `/lazy2work:analyze-arxiv` | Study arXiv papers — fetches paper content, generates structured summaries, and creates prerequisite knowledge documents for deeper understanding |
 | **constitution-generator** | `/lazy2work:constitution-generator` | Generate optimized `/speckit.constitution` prompts — gathers project info (tech stack, architecture, conventions), detects brownfield patterns, and outputs a verifiable constitution with validation checklist |
+| **generate-optimized-spec-kit-prompt** | `/lazy2work:generate-optimized-spec-kit-prompt` | Generate complete Spec Kit prompts (specify/plan/tasks/implement) for all features — splits project into 1-5 day features, generates 4-stage prompts per feature, outputs grouped into files of 5 features each |
 
 <details>
 <summary><strong>up2date — Usage Examples</strong></summary>
@@ -255,6 +256,45 @@ Validation checklist:
 | No implementation details (belongs in /plan)   |  ✅   |
 | Each section has 3-7 rules                     |  ✅   |
 ```
+
+</details>
+
+<details>
+<summary><strong>generate-optimized-spec-kit-prompt — Usage Examples</strong></summary>
+
+**Generate Spec Kit prompts from a constitution file:**
+
+```
+/lazy2work:generate-optimized-spec-kit-prompt @path/to/speckit.constitution
+```
+
+**Generate from a PRD or project description:**
+
+```
+/lazy2work:generate-optimized-spec-kit-prompt @path/to/project-description.md
+```
+
+Workflow:
+
+1. Reads project information from the provided file
+2. Decomposes into features (1-5 day units, independently testable)
+3. Generates 4 optimized prompts per feature:
+   - `/specify` — What + Why (tech-neutral, ends with "What questions do you have?")
+   - `/plan` — How (tech stack, architecture, file refs, exclusions)
+   - `/tasks` — Order (sequence, deps, `[NEW]`/`[MODIFY]`/`[TEST]` tags, 1 task = 1 commit)
+   - `/implement` — Rules (scope `--tasks N-M`, commit strategy, failure behavior)
+4. Writes output to `claudedocs/speckit/{date}/` grouped 5 features per file
+
+Output structure:
+
+```
+claudedocs/speckit/20260324/
+├── features_01-05_20260324.md
+├── features_06-10_20260324.md
+└── features_11-12_20260324.md
+```
+
+Each prompt follows strict stage separation — specify never mentions tech, plan never repeats features, tasks never makes tech decisions, implement never changes design.
 
 </details>
 
@@ -470,6 +510,9 @@ hoosiki-marketplace/
 │       │   ├── constitution-generator/
 │       │   │   ├── SKILL.md
 │       │   │   └── references/
+│       │   ├── generate-optimized-spec-kit-prompt/
+│       │   │   ├── SKILL.md
+│       │   │   └── references/
 │       │   └── up2date/
 │       │       ├── SKILL.md
 │       │       ├── scripts/
@@ -510,6 +553,11 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.7.0 (2026-03-24)
+
+- **New skill: generate-optimized-spec-kit-prompt** — generates complete Spec Kit prompts (specify/plan/tasks/implement) for all project features. Splits project into 1-5 day features, enforces strict 4-stage separation, outputs grouped 5 features per file
+- **Version bump**: 1.6.0 → 1.7.0
 
 ### v1.6.0 (2026-03-24)
 
