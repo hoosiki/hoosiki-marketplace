@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.8.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.9.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.8.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills |
+| [**lazy2work**](plugins/lazy2work/) | 1.9.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills |
 
 ---
 
@@ -44,7 +44,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 - Python 3.10+ (for skills scripts and webhook hooks)
 - Node.js 18+ (for MCP setup commands that use `npx`)
 
-### Skills (4)
+### Skills (5)
 
 | Skill | Command | Description |
 |-------|---------|-------------|
@@ -52,6 +52,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 | **analyze-arxiv** | `/lazy2work:analyze-arxiv` | Study arXiv papers — fetches paper content, generates structured summaries, and creates prerequisite knowledge documents for deeper understanding |
 | **constitution-generator** | `/lazy2work:constitution-generator` | Generate optimized `/speckit.constitution` prompts — gathers project info (tech stack, architecture, conventions), detects brownfield patterns, and outputs a verifiable constitution with validation checklist |
 | **generate-optimized-spec-kit-prompt** | `/lazy2work:generate-optimized-spec-kit-prompt` | Generate complete Spec Kit prompts (specify/plan/tasks/implement) for all features — splits project into 1-5 day features, generates 4-stage prompts per feature, outputs grouped into files of 5 features each |
+| **pyright-setup** | `/lazy2work:pyright-setup` | Auto-configure Pyright for Python projects — detects Python version from venv, adds `[tool.pyright]` to pyproject.toml, resolves "Import could not be resolved" LSP errors in Neovim/VS Code |
 
 <details>
 <summary><strong>up2date — Usage Examples</strong></summary>
@@ -298,6 +299,47 @@ Each prompt follows strict stage separation — specify never mentions tech, pla
 
 </details>
 
+<details>
+<summary><strong>pyright-setup — Usage Examples</strong></summary>
+
+**Auto-configure pyright for current project:**
+
+```
+/lazy2work:pyright-setup
+```
+
+**Configure for a specific project path:**
+
+```
+/lazy2work:pyright-setup /path/to/project
+```
+
+What it does:
+
+1. Detects Python version (priority: `.venv` interpreter → `requires-python` in pyproject.toml → system python3)
+2. Detects virtual environment directory (`.venv`, `venv`, `.env`, `env`)
+3. Adds `[tool.pyright]` section to `pyproject.toml`
+4. Skips if `[tool.pyright]` already exists
+5. Inserts before `[tool.mypy]` if present, otherwise appends
+
+Generated config:
+
+```toml
+# ==== pyright ====
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.13"
+```
+
+Fixes common issues:
+- "Import X could not be resolved" in Neovim (basedpyright) or VS Code (pylance)
+- Pyright not finding packages installed in virtual environment
+- Wrong Python version detection by LSP
+
+</details>
+
 ### Setup Commands (7)
 
 One-command MCP server installers accessible via `/lazy2work:setup:*`:
@@ -513,6 +555,9 @@ hoosiki-marketplace/
 │       │   ├── generate-optimized-spec-kit-prompt/
 │       │   │   ├── SKILL.md
 │       │   │   └── references/
+│       │   ├── pyright-setup/
+│       │   │   ├── SKILL.md
+│       │   │   └── scripts/
 │       │   └── up2date/
 │       │       ├── SKILL.md
 │       │       ├── scripts/
@@ -553,6 +598,11 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.9.0 (2026-03-24)
+
+- **New skill: pyright-setup** — auto-configures Pyright for Python projects by detecting Python version from venv and adding `[tool.pyright]` to pyproject.toml. Fixes "Import could not be resolved" LSP errors in Neovim/VS Code
+- **Version bump**: 1.8.0 → 1.9.0
 
 ### v1.8.0 (2026-03-24)
 
