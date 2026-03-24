@@ -12,3 +12,7 @@ node_modules/
 .ruff_cache/
 claude-toolkit-plugin-plan.md
 /.jbeval/
+.agents/
+.claude/skills/
+.junie/
+skills-lock.json
