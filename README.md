@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.7.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.8.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.7.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills |
+| [**lazy2work**](plugins/lazy2work/) | 1.8.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills |
 
 ---
 
@@ -279,10 +279,10 @@ Workflow:
 1. Reads project information from the provided file
 2. Decomposes into features (1-5 day units, independently testable)
 3. Generates 4 optimized prompts per feature:
-   - `/specify` — What + Why (tech-neutral, ends with "What questions do you have?")
-   - `/plan` — How (tech stack, architecture, file refs, exclusions)
-   - `/tasks` — Order (sequence, deps, `[NEW]`/`[MODIFY]`/`[TEST]` tags, 1 task = 1 commit)
-   - `/implement` — Rules (scope `--tasks N-M`, commit strategy, failure behavior)
+   - `/speckit.specify` — What + Why (tech-neutral, ends with "What questions do you have?")
+   - `/speckit.plan` — How (tech stack, architecture, file refs, exclusions)
+   - `/speckit.tasks` — Order (sequence, deps, `[NEW]`/`[MODIFY]`/`[TEST]` tags, 1 task = 1 commit)
+   - `/speckit.implement` — Rules (scope `--tasks N-M`, commit strategy, failure behavior)
 4. Writes output to `claudedocs/speckit/{date}/` grouped 5 features per file
 
 Output structure:
@@ -553,6 +553,11 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.8.0 (2026-03-24)
+
+- **generate-optimized-spec-kit-prompt: speckit command format** — updated all prompts to use official Spec Kit command syntax (`/speckit.specify`, `/speckit.plan`, `/speckit.tasks`, `/speckit.implement`) instead of bare `/specify`, `/plan`, `/tasks`, `/implement`
+- **Version bump**: 1.7.0 → 1.8.0
 
 ### v1.7.0 (2026-03-24)
 

@@ -1,11 +1,11 @@
 ---
 name: generate-optimized-spec-kit-prompt
-description: Generate optimized GitHub Spec Kit prompts (specify/plan/tasks/implement) for all features of a project. Use when user provides project information via @ file path and wants complete Spec Kit prompts generated. Triggers on "speckit prompts", "generate spec kit", "feature breakdown", "specify plan tasks implement", "SDD prompts", or when user provides a constitution/project file and wants full spec-driven development prompts. Assumes constitution already exists.
+description: Generate optimized GitHub Spec Kit prompts (/speckit.specify, /speckit.plan, /speckit.tasks, /speckit.implement) for all features of a project. Use when user provides project information via @ file path and wants complete Spec Kit prompts generated. Triggers on "speckit prompts", "generate spec kit", "feature breakdown", "specify plan tasks implement", "SDD prompts", or when user provides a constitution/project file and wants full spec-driven development prompts. Assumes constitution already exists.
 ---
 
 # Generate Optimized Spec Kit Prompts
 
-Split a project into features and generate optimized `/specify`, `/plan`, `/tasks`, `/implement` prompts for each feature. Output grouped into files of 5 features each.
+Split a project into features and generate optimized `/speckit.specify`, `/speckit.plan`, `/speckit.tasks`, `/speckit.implement` prompts for each feature. Output grouped into files of 5 features each.
 
 ## Input
 
@@ -40,10 +40,10 @@ Output a numbered feature list for confirmation awareness before proceeding.
 For each feature, generate all 4 prompts following strict stage separation. Read [references/speckit-prompt-guide.md](references/speckit-prompt-guide.md) for the rules on what each stage MUST and MUST NOT include.
 
 **Critical rules:**
-- `/specify` — WHAT + WHY only. Zero tech references. End with "What questions do you have?"
-- `/plan` — HOW only. Tech stack, architecture, file paths. No feature requirements.
-- `/tasks` — ORDER only. Sequence, deps, tags `[NEW]`/`[MODIFY]`/`[TEST]`. No tech decisions.
-- `/implement` — RULES only. Scope `--tasks N-M`, commit strategy, failure behavior. No design changes.
+- `/speckit.specify` — WHAT + WHY only. Zero tech references. End with "What questions do you have?"
+- `/speckit.plan` — HOW only. Tech stack, architecture, file paths. No feature requirements.
+- `/speckit.tasks` — ORDER only. Sequence, deps, tags `[NEW]`/`[MODIFY]`/`[TEST]`. No tech decisions.
+- `/speckit.implement` — RULES only. Scope `--tasks N-M`, commit strategy, failure behavior. No design changes.
 
 ### 4. Write Output Files
 
@@ -76,22 +76,22 @@ claudedocs/speckit/20260324/
 
 ## Feature 1: {Name}
 
-### /specify
+### /speckit.specify
 {full specify prompt}
 
 ---
 
-### /plan
+### /speckit.plan
 {full plan prompt}
 
 ---
 
-### /tasks
+### /speckit.tasks
 {full tasks prompt}
 
 ---
 
-### /implement
+### /speckit.implement
 {full implement prompt}
 
 ---
@@ -108,15 +108,15 @@ After generating all prompts, verify each feature against:
 
 | Check | Rule |
 |-------|------|
-| /specify has no tech terms | Tech-neutral (survives stack change) |
-| /specify ends with "What questions do you have?" | Always present |
-| /specify has Out of Scope section | Prevents AI scope creep |
-| /plan references specific file paths | Not vague "follow patterns" |
-| /plan has explicit exclusions | Prevents AI adding Docker/CI/CD |
-| /tasks uses `[NEW]`/`[MODIFY]`/`[TEST]` tags | Every task tagged |
-| /tasks has 1 task = 1 commit size | Not too large |
-| /implement uses `--tasks N-M` | Never all tasks at once |
-| /implement has failure behavior | Stop and report on failure |
+| /speckit.specify has no tech terms | Tech-neutral (survives stack change) |
+| /speckit.specify ends with "What questions do you have?" | Always present |
+| /speckit.specify has Out of Scope section | Prevents AI scope creep |
+| /speckit.plan references specific file paths | Not vague "follow patterns" |
+| /speckit.plan has explicit exclusions | Prevents AI adding Docker/CI/CD |
+| /speckit.tasks uses `[NEW]`/`[MODIFY]`/`[TEST]` tags | Every task tagged |
+| /speckit.tasks has 1 task = 1 commit size | Not too large |
+| /speckit.implement uses `--tasks N-M` | Never all tasks at once |
+| /speckit.implement has failure behavior | Stop and report on failure |
 | Success criteria are measurable | "< 1s" not "fast" |
 
 ## References

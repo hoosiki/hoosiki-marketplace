@@ -4,12 +4,12 @@
 
 | Stage | Role | Prompt Focus | MUST NOT Include |
 |-------|------|-------------|-----------------|
-| `/specify` | **What + Why** | Features, users, scenarios, constraints | Tech stack, architecture, code |
-| `/plan` | **How** | Tech stack, architecture, existing code refs | Feature requirements (in spec) |
-| `/tasks` | **Order** | Impl sequence, deps, TDD, task size | Tech decisions (in plan) |
-| `/implement` | **Rules** | Scope, commit strategy, code style | Design changes (go back to plan) |
+| `/speckit.specify` | **What + Why** | Features, users, scenarios, constraints | Tech stack, architecture, code |
+| `/speckit.plan` | **How** | Tech stack, architecture, existing code refs | Feature requirements (in spec) |
+| `/speckit.tasks` | **Order** | Impl sequence, deps, TDD, task size | Tech decisions (in plan) |
+| `/speckit.implement` | **Rules** | Scope, commit strategy, code style | Design changes (go back to plan) |
 
-## /specify — Required Fields
+## /speckit.specify — Required Fields
 
 1. Feature name + one-line description
 2. Purpose (Why)
@@ -23,7 +23,7 @@
 
 **Rules**: WHAT & WHY only. No HOW. Tech-neutral (spec survives stack change).
 
-## /plan — Required Fields
+## /speckit.plan — Required Fields
 
 1. Tech stack — language, framework, DB with versions
 2. Architecture pattern — structural decisions
@@ -34,7 +34,7 @@
 
 **Rules**: No feature requirements (already in spec). Reference specific file paths, not vague "follow existing patterns."
 
-## /tasks — Required Fields
+## /speckit.tasks — Required Fields
 
 1. Implementation order — foundation → core → integration
 2. Task size — 1 task = 1 commit
@@ -46,7 +46,7 @@
 
 **Rules**: No tech decisions (already in plan). Keep tasks small.
 
-## /implement — Required Fields
+## /speckit.implement — Required Fields
 
 1. Scope — `--tasks N-M` for partial impl
 2. Commit strategy — per-task commit
@@ -54,7 +54,7 @@
 4. Verification — test after each task
 5. Failure behavior — stop and report on test failure
 
-**Rules**: Never implement all tasks at once. Go back to /plan if design change needed.
+**Rules**: Never implement all tasks at once. Go back to /speckit.plan if design change needed.
 
 ## Feature Sizing
 
@@ -66,8 +66,8 @@
 
 | Anti-Pattern | Correct Approach |
 |-------------|-----------------|
-| Tech stack in /specify | Tech decisions only in /plan |
-| All tasks at once in /implement | `--tasks 1-3` partial impl |
+| Tech stack in /speckit.specify | Tech decisions only in /speckit.plan |
+| All tasks at once in /speckit.implement | `--tasks 1-3` partial impl |
 | Spec change without re-plan | spec change → re-plan → re-tasks |
 | Skip output review | Manual review after each stage |
 | Vague success criteria ("fast") | Measurable ("< 1 second") |

@@ -18,9 +18,9 @@ Examples:
 
 ## Feature {N}: {Feature Name}
 
-### /specify
+### /speckit.specify
 
-/specify {Feature Name}: {one-line description}
+/speckit.specify {Feature Name}: {one-line description}
 
 #### Purpose (Why)
 {2-3 sentences}
@@ -53,9 +53,9 @@ What questions do you have?
 
 ---
 
-### /plan
+### /speckit.plan
 
-/plan
+/speckit.plan
 
 Tech Stack:
 - {language + version}
@@ -75,9 +75,9 @@ Explicit Exclusions:
 
 ---
 
-### /tasks
+### /speckit.tasks
 
-/tasks
+/speckit.tasks
 
 Task Classification:
 - Each task = 1 git commit
@@ -98,9 +98,9 @@ Dependencies:
 
 ---
 
-### /implement
+### /speckit.implement
 
-/implement --tasks 1-{N}
+/speckit.implement --tasks 1-{N}
 
 Implementation Rules:
 - Run tests after each task
