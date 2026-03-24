@@ -227,16 +227,23 @@ def check_user_skills() -> list[dict]:
         return skills
 
     for skill_dir in sorted(SKILLS_DIR.iterdir()):
-        if not skill_dir.is_dir():
+        if not skill_dir.is_dir() and not skill_dir.is_symlink():
             continue
-        skill_md = skill_dir / "SKILL.md"
+        # Resolve symlinks to get the actual path
+        resolved = skill_dir.resolve() if skill_dir.is_symlink() else skill_dir
+        if not resolved.is_dir():
+            continue
+        skill_md = resolved / "SKILL.md"
         info = {
             "name": skill_dir.name,
             "path": str(skill_dir),
-            "has_scripts": (skill_dir / "scripts").exists(),
-            "has_references": (skill_dir / "references").exists(),
-            "has_assets": (skill_dir / "assets").exists(),
+            "source": "user",
+            "has_scripts": (resolved / "scripts").exists(),
+            "has_references": (resolved / "references").exists(),
+            "has_assets": (resolved / "assets").exists(),
         }
+        if skill_dir.is_symlink():
+            info["symlink_target"] = str(resolved)
 
         if skill_md.exists():
             content = skill_md.read_text(encoding="utf-8")
@@ -247,6 +254,53 @@ def check_user_skills() -> list[dict]:
 
         info["registered"] = _is_skill_registered(skill_dir.name)
         skills.append(info)
+
+    return skills
+
+
+def check_plugin_skills() -> list[dict]:
+    """Check skills installed via plugin marketplaces in cache directories."""
+    skills = []
+    if not INSTALLED_PLUGINS_FILE.exists():
+        return skills
+
+    try:
+        data = json.loads(INSTALLED_PLUGINS_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return skills
+
+    for plugin_id, installs in data.get("plugins", {}).items():
+        for inst in installs:
+            install_path = Path(inst.get("installPath", ""))
+            skills_dir = install_path / "skills"
+            if not skills_dir.exists():
+                continue
+
+            for skill_dir in sorted(skills_dir.iterdir()):
+                if not skill_dir.is_dir():
+                    continue
+                skill_md = skill_dir / "SKILL.md"
+                info = {
+                    "name": skill_dir.name,
+                    "path": str(skill_dir),
+                    "source": "plugin",
+                    "plugin_id": plugin_id,
+                    "plugin_version": inst.get("version", "unknown"),
+                    "has_scripts": (skill_dir / "scripts").exists(),
+                    "has_references": (skill_dir / "references").exists(),
+                    "has_assets": (skill_dir / "assets").exists(),
+                }
+
+                if skill_md.exists():
+                    content = skill_md.read_text(encoding="utf-8")
+                    for line in content.split("\n"):
+                        if line.startswith("description:"):
+                            info["description"] = (
+                                line.split(":", 1)[1].strip()[:80]
+                            )
+                            break
+
+                skills.append(info)
 
     return skills
 
@@ -372,7 +426,12 @@ def update_marketplace(name: str, mkt_path: str) -> str:
 
 
 def update_plugin_cache(plugin_id: str, marketplace_name: str) -> str:
-    """Refresh plugin cache to marketplace latest version."""
+    """Refresh plugin cache to marketplace latest version.
+
+    Searches for plugin source in marketplace under:
+      - plugins/{plugin_name}/  (standard marketplace layout)
+      - {plugin_name}/          (flat layout)
+    """
     mkt_path = MARKETPLACES_DIR / marketplace_name
     if not mkt_path.exists():
         return f"Marketplace not found: {marketplace_name}"
@@ -387,26 +446,46 @@ def update_plugin_cache(plugin_id: str, marketplace_name: str) -> str:
 
     plugin_name = plugin_id.split("@")[0]
 
-    skills_src = mkt_path / "skills"
-    if not skills_src.exists():
-        return f"Skills source not found: {skills_src}"
+    # Detect plugin version from plugin.json or marketplace.json
+    new_version = new_sha
+    plugin_json = mkt_path / "plugins" / plugin_name / ".claude-plugin" / "plugin.json"
+    if plugin_json.exists():
+        try:
+            pdata = json.loads(plugin_json.read_text(encoding="utf-8"))
+            new_version = pdata.get("version", new_sha)
+        except (OSError, json.JSONDecodeError):
+            pass
 
-    cache_dest = CACHE_DIR / marketplace_name / plugin_name / new_sha
+    # Find plugin source directory (try standard layout first)
+    plugin_src = mkt_path / "plugins" / plugin_name
+    if not plugin_src.exists():
+        plugin_src = mkt_path / plugin_name
+    if not plugin_src.exists():
+        return f"Plugin source not found in marketplace: {plugin_name}"
+
+    cache_dest = CACHE_DIR / marketplace_name / plugin_name / new_version
 
     if cache_dest.exists():
-        return f"Already up to date: {new_sha}"
+        return f"Already up to date: {new_version}"
 
     cache_dest.mkdir(parents=True, exist_ok=True)
 
-    dest_skills = cache_dest / "skills"
-    shutil.copytree(str(skills_src), str(dest_skills), dirs_exist_ok=True)
+    # Copy all plugin contents (skills, hooks, commands, rules, scripts, etc.)
+    for item in plugin_src.iterdir():
+        if item.name.startswith("."):
+            continue
+        dest_item = cache_dest / item.name
+        if item.is_dir():
+            shutil.copytree(str(item), str(dest_item), dirs_exist_ok=True)
+        else:
+            shutil.copy2(str(item), str(dest_item))
 
     if INSTALLED_PLUGINS_FILE.exists():
         try:
             data = json.loads(INSTALLED_PLUGINS_FILE.read_text(encoding="utf-8"))
             if plugin_id in data.get("plugins", {}):
                 for inst in data["plugins"][plugin_id]:
-                    inst["version"] = new_sha
+                    inst["version"] = new_version
                     inst["gitCommitSha"] = new_full_sha
                     inst["installPath"] = str(cache_dest)
                     inst["lastUpdated"] = datetime.now(timezone.utc).isoformat()
@@ -416,7 +495,7 @@ def update_plugin_cache(plugin_id: str, marketplace_name: str) -> str:
         except (OSError, json.JSONDecodeError) as e:
             return f"installed_plugins.json update failed: {e}"
 
-    return f"Cache refreshed: {plugin_name} -> {new_sha}"
+    return f"Cache refreshed: {plugin_name} {new_version} (was {new_sha[:7] if new_version != new_sha else 'new'})"
 
 
 def update_superclaude() -> str:
@@ -430,29 +509,57 @@ def update_superclaude() -> str:
     return f"SuperClaude update failed:\n{output}"
 
 
+def _print_skill_info(sk: dict) -> None:
+    """Print formatted skill information."""
+    desc = sk.get("description", "No description")
+    print(f"\n  [{sk['source']}] {sk['name']}")
+    print(f"    Path: {sk['path']}")
+    if sk.get("symlink_target"):
+        print(f"    Target: {sk['symlink_target']}")
+    if sk.get("plugin_id"):
+        print(f"    Plugin: {sk['plugin_id']} ({sk.get('plugin_version', '?')})")
+    print(f"    Description: {desc}")
+    parts = []
+    if sk["has_scripts"]:
+        parts.append("scripts")
+    if sk["has_references"]:
+        parts.append("references")
+    if sk["has_assets"]:
+        parts.append("assets")
+    if parts:
+        print(f"    Resources: {', '.join(parts)}")
+
+
 def run_skill() -> None:
     """Run full skill/plugin/SuperClaude check and update."""
     # -- 1. User Skills --
     print_section("User Skills")
     user_skills = check_user_skills()
     if user_skills:
+        print(f"\n  Found {len(user_skills)} user skill(s):")
         for sk in user_skills:
-            status = "Registered" if sk["registered"] else "Not registered"
-            desc = sk.get("description", "No description")
-            print(f"\n  [{status}] {sk['name']}")
-            print(f"    Path: {sk['path']}")
-            print(f"    Description: {desc}")
-            parts = []
-            if sk["has_scripts"]:
-                parts.append("scripts")
-            if sk["has_references"]:
-                parts.append("references")
-            if sk["has_assets"]:
-                parts.append("assets")
-            if parts:
-                print(f"    Resources: {', '.join(parts)}")
+            _print_skill_info(sk)
     else:
-        print("\n  No user skills found")
+        print("\n  No user skills found in ~/.claude/skills/")
+
+    # -- 1b. Plugin Skills --
+    print_section("Plugin Skills")
+    plugin_skills = check_plugin_skills()
+    if plugin_skills:
+        # Group by plugin_id
+        by_plugin: dict[str, list[dict]] = {}
+        for sk in plugin_skills:
+            pid = sk.get("plugin_id", "unknown")
+            by_plugin.setdefault(pid, []).append(sk)
+
+        total = len(plugin_skills)
+        print(f"\n  Found {total} skill(s) from {len(by_plugin)} plugin(s):")
+        for pid, sks in sorted(by_plugin.items()):
+            print(f"\n  --- {pid} ({sks[0].get('plugin_version', '?')}) ---")
+            for sk in sks:
+                _print_skill_info(sk)
+    else:
+        print("\n  No plugin skills found")
 
     # -- 2. Plugins --
     print_section("Plugins")
