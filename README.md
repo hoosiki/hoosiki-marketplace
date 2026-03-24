@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.5.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.6.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.5.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills |
+| [**lazy2work**](plugins/lazy2work/) | 1.6.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills |
 
 ---
 
@@ -510,6 +510,13 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.6.0 (2026-03-24)
+
+- **up2date: plugin skill detection** — `--skill` now scans and displays skills installed via plugin marketplaces (from `~/.claude/plugins/cache/`), grouped by plugin with version info
+- **up2date: improved cache refresh** — `update_plugin_cache()` now finds plugin source under `plugins/{name}/` layout, reads version from `plugin.json`, and copies all plugin contents (skills, hooks, commands, rules)
+- **up2date: symlink support** — user skills in `~/.claude/skills/` that are symlinks are now properly resolved and displayed
+- **Version bump**: 1.5.0 → 1.6.0
 
 ### v1.5.0 (2026-03-24)
 
