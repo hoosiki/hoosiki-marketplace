@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.9.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.10.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.9.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills |
+| [**lazy2work**](plugins/lazy2work/) | 1.10.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills |
 
 ---
 
@@ -44,7 +44,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 - Python 3.10+ (for skills scripts and webhook hooks)
 - Node.js 18+ (for MCP setup commands that use `npx`)
 
-### Skills (5)
+### Skills (6)
 
 | Skill | Command | Description |
 |-------|---------|-------------|
@@ -53,6 +53,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 | **constitution-generator** | `/lazy2work:constitution-generator` | Generate optimized `/speckit.constitution` prompts — gathers project info (tech stack, architecture, conventions), detects brownfield patterns, and outputs a verifiable constitution with validation checklist |
 | **generate-optimized-spec-kit-prompt** | `/lazy2work:generate-optimized-spec-kit-prompt` | Generate complete Spec Kit prompts (specify/plan/tasks/implement) for all features — splits project into 1-5 day features, generates 4-stage prompts per feature, outputs grouped into files of 5 features each |
 | **pyright-setup** | `/lazy2work:pyright-setup` | Auto-configure Pyright for Python projects — detects Python version from venv, adds `[tool.pyright]` to pyproject.toml, resolves "Import could not be resolved" LSP errors in Neovim/VS Code |
+| **apply-all-sc-save** | `/lazy2work:apply-all-sc-save` | Broadcast `/sc:save` to all Claude Code panes in the current tmux session — auto-detects Claude panes, excludes self, supports `--dry-run`, `--all-sessions`, and custom commands |
 
 <details>
 <summary><strong>up2date — Usage Examples</strong></summary>
@@ -340,6 +341,58 @@ Fixes common issues:
 
 </details>
 
+<details>
+<summary><strong>apply-all-sc-save — Usage Examples</strong></summary>
+
+**Save all Claude sessions in current tmux session:**
+
+```
+/lazy2work:apply-all-sc-save
+```
+
+**Preview which panes would receive the command:**
+
+```
+/lazy2work:apply-all-sc-save --dry-run
+```
+
+**Target all tmux sessions:**
+
+```
+/lazy2work:apply-all-sc-save --all-sessions
+```
+
+**Send a custom command instead:**
+
+```
+/lazy2work:apply-all-sc-save --command "/help"
+```
+
+Workflow:
+
+1. Detects current tmux session and own pane ID (`$TMUX_PANE`)
+2. Scans all panes for `pane_current_command == "claude"`
+3. Excludes the current pane (self) to avoid recursive invocation
+4. Sends `/sc:save` + Enter to each discovered Claude pane via `tmux send-keys`
+5. Reports how many panes received the command
+
+Example output:
+
+```
+Scanning session 'claude-research' for Claude panes (excluding self: %3)...
+Found 2 Claude pane(s):
+  sent '/sc:save' to claude-research:1.1
+  sent '/sc:save' to claude-research:2.1
+Done.
+```
+
+Notes:
+- Target Claude instances must be in an **idle state** (waiting for user input)
+- If Claude is mid-execution, keys are buffered and execute when idle
+- Requires tmux to be running
+
+</details>
+
 ### Setup Commands (7)
 
 One-command MCP server installers accessible via `/lazy2work:setup:*`:
@@ -558,6 +611,9 @@ hoosiki-marketplace/
 │       │   ├── pyright-setup/
 │       │   │   ├── SKILL.md
 │       │   │   └── scripts/
+│       │   ├── apply-all-sc-save/
+│       │   │   ├── SKILL.md
+│       │   │   └── scripts/
 │       │   └── up2date/
 │       │       ├── SKILL.md
 │       │       ├── scripts/
@@ -598,6 +654,11 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.10.0 (2026-03-25)
+
+- **New skill: apply-all-sc-save** — broadcasts `/sc:save` to all Claude Code panes in the current tmux session. Auto-detects Claude panes via `pane_current_command`, excludes self, supports `--dry-run`, `--all-sessions`, and custom commands via `--command`
+- **Version bump**: 1.9.0 → 1.10.0
 
 ### v1.9.0 (2026-03-24)
 
