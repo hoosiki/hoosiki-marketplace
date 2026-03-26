@@ -1,59 +1,76 @@
 # Output Format Reference
 
-## File Naming Convention
+## Directory Structure
 
 ```
-claudedocs/speckit/{YYYYMMDD}/features_{batch_start}-{batch_end}_{YYYYMMDD}.md
+.speckit-prompts/
+├── feature-{NNN}-{kebab-case-name}/
+│   ├── 01_specify.md
+│   ├── 02_plan.md
+│   ├── 03_tasks.md
+│   └── 04_implement.md
 ```
 
-Examples:
-- `claudedocs/speckit/20260324/features_01-05_20260324.md`
-- `claudedocs/speckit/20260324/features_06-10_20260324.md`
-- `claudedocs/speckit/20260324/features_11-12_20260324.md`
+## Folder Naming Convention
 
-## Single Feature Output Template
+- Format: `feature-{NNN}-{kebab-case-name}`
+- `{NNN}`: 3자리 zero-padded 번호 (001, 002, ...)
+- `{kebab-case-name}`: feature 이름을 kebab-case로 변환
+- Examples:
+  - `feature-001-user-authentication`
+  - `feature-002-markdown-rendering`
+  - `feature-003-api-endpoints`
+
+## 01_specify.md Template
 
 ```markdown
 ---
-
-## Feature {N}: {Feature Name}
-
-### /speckit.specify
+feature: "{Feature Name}"
+stage: specify
+generated: {YYYY-MM-DD}
+---
 
 /speckit.specify {Feature Name}: {one-line description}
 
-#### Purpose (Why)
+## Purpose (Why)
 {2-3 sentences}
 
-#### Users (Who)
+## Users (Who)
 - {Persona}: {goal}
 
-#### Core Features (What)
+## Core Features (What)
 1. {Feature 1}
 2. {Feature 2}
 ...
 
-#### User Scenarios
-##### Happy Path
+## User Scenarios
+
+### Happy Path
 1. {step}
 
-##### Error: {error name}
+### Error: {error name}
 1. {step}
 
-#### Success Criteria
+## Success Criteria
 - {measurable criterion}
 
-#### Constraints
+## Constraints
 - {constraint}
 
-#### Out of Scope
+## Out of Scope
 - {exclusion}
 
 What questions do you have?
+```
 
+## 02_plan.md Template
+
+```markdown
 ---
-
-### /speckit.plan
+feature: "{Feature Name}"
+stage: plan
+generated: {YYYY-MM-DD}
+---
 
 /speckit.plan
 
@@ -72,10 +89,16 @@ Test Strategy:
 
 Explicit Exclusions:
 - {exclusion}
+```
 
+## 03_tasks.md Template
+
+```markdown
 ---
-
-### /speckit.tasks
+feature: "{Feature Name}"
+stage: tasks
+generated: {YYYY-MM-DD}
+---
 
 /speckit.tasks
 
@@ -95,10 +118,16 @@ Phase 3 (Testing):
 
 Dependencies:
 - {dependency info}
+```
 
+## 04_implement.md Template
+
+```markdown
 ---
-
-### /speckit.implement
+feature: "{Feature Name}"
+stage: implement
+generated: {YYYY-MM-DD}
+---
 
 /speckit.implement --tasks 1-{N}
 

@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.12.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.13.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.12.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills |
+| [**lazy2work**](plugins/lazy2work/) | 1.13.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills |
 
 ---
 
@@ -51,7 +51,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 | **up2date** | `/lazy2work:up2date` | Unified updater — checks and updates Homebrew packages, Claude Code skills/plugins, and SuperClaude commands in one go (`--brew` for Homebrew only, `--skill` for skills only) |
 | **analyze-arxiv** | `/lazy2work:analyze-arxiv` | Study arXiv papers — fetches paper content, generates structured summaries, and creates prerequisite knowledge documents for deeper understanding |
 | **constitution-generator** | `/lazy2work:constitution-generator` | Generate optimized `/speckit.constitution` prompts — gathers project info (tech stack, architecture, conventions), detects brownfield patterns, and outputs a verifiable constitution with validation checklist |
-| **generate-optimized-spec-kit-prompt** | `/lazy2work:generate-optimized-spec-kit-prompt` | Generate complete Spec Kit prompts (specify/plan/tasks/implement) for all features — splits project into 1-5 day features, generates 4-stage prompts per feature, outputs grouped into files of 5 features each |
+| **generate-optimized-spec-kit-prompt** | `/lazy2work:generate-optimized-spec-kit-prompt` | Generate complete Spec Kit prompts (specify/plan/tasks/implement) for all features — splits project into 1-5 day features, generates 4-stage prompts per feature, each feature gets its own folder with individual prompt files |
 | **pyright-setup** | `/lazy2work:pyright-setup` | Auto-configure Pyright for Python projects — detects Python version from venv, adds `[tool.pyright]` to pyproject.toml, resolves "Import could not be resolved" LSP errors in Neovim/VS Code |
 | **apply-all-sc-save** | `/lazy2work:apply-all-sc-save` | Broadcast `/sc:save` to all Claude Code panes in the current tmux session — auto-detects Claude panes, excludes self, supports `--dry-run`, `--all-sessions`, and custom commands |
 
@@ -285,15 +285,27 @@ Workflow:
    - `/speckit.plan` — How (tech stack, architecture, file refs, exclusions)
    - `/speckit.tasks` — Order (sequence, deps, `[NEW]`/`[MODIFY]`/`[TEST]` tags, 1 task = 1 commit)
    - `/speckit.implement` — Rules (scope `--tasks N-M`, commit strategy, failure behavior)
-4. Writes output to `claudedocs/speckit/{date}/` grouped 5 features per file
+4. Writes output to `.speckit-prompts/` with feature-based folder structure
 
 Output structure:
 
 ```
-claudedocs/speckit/20260324/
-├── features_01-05_20260324.md
-├── features_06-10_20260324.md
-└── features_11-12_20260324.md
+.speckit-prompts/
+├── feature-001-user-authentication/
+│   ├── 01_specify.md
+│   ├── 02_plan.md
+│   ├── 03_tasks.md
+│   └── 04_implement.md
+├── feature-002-dashboard/
+│   ├── 01_specify.md
+│   ├── 02_plan.md
+│   ├── 03_tasks.md
+│   └── 04_implement.md
+└── feature-003-api-endpoints/
+    ├── 01_specify.md
+    ├── 02_plan.md
+    ├── 03_tasks.md
+    └── 04_implement.md
 ```
 
 Each prompt follows strict stage separation — specify never mentions tech, plan never repeats features, tasks never makes tech decisions, implement never changes design.
@@ -655,6 +667,11 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 
 ## Changelog
 
+### v1.13.0 (2026-03-27)
+
+- **generate-optimized-spec-kit-prompt: feature-based folder output** — changed output from batch files (`claudedocs/speckit/{date}/features_01-05.md`) to feature-based folders (`.speckit-prompts/feature-{NNN}-{name}/`) with individual `01_specify.md`, `02_plan.md`, `03_tasks.md`, `04_implement.md` files per feature. Each file includes frontmatter with feature name, stage, and generation date
+- **Version bump**: 1.12.0 → 1.13.0
+
 ### v1.12.0 (2026-03-26)
 
 - **up2date: code quality improvements** — added subprocess timeout protection (brew=300s, git=60s) to prevent infinite hangs, atomic writes for `installed_plugins.json` via `tempfile` + `os.replace()`, and consolidated repeated file reads into `_read_installed_plugins()` / `_write_installed_plugins()` helpers
@@ -687,7 +704,7 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 
 ### v1.7.0 (2026-03-24)
 
-- **New skill: generate-optimized-spec-kit-prompt** — generates complete Spec Kit prompts (specify/plan/tasks/implement) for all project features. Splits project into 1-5 day features, enforces strict 4-stage separation, outputs grouped 5 features per file
+- **New skill: generate-optimized-spec-kit-prompt** — generates complete Spec Kit prompts (specify/plan/tasks/implement) for all project features. Splits project into 1-5 day features, enforces strict 4-stage separation
 - **Version bump**: 1.6.0 → 1.7.0
 
 ### v1.6.0 (2026-03-24)

@@ -5,7 +5,7 @@ description: Generate optimized GitHub Spec Kit prompts (/speckit.specify, /spec
 
 # Generate Optimized Spec Kit Prompts
 
-Split a project into features and generate optimized `/speckit.specify`, `/speckit.plan`, `/speckit.tasks`, `/speckit.implement` prompts for each feature. Output grouped into files of 5 features each.
+Split a project into features and generate optimized `/speckit.specify`, `/speckit.plan`, `/speckit.tasks`, `/speckit.implement` prompts for each feature. Each feature gets its own folder with 4 individual prompt files.
 
 ## Input
 
@@ -49,58 +49,32 @@ For each feature, generate all 4 prompts following strict stage separation. Read
 
 Create output directory and write files. See [references/api_reference.md](references/api_reference.md) for the exact output template.
 
-**Directory**: `claudedocs/speckit/{YYYYMMDD}/`
+**Directory**: `.speckit-prompts/` (프로젝트 루트)
 
-**File grouping**: 5 features per file.
+**구조**: feature별 폴더, 각 폴더에 4개 스테이지 파일.
 
 ```
-claudedocs/speckit/20260324/
-├── features_01-05_20260324.md
-├── features_06-10_20260324.md
-└── features_11-12_20260324.md   (remainder)
+.speckit-prompts/
+├── feature-001-user-authentication/
+│   ├── 01_specify.md
+│   ├── 02_plan.md
+│   ├── 03_tasks.md
+│   └── 04_implement.md
+├── feature-002-dashboard/
+│   ├── 01_specify.md
+│   ├── 02_plan.md
+│   ├── 03_tasks.md
+│   └── 04_implement.md
+└── feature-003-api-endpoints/
+    ├── 01_specify.md
+    ├── 02_plan.md
+    ├── 03_tasks.md
+    └── 04_implement.md
 ```
 
-**File structure per batch:**
+**폴더 네이밍**: `feature-{NNN}-{kebab-case-name}` (예: `feature-001-user-authentication`)
 
-```markdown
-# Spec Kit Prompts: {Project Name}
-
-> Generated: {YYYY-MM-DD} | Features {N}-{M} of {Total}
-
-## Feature Index
-1. {Feature 1 name}
-2. {Feature 2 name}
-...
-
----
-
-## Feature 1: {Name}
-
-### /speckit.specify
-{full specify prompt}
-
----
-
-### /speckit.plan
-{full plan prompt}
-
----
-
-### /speckit.tasks
-{full tasks prompt}
-
----
-
-### /speckit.implement
-{full implement prompt}
-
----
-
-## Feature 2: {Name}
-...
-```
-
-If total features <= 4, write a single file: `features_all_{YYYYMMDD}.md`.
+**파일별 내용**: 각 파일은 해당 스테이지의 프롬프트만 포함한다. 파일 상단에 feature 이름과 생성일을 frontmatter로 기록한다.
 
 ## Quality Checklist
 
