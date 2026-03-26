@@ -1,6 +1,6 @@
 ---
 name: apply-all-sc-save
-description: Send /sc:save command to all Claude Code panes running in the current tmux session. Use when user wants to save all Claude sessions at once, says "save all claude", "sc:save all", "tmux save all", "모든 claude 세션 저장", "전체 세션 save", or wants to broadcast /sc:save across tmux panes. Requires tmux to be running.
+description: Send /sc:save command to all Claude Code panes running in the current tmux session. Use when user wants to save all Claude sessions at once, says "save all claude", "sc:save all", "tmux save all", "save all claude sessions", "save all sessions", or wants to broadcast /sc:save across tmux panes. Requires tmux to be running.
 ---
 
 # apply-all-sc-save

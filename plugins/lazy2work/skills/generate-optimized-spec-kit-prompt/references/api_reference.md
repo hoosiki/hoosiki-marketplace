@@ -14,8 +14,8 @@
 ## Folder Naming Convention
 
 - Format: `feature-{NNN}-{kebab-case-name}`
-- `{NNN}`: 3자리 zero-padded 번호 (001, 002, ...)
-- `{kebab-case-name}`: feature 이름을 kebab-case로 변환
+- `{NNN}`: 3-digit zero-padded number (001, 002, ...)
+- `{kebab-case-name}`: feature name converted to kebab-case
 - Examples:
   - `feature-001-user-authentication`
   - `feature-002-markdown-rendering`
@@ -24,12 +24,6 @@
 ## 01_specify.md Template
 
 ```markdown
----
-feature: "{Feature Name}"
-stage: specify
-generated: {YYYY-MM-DD}
----
-
 /speckit.specify {Feature Name}: {one-line description}
 
 ## Purpose (Why)
@@ -66,12 +60,6 @@ What questions do you have?
 ## 02_plan.md Template
 
 ```markdown
----
-feature: "{Feature Name}"
-stage: plan
-generated: {YYYY-MM-DD}
----
-
 /speckit.plan
 
 Tech Stack:
@@ -94,12 +82,6 @@ Explicit Exclusions:
 ## 03_tasks.md Template
 
 ```markdown
----
-feature: "{Feature Name}"
-stage: tasks
-generated: {YYYY-MM-DD}
----
-
 /speckit.tasks
 
 Task Classification:
@@ -123,12 +105,6 @@ Dependencies:
 ## 04_implement.md Template
 
 ```markdown
----
-feature: "{Feature Name}"
-stage: implement
-generated: {YYYY-MM-DD}
----
-
 /speckit.implement --tasks 1-{N}
 
 Implementation Rules:

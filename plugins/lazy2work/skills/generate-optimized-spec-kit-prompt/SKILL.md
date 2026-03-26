@@ -49,9 +49,9 @@ For each feature, generate all 4 prompts following strict stage separation. Read
 
 Create output directory and write files. See [references/api_reference.md](references/api_reference.md) for the exact output template.
 
-**Directory**: `.speckit-prompts/` (프로젝트 루트)
+**Directory**: `.speckit-prompts/` (project root)
 
-**구조**: feature별 폴더, 각 폴더에 4개 스테이지 파일.
+**Structure**: One folder per feature, each containing 4 stage files.
 
 ```
 .speckit-prompts/
@@ -72,9 +72,9 @@ Create output directory and write files. See [references/api_reference.md](refer
     └── 04_implement.md
 ```
 
-**폴더 네이밍**: `feature-{NNN}-{kebab-case-name}` (예: `feature-001-user-authentication`)
+**Folder naming**: `feature-{NNN}-{kebab-case-name}` (e.g., `feature-001-user-authentication`)
 
-**파일별 내용**: 각 파일은 해당 스테이지의 프롬프트만 포함한다. 파일 상단에 feature 이름과 생성일을 frontmatter로 기록한다.
+**File content**: Each file contains only the prompt for that stage. Do not include frontmatter (YAML `---` blocks). The first line of each file must start directly with the `/speckit.specify`, `/speckit.plan`, `/speckit.tasks`, or `/speckit.implement` command.
 
 ## Quality Checklist
 
