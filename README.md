@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.13.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.14.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.13.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills |
+| [**lazy2work**](plugins/lazy2work/) | 1.14.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills |
 
 ---
 
@@ -667,9 +667,15 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 
 ## Changelog
 
+### v1.14.0 (2026-03-27)
+
+- **generate-optimized-spec-kit-prompt: remove frontmatter** — prompt files no longer include YAML frontmatter (`feature`, `stage`, `generated`); each file starts directly with the `/speckit.*` command for immediate copy-paste use
+- **English translation** — all plugin files (SKILL.md, references) translated from Korean to English for international accessibility
+- **Version bump**: 1.13.0 → 1.14.0
+
 ### v1.13.0 (2026-03-27)
 
-- **generate-optimized-spec-kit-prompt: feature-based folder output** — changed output from batch files (`claudedocs/speckit/{date}/features_01-05.md`) to feature-based folders (`.speckit-prompts/feature-{NNN}-{name}/`) with individual `01_specify.md`, `02_plan.md`, `03_tasks.md`, `04_implement.md` files per feature. Each file includes frontmatter with feature name, stage, and generation date
+- **generate-optimized-spec-kit-prompt: feature-based folder output** — changed output from batch files (`claudedocs/speckit/{date}/features_01-05.md`) to feature-based folders (`.speckit-prompts/feature-{NNN}-{name}/`) with individual `01_specify.md`, `02_plan.md`, `03_tasks.md`, `04_implement.md` files per feature
 - **Version bump**: 1.12.0 → 1.13.0
 
 ### v1.12.0 (2026-03-26)
