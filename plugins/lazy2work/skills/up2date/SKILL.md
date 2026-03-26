@@ -52,6 +52,6 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/up2date.py --skill
 - Marketplace updates use `git pull --ff-only` for safety
 - SuperClaude updates use `superclaude update`
 - User skills (`~/.claude/skills/`) are manually managed; only status checks are performed
-- `brew upgrade --cask` skips casks with `auto_updates=true` (use `--greedy` to force)
+- `brew upgrade --cask --greedy` upgrades all casks including those with `auto_updates=true`
 - `brew cleanup --prune=all` removes all cached downloads
 - Summarize script output and report to the user

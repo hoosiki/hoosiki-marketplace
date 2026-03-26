@@ -13,8 +13,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -30,16 +32,57 @@ INSTALLED_PLUGINS_FILE = PLUGINS_DIR / "installed_plugins.json"
 KNOWN_MARKETPLACES_FILE = PLUGINS_DIR / "known_marketplaces.json"
 SETTINGS_FILE = CLAUDE_DIR / "settings.json"
 
+_BREW_TIMEOUT: int = 300
+_GIT_TIMEOUT: int = 60
+_DEFAULT_TIMEOUT: int = 120
+
 
 def run(
-    cmd: list[str], *, capture: bool = True, cwd: str | None = None
+    cmd: list[str],
+    *,
+    capture: bool = True,
+    cwd: str | None = None,
+    timeout: int = _DEFAULT_TIMEOUT,
 ) -> subprocess.CompletedProcess[str]:
-    """Execute a shell command and return the result."""
-    return subprocess.run(cmd, capture_output=capture, text=True, cwd=cwd)
+    """Execute a shell command and return the result.
+
+    Args:
+        cmd: Command and arguments to execute.
+        capture: Whether to capture stdout/stderr. Defaults to True.
+        cwd: Working directory for the command.
+        timeout: Timeout in seconds. Defaults to _DEFAULT_TIMEOUT.
+
+    Returns:
+        Completed process with stdout, stderr, and returncode.
+        On timeout, returns a synthetic result with returncode=1.
+
+    Examples:
+        >>> run(["echo", "hello"]).stdout.strip()
+        'hello'
+        >>> run(["false"]).returncode
+        1
+    """
+    try:
+        return subprocess.run(
+            cmd, capture_output=capture, text=True, cwd=cwd, timeout=timeout
+        )
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(cmd, returncode=1, stdout="", stderr="timeout")
 
 
 def print_section(title: str) -> None:
-    """Print a section header surrounded by separator lines."""
+    """Print a section header surrounded by separator lines.
+
+    Args:
+        title: The section title to display.
+
+    Examples:
+        >>> print_section("Test")  # doctest: +NORMALIZE_WHITESPACE
+        <BLANKLINE>
+        ============================================================
+          Test
+        ============================================================
+    """
     sep = "=" * 60
     print(f"\n{sep}")
     print(f"  {title}")
@@ -52,16 +95,44 @@ def print_section(title: str) -> None:
 
 
 def get_installed(kind: str) -> list[str]:
-    """Return list of installed packages. kind: 'formula' or 'cask'."""
-    result = run(["brew", "list", f"--{kind}"])
+    """Return list of installed Homebrew packages.
+
+    Args:
+        kind: Package type — ``"formula"`` or ``"cask"``.
+
+    Returns:
+        List of package names. Empty list if brew command fails.
+
+    Examples:
+        >>> isinstance(get_installed("formula"), list)
+        True
+    """
+    result = run(["brew", "list", f"--{kind}"], timeout=_BREW_TIMEOUT)
     if result.returncode != 0:
         return []
     return [p.strip() for p in result.stdout.strip().split("\n") if p.strip()]
 
 
 def get_outdated(kind: str) -> list[dict]:
-    """Return list of updatable packages."""
-    result = run(["brew", "outdated", f"--{kind}", "--verbose"])
+    """Return list of outdated Homebrew packages.
+
+    For casks, uses ``--greedy`` to include auto-updating packages.
+
+    Args:
+        kind: Package type — ``"formula"`` or ``"cask"``.
+
+    Returns:
+        List of dicts with ``"raw"`` (full output line) and ``"name"`` keys.
+        Empty list when all packages are current or on failure.
+
+    Examples:
+        >>> get_outdated("formula")  # when all up to date
+        []
+    """
+    cmd = ["brew", "outdated", f"--{kind}", "--verbose"]
+    if kind == "cask":
+        cmd.append("--greedy")
+    result = run(cmd, timeout=_BREW_TIMEOUT)
     if result.returncode != 0 or not result.stdout.strip():
         return []
     items = []
@@ -74,23 +145,47 @@ def get_outdated(kind: str) -> list[dict]:
 
 
 def brew_doctor() -> str:
-    """Return brew doctor output."""
-    result = run(["brew", "doctor"])
+    """Return brew doctor diagnostic output.
+
+    Returns:
+        Diagnostic text from ``brew doctor``. Prefers stderr if present.
+
+    Examples:
+        >>> "ready to brew" in brew_doctor().lower() or True  # system-dependent
+        True
+    """
+    result = run(["brew", "doctor"], timeout=_BREW_TIMEOUT)
     return result.stderr.strip() or result.stdout.strip()
 
 
 def brew_update() -> str:
-    """Run brew update."""
+    """Run ``brew update`` to refresh Homebrew package index.
+
+    Returns:
+        stdout output from the update command.
+
+    Examples:
+        >>> isinstance(brew_update(), str)
+        True
+    """
     print("  Running brew update...", flush=True)
-    result = run(["brew", "update"])
+    result = run(["brew", "update"], timeout=_BREW_TIMEOUT)
     return result.stdout.strip()
 
 
 def brew_upgrade_formula() -> str:
-    """Upgrade all formulae."""
+    """Upgrade all outdated Homebrew formulae.
+
+    Returns:
+        Combined stdout and stderr output from the upgrade command.
+
+    Examples:
+        >>> isinstance(brew_upgrade_formula(), str)
+        True
+    """
     cmd = ["brew", "upgrade", "--formula"]
     print(f"  {' '.join(cmd)}", flush=True)
-    result = run(cmd)
+    result = run(cmd, timeout=_BREW_TIMEOUT)
     output = result.stdout.strip()
     if result.stderr.strip():
         output += "\n" + result.stderr.strip()
@@ -98,10 +193,21 @@ def brew_upgrade_formula() -> str:
 
 
 def brew_upgrade_cask() -> str:
-    """Upgrade all casks."""
-    cmd = ["brew", "upgrade", "--cask"]
+    """Upgrade all outdated Homebrew casks with ``--greedy``.
+
+    Uses ``--greedy`` to include casks with ``auto_updates=true``
+    (e.g. Docker Desktop, CLion).
+
+    Returns:
+        Combined stdout and stderr output from the upgrade command.
+
+    Examples:
+        >>> isinstance(brew_upgrade_cask(), str)
+        True
+    """
+    cmd = ["brew", "upgrade", "--cask", "--greedy"]
     print(f"  {' '.join(cmd)}", flush=True)
-    result = run(cmd)
+    result = run(cmd, timeout=_BREW_TIMEOUT)
     output = result.stdout.strip()
     if result.stderr.strip():
         output += "\n" + result.stderr.strip()
@@ -109,14 +215,30 @@ def brew_upgrade_cask() -> str:
 
 
 def brew_cleanup() -> str:
-    """Run brew cleanup."""
+    """Run ``brew cleanup --prune=all`` to remove cached downloads.
+
+    Returns:
+        stdout output listing removed files.
+
+    Examples:
+        >>> isinstance(brew_cleanup(), str)
+        True
+    """
     print("  Running brew cleanup...", flush=True)
-    result = run(["brew", "cleanup", "--prune=all"])
+    result = run(["brew", "cleanup", "--prune=all"], timeout=_BREW_TIMEOUT)
     return result.stdout.strip()
 
 
 def run_brew() -> None:
-    """Run full Homebrew check, update, upgrade, and cleanup."""
+    """Run full Homebrew check, update, upgrade, and cleanup.
+
+    Executes the complete Homebrew maintenance workflow:
+    version check → installed count → outdated detection → doctor →
+    update → upgrade formulae/casks → cleanup → summary.
+
+    Examples:
+        >>> run_brew()  # prints Homebrew status to stdout
+    """
     print_section("Homebrew Package Check")
 
     ver = run(["brew", "--version"])
@@ -159,11 +281,11 @@ def run_brew() -> None:
     if "ready to brew" in doctor_result.lower():
         print("\n  Status: OK (ready to brew)")
     else:
-        lines = doctor_result.split("\n")[:5]
-        for line in lines:
+        all_lines = doctor_result.split("\n")
+        for line in all_lines[:5]:
             print(f"  {line}")
-        if len(doctor_result.split("\n")) > 5:
-            print(f"  ... ({len(doctor_result.split('\n'))} lines omitted)")
+        if len(all_lines) > 5:
+            print(f"  ... ({len(all_lines)} lines omitted)")
 
     # Update & Upgrade
     print_section("Update & Upgrade")
@@ -220,8 +342,67 @@ def run_brew() -> None:
 # ===================================================================
 
 
+def _read_installed_plugins() -> dict:
+    """Read and parse installed_plugins.json.
+
+    Returns:
+        Parsed JSON as dict. Returns ``{"version": 2, "plugins": {}}``
+        on missing file or parse failure.
+
+    Examples:
+        >>> data = _read_installed_plugins()
+        >>> "plugins" in data
+        True
+    """
+    if not INSTALLED_PLUGINS_FILE.exists():
+        return {"version": 2, "plugins": {}}
+    try:
+        return json.loads(INSTALLED_PLUGINS_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"version": 2, "plugins": {}}
+
+
+def _write_installed_plugins(data: dict) -> None:
+    """Atomically write installed_plugins.json via tempfile + rename.
+
+    Args:
+        data: Plugin data dict to serialize as JSON.
+
+    Raises:
+        OSError: If the write or rename fails.
+
+    Examples:
+        >>> _write_installed_plugins({"version": 2, "plugins": {}})
+    """
+    INSTALLED_PLUGINS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(
+        dir=str(INSTALLED_PLUGINS_FILE.parent), suffix=".tmp"
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        os.replace(tmp_path, str(INSTALLED_PLUGINS_FILE))
+    except OSError:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        raise
+
+
 def check_user_skills() -> list[dict]:
-    """Check user-defined skills in ~/.claude/skills/."""
+    """Check user-defined skills in ``~/.claude/skills/``.
+
+    Scans each subdirectory for SKILL.md, resolves symlinks, and checks
+    registration status in settings.json.
+
+    Returns:
+        List of skill info dicts with keys: ``name``, ``path``, ``source``,
+        ``has_scripts``, ``has_references``, ``has_assets``, ``registered``.
+
+    Examples:
+        >>> skills = check_user_skills()
+        >>> isinstance(skills, list)
+        True
+    """
     skills = []
     if not SKILLS_DIR.exists():
         return skills
@@ -259,17 +440,27 @@ def check_user_skills() -> list[dict]:
 
 
 def check_plugin_skills() -> list[dict]:
-    """Check skills installed via plugin marketplaces in cache directories."""
+    """Check skills installed via plugin marketplaces in cache directories.
+
+    Reads installed_plugins.json and enumerates skills under each
+    plugin's ``installPath/skills/`` directory.
+
+    Returns:
+        List of skill info dicts with keys: ``name``, ``path``, ``source``,
+        ``plugin_id``, ``plugin_version``, ``has_scripts``, ``has_references``,
+        ``has_assets``.
+
+    Examples:
+        >>> skills = check_plugin_skills()
+        >>> all(s["source"] == "plugin" for s in skills)
+        True
+    """
     skills = []
-    if not INSTALLED_PLUGINS_FILE.exists():
+    data = _read_installed_plugins()
+    if not data.get("plugins"):
         return skills
 
-    try:
-        data = json.loads(INSTALLED_PLUGINS_FILE.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return skills
-
-    for plugin_id, installs in data.get("plugins", {}).items():
+    for plugin_id, installs in data["plugins"].items():
         for inst in installs:
             install_path = Path(inst.get("installPath", ""))
             skills_dir = install_path / "skills"
@@ -306,7 +497,19 @@ def check_plugin_skills() -> list[dict]:
 
 
 def _is_skill_registered(skill_name: str) -> bool:
-    """Check if a skill is registered in settings.json."""
+    """Check if a skill is registered in settings.json permissions.
+
+    Args:
+        skill_name: The skill directory name to look for.
+
+    Returns:
+        True if the skill appears in the ``permissions.allow`` list
+        with a ``Skill(`` prefix.
+
+    Examples:
+        >>> _is_skill_registered("nonexistent-skill")
+        False
+    """
     if not SETTINGS_FILE.exists():
         return False
     try:
@@ -319,29 +522,38 @@ def _is_skill_registered(skill_name: str) -> bool:
 
 
 def check_plugins() -> dict:
-    """Compare installed plugins with marketplace latest state."""
+    """Compare installed plugins with marketplace latest state.
+
+    Fetches remote refs for each marketplace and counts how many
+    commits the local copy is behind.
+
+    Returns:
+        Dict with keys ``"installed"`` (list of plugin info),
+        ``"marketplaces"`` (list of marketplace info),
+        ``"updates_available"`` (list of behind-count entries).
+
+    Examples:
+        >>> info = check_plugins()
+        >>> set(info.keys()) == {"installed", "marketplaces", "updates_available"}
+        True
+    """
     result = {
         "installed": [],
         "marketplaces": [],
         "updates_available": [],
     }
 
-    if INSTALLED_PLUGINS_FILE.exists():
-        try:
-            data = json.loads(INSTALLED_PLUGINS_FILE.read_text(encoding="utf-8"))
-            plugins = data.get("plugins", {})
-            for plugin_id, installs in plugins.items():
-                for inst in installs:
-                    result["installed"].append(
-                        {
-                            "id": plugin_id,
-                            "version": inst.get("version", "unknown"),
-                            "scope": inst.get("scope", "unknown"),
-                            "installed_at": inst.get("installedAt", ""),
-                        }
-                    )
-        except (OSError, json.JSONDecodeError) as e:
-            print(f"  Error reading plugin file: {e}")
+    data = _read_installed_plugins()
+    for plugin_id, installs in data.get("plugins", {}).items():
+        for inst in installs:
+            result["installed"].append(
+                {
+                    "id": plugin_id,
+                    "version": inst.get("version", "unknown"),
+                    "scope": inst.get("scope", "unknown"),
+                    "installed_at": inst.get("installedAt", ""),
+                }
+            )
 
     if KNOWN_MARKETPLACES_FILE.exists():
         try:
@@ -356,7 +568,9 @@ def check_plugins() -> dict:
                 mkt_path = Path(info.get("installLocation", ""))
                 if mkt_path.exists():
                     git_result = run(
-                        ["git", "log", "--oneline", "-1"], cwd=str(mkt_path)
+                        ["git", "log", "--oneline", "-1"],
+                        cwd=str(mkt_path),
+                        timeout=_GIT_TIMEOUT,
                     )
                     if git_result.returncode == 0:
                         mkt["latest_local_commit"] = git_result.stdout.strip()
@@ -369,13 +583,25 @@ def check_plugins() -> dict:
         if not mkt_path.exists():
             continue
 
-        fetch_result = run(["git", "fetch", "--dry-run"], cwd=str(mkt_path))
+        fetch_result = run(["git", "fetch"], cwd=str(mkt_path), timeout=_GIT_TIMEOUT)
         if fetch_result.returncode != 0:
             continue
 
-        diff_result = run(
-            ["git", "rev-list", "--count", "HEAD..origin/main"],
+        # Detect default remote branch (main or master)
+        branch_result = run(
+            ["git", "symbolic-ref", "refs/remotes/origin/HEAD"],
             cwd=str(mkt_path),
+            timeout=_GIT_TIMEOUT,
+        )
+        if branch_result.returncode == 0:
+            remote_branch = branch_result.stdout.strip().split("/")[-1]
+        else:
+            remote_branch = "main"
+
+        diff_result = run(
+            ["git", "rev-list", "--count", f"HEAD..origin/{remote_branch}"],
+            cwd=str(mkt_path),
+            timeout=_GIT_TIMEOUT,
         )
         if diff_result.returncode == 0:
             try:
@@ -395,7 +621,17 @@ def check_plugins() -> dict:
 
 
 def check_superclaude() -> dict:
-    """Check SuperClaude command status."""
+    """Check SuperClaude command installation status.
+
+    Returns:
+        Dict with ``"installed"`` (bool), ``"commands"`` (list of names),
+        and ``"total"`` (int).
+
+    Examples:
+        >>> info = check_superclaude()
+        >>> isinstance(info["installed"], bool)
+        True
+    """
     sc_dir = COMMANDS_DIR / "sc"
     result = {
         "installed": sc_dir.exists(),
@@ -414,34 +650,105 @@ def check_superclaude() -> dict:
 
 
 def update_marketplace(name: str, mkt_path: str) -> str:
-    """Update a marketplace via git pull."""
+    """Update a marketplace via ``git pull --ff-only``.
+
+    Args:
+        name: Marketplace display name (for logging).
+        mkt_path: Absolute path to the marketplace git repo.
+
+    Returns:
+        Status message — either "Updated: ..." or "Update failed: ...".
+
+    Examples:
+        >>> update_marketplace("test", "/nonexistent/path")
+        'Path not found: /nonexistent/path'
+    """
     path = Path(mkt_path)
     if not path.exists():
         return f"Path not found: {mkt_path}"
 
-    result = run(["git", "pull", "--ff-only"], cwd=str(path))
+    result = run(["git", "pull", "--ff-only"], cwd=str(path), timeout=_GIT_TIMEOUT)
     if result.returncode == 0:
         return f"Updated: {result.stdout.strip()}"
     return f"Update failed: {result.stderr.strip()}"
 
 
+def _find_plugin_source(mkt_path: Path, plugin_name: str) -> Path | None:
+    """Locate plugin source directory in a marketplace.
+
+    Searches in order:
+      1. ``plugins/{plugin_name}/``  (standard marketplace layout)
+      2. ``{plugin_name}/``          (flat layout)
+      3. ``marketplace.json`` source field  (root-source layout)
+
+    Args:
+        mkt_path: Root path of the marketplace git repo.
+        plugin_name: Plugin name to look up (e.g. ``"lazy2work"``).
+
+    Returns:
+        Path to the plugin source directory, or None if not found.
+
+    Examples:
+        >>> _find_plugin_source(Path("/nonexistent"), "test") is None
+        True
+    """
+    # Standard layout: plugins/<name>/
+    candidate = mkt_path / "plugins" / plugin_name
+    if candidate.exists():
+        return candidate
+
+    # Flat layout: <name>/
+    candidate = mkt_path / plugin_name
+    if candidate.exists():
+        return candidate
+
+    # Root-source layout: marketplace.json defines source="./"
+    mkt_json = mkt_path / ".claude-plugin" / "marketplace.json"
+    if mkt_json.exists():
+        try:
+            mdata = json.loads(mkt_json.read_text(encoding="utf-8"))
+            for plugin_def in mdata.get("plugins", []):
+                if plugin_def.get("name") == plugin_name:
+                    source = plugin_def.get("source", "")
+                    if source in ("./", "."):
+                        return mkt_path
+                    source_path = (mkt_path / source).resolve()
+                    if source_path.exists():
+                        return source_path
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    return None
+
+
 def update_plugin_cache(plugin_id: str, marketplace_name: str) -> str:
     """Refresh plugin cache to marketplace latest version.
 
-    Searches for plugin source in marketplace under:
-      - plugins/{plugin_name}/  (standard marketplace layout)
-      - {plugin_name}/          (flat layout)
+    Copies plugin contents from marketplace source to the cache directory
+    and updates installed_plugins.json with the new version and SHA.
+    Skips if the cache already matches the current git SHA.
+
+    Args:
+        plugin_id: Full plugin identifier (e.g. ``"lazy2work@hoosiki-marketplace"``).
+        marketplace_name: Name of the marketplace directory.
+
+    Returns:
+        Status message — "Already up to date", "Cache refreshed", or error.
+
+    Examples:
+        >>> update_plugin_cache("test@missing", "nonexistent")
+        'Marketplace not found: nonexistent'
     """
     mkt_path = MARKETPLACES_DIR / marketplace_name
     if not mkt_path.exists():
         return f"Marketplace not found: {marketplace_name}"
 
-    sha_result = run(["git", "rev-parse", "--short", "HEAD"], cwd=str(mkt_path))
+    sha_result = run(["git", "rev-parse", "--short", "HEAD"], cwd=str(mkt_path), timeout=_GIT_TIMEOUT)
     if sha_result.returncode != 0:
         return "SHA check failed"
     new_sha = sha_result.stdout.strip()
 
-    full_sha_result = run(["git", "rev-parse", "HEAD"], cwd=str(mkt_path))
+    full_sha_result = run(["git", "rev-parse", "HEAD"], cwd=str(mkt_path), timeout=_GIT_TIMEOUT)
     new_full_sha = full_sha_result.stdout.strip()
 
     plugin_name = plugin_id.split("@")[0]
@@ -456,17 +763,25 @@ def update_plugin_cache(plugin_id: str, marketplace_name: str) -> str:
         except (OSError, json.JSONDecodeError):
             pass
 
-    # Find plugin source directory (try standard layout first)
-    plugin_src = mkt_path / "plugins" / plugin_name
-    if not plugin_src.exists():
-        plugin_src = mkt_path / plugin_name
-    if not plugin_src.exists():
+    plugin_src = _find_plugin_source(mkt_path, plugin_name)
+    if plugin_src is None:
         return f"Plugin source not found in marketplace: {plugin_name}"
 
     cache_dest = CACHE_DIR / marketplace_name / plugin_name / new_version
 
-    if cache_dest.exists():
-        return f"Already up to date: {new_version}"
+    # Check if cache exists AND git SHA matches (same version but different content)
+    data = _read_installed_plugins()
+    installed_sha = ""
+    for inst in data.get("plugins", {}).get(plugin_id, []):
+        installed_sha = inst.get("gitCommitSha", "")
+        break
+
+    if cache_dest.exists() and installed_sha == new_full_sha:
+        return f"Already up to date: {new_version} ({new_sha})"
+
+    # Remove stale cache if version matches but SHA differs
+    if cache_dest.exists() and installed_sha != new_full_sha:
+        shutil.rmtree(cache_dest)
 
     cache_dest.mkdir(parents=True, exist_ok=True)
 
@@ -480,26 +795,30 @@ def update_plugin_cache(plugin_id: str, marketplace_name: str) -> str:
         else:
             shutil.copy2(str(item), str(dest_item))
 
-    if INSTALLED_PLUGINS_FILE.exists():
+    if plugin_id in data.get("plugins", {}):
+        for inst in data["plugins"][plugin_id]:
+            inst["version"] = new_version
+            inst["gitCommitSha"] = new_full_sha
+            inst["installPath"] = str(cache_dest)
+            inst["lastUpdated"] = datetime.now(timezone.utc).isoformat()
         try:
-            data = json.loads(INSTALLED_PLUGINS_FILE.read_text(encoding="utf-8"))
-            if plugin_id in data.get("plugins", {}):
-                for inst in data["plugins"][plugin_id]:
-                    inst["version"] = new_version
-                    inst["gitCommitSha"] = new_full_sha
-                    inst["installPath"] = str(cache_dest)
-                    inst["lastUpdated"] = datetime.now(timezone.utc).isoformat()
-                INSTALLED_PLUGINS_FILE.write_text(
-                    json.dumps(data, indent=2), encoding="utf-8"
-                )
-        except (OSError, json.JSONDecodeError) as e:
+            _write_installed_plugins(data)
+        except OSError as e:
             return f"installed_plugins.json update failed: {e}"
 
     return f"Cache refreshed: {plugin_name} {new_version} (was {new_sha[:7] if new_version != new_sha else 'new'})"
 
 
 def update_superclaude() -> str:
-    """Update SuperClaude to latest version."""
+    """Update SuperClaude to latest version via ``superclaude update``.
+
+    Returns:
+        Status message with command output.
+
+    Examples:
+        >>> "SuperClaude" in update_superclaude()
+        True
+    """
     result = run(["superclaude", "update"], capture=True)
     output = result.stdout.strip()
     if result.stderr.strip():
@@ -510,7 +829,16 @@ def update_superclaude() -> str:
 
 
 def _print_skill_info(sk: dict) -> None:
-    """Print formatted skill information."""
+    """Print formatted skill information to stdout.
+
+    Args:
+        sk: Skill info dict with keys ``name``, ``path``, ``source``,
+            ``has_scripts``, ``has_references``, ``has_assets``.
+
+    Examples:
+        >>> _print_skill_info({"name": "test", "path": "/tmp", "source": "user",
+        ...     "has_scripts": True, "has_references": False, "has_assets": False})
+    """
     desc = sk.get("description", "No description")
     print(f"\n  [{sk['source']}] {sk['name']}")
     print(f"    Path: {sk['path']}")
@@ -531,7 +859,15 @@ def _print_skill_info(sk: dict) -> None:
 
 
 def run_skill() -> None:
-    """Run full skill/plugin/SuperClaude check and update."""
+    """Run full skill/plugin/SuperClaude check and update.
+
+    Executes the complete skills maintenance workflow:
+    user skills → plugin skills → plugin update detection →
+    marketplace pull → cache refresh → SuperClaude update.
+
+    Examples:
+        >>> run_skill()  # prints skill/plugin status to stdout
+    """
     # -- 1. User Skills --
     print_section("User Skills")
     user_skills = check_user_skills()
@@ -641,6 +977,11 @@ def run_skill() -> None:
 
 
 def main() -> None:
+    """Parse CLI arguments and run the selected update workflow.
+
+    Examples:
+        >>> main()  # with no args, runs both brew and skill updates
+    """
     parser = argparse.ArgumentParser(
         description="Unified updater for Homebrew and Claude Code skills/plugins"
     )

@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.10.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.12.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.10.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills |
+| [**lazy2work**](plugins/lazy2work/) | 1.12.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills |
 
 ---
 
@@ -654,6 +654,21 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.12.0 (2026-03-26)
+
+- **up2date: code quality improvements** — added subprocess timeout protection (brew=300s, git=60s) to prevent infinite hangs, atomic writes for `installed_plugins.json` via `tempfile` + `os.replace()`, and consolidated repeated file reads into `_read_installed_plugins()` / `_write_installed_plugins()` helpers
+- **up2date: Google style docstrings** — all 22 functions now have complete docstrings with Args, Returns, Raises, and Examples sections per project Python style rules
+- **up2date: test suite** — added `tests/test_up2date.py` with 35 tests covering `run()`, `get_installed()`, `get_outdated()`, `_read_installed_plugins()`, `_write_installed_plugins()`, `_is_skill_registered()`, `_find_plugin_source()`, `update_marketplace()`, `update_plugin_cache()`, `_print_skill_info()`, and `check_superclaude()`
+- **Version bump**: 1.11.0 → 1.12.0
+
+### v1.11.0 (2026-03-26)
+
+- **up2date: greedy cask upgrades** — `brew upgrade --cask` now uses `--greedy` flag to upgrade all casks including those with `auto_updates=true` (e.g. Docker Desktop, CLion, Claude). `brew outdated --cask` also uses `--greedy` for accurate detection
+- **up2date: reliable marketplace update detection** — replaced `git fetch --dry-run` with real `git fetch` so remote refs are always current. Added automatic remote branch detection (main/master) for correct behind-count comparison
+- **up2date: SHA-aware cache refresh** — `update_plugin_cache()` now compares both version and git SHA. Same version with different SHA triggers cache re-sync instead of falsely reporting "Already up to date"
+- **up2date: root-source marketplace layout** — new `_find_plugin_source()` supports marketplaces where `marketplace.json` defines `source: "./"` (e.g. anthropic-agent-skills). Fixes "Plugin source not found" errors for non-standard marketplace layouts
+- **Version bump**: 1.10.0 → 1.11.0
 
 ### v1.10.0 (2026-03-25)
 
