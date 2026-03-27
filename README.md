@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.14.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.15.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.14.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills |
+| [**lazy2work**](plugins/lazy2work/) | 1.15.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills |
 
 ---
 
@@ -51,7 +51,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 | **up2date** | `/lazy2work:up2date` | Unified updater — checks and updates Homebrew packages, Claude Code skills/plugins, and SuperClaude commands in one go (`--brew` for Homebrew only, `--skill` for skills only) |
 | **analyze-arxiv** | `/lazy2work:analyze-arxiv` | Study arXiv papers — fetches paper content, generates structured summaries, and creates prerequisite knowledge documents for deeper understanding |
 | **constitution-generator** | `/lazy2work:constitution-generator` | Generate optimized `/speckit.constitution` prompts — gathers project info (tech stack, architecture, conventions), detects brownfield patterns, and outputs a verifiable constitution with validation checklist |
-| **generate-optimized-spec-kit-prompt** | `/lazy2work:generate-optimized-spec-kit-prompt` | Generate complete Spec Kit prompts (specify/plan/tasks/implement) for all features — splits project into 1-5 day features, generates 4-stage prompts per feature, each feature gets its own folder with individual prompt files |
+| **generate-optimized-spec-kit-prompt** | `/lazy2work:generate-optimized-spec-kit-prompt` | Generate complete Spec Kit prompts (specify/plan/tasks/implement) for all features — splits project into 1-5 day features, generates 4-stage prompts per feature with Mermaid diagram placement (user workflows in specify, architecture/API/ERD in plan) |
 | **pyright-setup** | `/lazy2work:pyright-setup` | Auto-configure Pyright for Python projects — detects Python version from venv, adds `[tool.pyright]` to pyproject.toml, resolves "Import could not be resolved" LSP errors in Neovim/VS Code |
 | **apply-all-sc-save** | `/lazy2work:apply-all-sc-save` | Broadcast `/sc:save` to all Claude Code panes in the current tmux session — auto-detects Claude panes, excludes self, supports `--dry-run`, `--all-sessions`, and custom commands |
 
@@ -666,6 +666,13 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.15.0 (2026-03-28)
+
+- **generate-optimized-spec-kit-prompt: Mermaid diagram support** — added Mermaid diagram extraction, classification, and stage-aware placement. User workflows (flowchart, sequence without tech terms) go into specify; architecture, API sequences, ERD, data flow, and state machines go into plan. Includes placement test ("does diagram survive stack change?"), anti-pattern guide, and updated specify/plan templates with Mermaid examples
+- **generate-optimized-spec-kit-prompt: enriched plan template** — plan now includes API Endpoints, API Sequence (sequenceDiagram), Data Model (erDiagram), and Architecture (graph TB) sections
+- **Quality checklist expanded** — 3 new Mermaid validation checks: no tech terms in specify diagrams, architecture/API diagrams present in plan, one concern per Mermaid block
+- **Version bump**: 1.14.0 → 1.15.0
 
 ### v1.14.0 (2026-03-27)
 

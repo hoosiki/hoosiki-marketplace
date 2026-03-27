@@ -62,6 +62,38 @@
 - If larger, split into sub-features
 - Each feature should be independently deployable
 
+## Mermaid Diagram Placement
+
+**Placement test**: "Does the diagram remain valid if the tech stack changes?" — Yes → specify, No → plan.
+
+### In /speckit.specify (tech-neutral only)
+- User workflow flowcharts (no tech terms in nodes/labels)
+- User ↔ system sequence diagrams (actor + generic "System" participant)
+- Always pair with explanation text before the code block
+
+### In /speckit.plan (all technical diagrams)
+- System architecture (graph TB with subgraphs for layers)
+- API sequence diagrams (Client → View → Service → DB)
+- ERD (erDiagram with entities, attributes, relationships)
+- Data flow (flowchart LR showing service-to-service data movement)
+- State machines (stateDiagram-v2 for entity state transitions)
+- Deployment structure (Docker, cloud infrastructure)
+- Always pair with explanation text before the code block
+
+### In /speckit.tasks (optional, rarely used)
+- Task dependency graphs — prefer text `[DEPENDS: T001]` over Mermaid
+
+### In /speckit.implement (never)
+- No Mermaid diagrams
+
+### Mermaid Anti-Patterns
+| Anti-Pattern | Correct Approach |
+|-------------|-----------------|
+| Tech terms in specify Mermaid | Move to plan |
+| Mermaid code without explanation text | Always add 1-2 sentences before the block |
+| Multiple concerns in one Mermaid block | Split: 1 diagram = 1 concern |
+| User workflow in plan | Move to specify |
+
 ## Anti-Patterns
 
 | Anti-Pattern | Correct Approach |

@@ -40,6 +40,17 @@
 ## User Scenarios
 
 ### Happy Path
+
+{1-2 sentence explanation of the user workflow}
+
+```mermaid
+flowchart TD
+    A[{user action}] --> B[{next step}]
+    B --> C{"{decision}"}
+    C -->|Yes| D[{success outcome}]
+    C -->|No| E[{error handling}]
+```
+
 1. {step}
 
 ### Error: {error name}
@@ -67,7 +78,47 @@ Tech Stack:
 - {framework + version}
 
 Architecture:
-- {structural decision}
+
+{1-2 sentence explanation of the architecture}
+
+```mermaid
+graph TB
+    subgraph "{Layer Name}"
+        A[{Component}] --> B[{Component}]
+    end
+```
+
+API Endpoints:
+- `{METHOD} {path}` — {description}
+
+API Sequence:
+
+{1-2 sentence explanation of the API call flow}
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant V as {View/Controller}
+    participant S as {Service}
+    participant DB as {Database}
+    C->>V: {METHOD} {path}
+    V->>S: {service_method}()
+    S->>DB: {query}
+    V-->>C: {response}
+```
+
+Data Model:
+
+{1-2 sentence explanation of the data model}
+
+```mermaid
+erDiagram
+    {Entity1} ||--o{ {Entity2} : {relationship}
+    {Entity1} {
+        int id PK
+        string name
+    }
+```
 
 Existing Code Reference:
 - {file path}: {pattern}

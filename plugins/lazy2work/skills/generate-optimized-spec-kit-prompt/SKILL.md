@@ -24,6 +24,23 @@ Read the provided file(s). Extract:
 - Architecture decisions
 - Existing code patterns (brownfield)
 - Constraints and exclusions
+- Mermaid diagrams — classify each diagram for stage placement:
+
+**Mermaid Diagram Classification** (placement test: "Does this diagram remain valid if the tech stack changes?"):
+
+| Diagram Type | Stage | Rationale |
+|-------------|-------|-----------|
+| User workflow (flowchart, no tech terms) | **specify** | WHAT — user behavior flow |
+| User-system sequence (actor ↔ system) | **specify** | WHAT — user scenario visualization |
+| Business process flow | **specify** | WHAT — business process |
+| System architecture (components, layers) | **plan** | HOW — technical structure |
+| API sequence (client ↔ server ↔ DB) | **plan** | HOW — API call chain |
+| Function-level sequence (internal calls) | **plan** | HOW — internal function chain |
+| ERD / data model (erDiagram) | **plan** | HOW — database schema |
+| Data flow (service-to-service) | **plan** | HOW — data movement paths |
+| State machine (stateDiagram) | **plan** | HOW — entity state transitions |
+| Deployment structure (Docker, cloud) | **plan** | HOW — infrastructure |
+| Task dependency (gantt) | **tasks** | ORDER — rarely used, text preferred |
 
 ### 2. Decompose into Features
 
@@ -44,6 +61,14 @@ For each feature, generate all 4 prompts following strict stage separation. Read
 - `/speckit.plan` — HOW only. Tech stack, architecture, file paths. No feature requirements.
 - `/speckit.tasks` — ORDER only. Sequence, deps, tags `[NEW]`/`[MODIFY]`/`[TEST]`. No tech decisions.
 - `/speckit.implement` — RULES only. Scope `--tasks N-M`, commit strategy, failure behavior. No design changes.
+
+**Mermaid diagram rules:**
+- Include Mermaid diagrams in specify and plan where they add clarity. Always pair with 1-2 sentences of explanation text before the code block.
+- `/speckit.specify` — User workflow flowcharts and user-system sequences only. No tech terms (Django, PostgreSQL, etc.) in any node or label.
+- `/speckit.plan` — Architecture diagrams, API sequences, ERD, data flow, state machines, deployment diagrams. Use clear node names and edge labels.
+- `/speckit.tasks` — Mermaid is optional. Task dependencies are typically expressed as text `[DEPENDS: T001]`.
+- `/speckit.implement` — No Mermaid diagrams.
+- One diagram = one concern. Do not combine architecture + sequence + ERD into a single Mermaid block.
 
 ### 4. Write Output Files
 
@@ -92,6 +117,9 @@ After generating all prompts, verify each feature against:
 | /speckit.implement uses `--tasks N-M` | Never all tasks at once |
 | /speckit.implement has failure behavior | Stop and report on failure |
 | Success criteria are measurable | "< 1s" not "fast" |
+| /speckit.specify Mermaid has no tech terms | No Django, PostgreSQL, Redis in nodes |
+| /speckit.plan has architecture + API sequence diagrams | Mermaid with explanation text |
+| Each Mermaid block = one concern | No combined architecture + ERD blocks |
 
 ## References
 
