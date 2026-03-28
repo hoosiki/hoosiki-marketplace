@@ -1,13 +1,15 @@
 # Spec Kit Prompt Guide — Quick Reference
 
-## 4-Stage Role Separation
+## 6-Stage Role Separation
 
 | Stage | Role | Prompt Focus | MUST NOT Include |
 |-------|------|-------------|-----------------|
 | `/speckit.specify` | **What + Why** | Features, users, scenarios, constraints | Tech stack, architecture, code |
+| `/speckit.clarify` | **Refine** | Auto-accept recommended options for spec ambiguities | Manual intervention (auto mode) |
 | `/speckit.plan` | **How** | Tech stack, architecture, existing code refs | Feature requirements (in spec) |
 | `/speckit.tasks` | **Order** | Impl sequence, deps, TDD, task size | Tech decisions (in plan) |
 | `/speckit.implement` | **Rules** | Scope, commit strategy, code style | Design changes (go back to plan) |
+| `/sc:git commit` | **Commit** | Create git commit after implementation | Design changes, new features |
 
 ## /speckit.specify — Required Fields
 
@@ -22,6 +24,15 @@
 9. "What questions do you have?" — always end with this
 
 **Rules**: WHAT & WHY only. No HOW. Tech-neutral (spec survives stack change).
+
+## /speckit.clarify — Auto-Accept Mode
+
+1. Scans spec for ambiguities across 11 categories
+2. Generates up to 5 clarification questions
+3. Automatically selects recommended/suggested options (no user input needed)
+4. Integrates answers into the spec
+
+**Rules**: Always use `auto-accept all recommended options` to run non-interactively. This resolves spec ambiguities before planning without manual intervention.
 
 ## /speckit.plan — Required Fields
 
@@ -55,6 +66,12 @@
 5. Failure behavior — stop and report on test failure
 
 **Rules**: Never implement all tasks at once. Go back to /speckit.plan if design change needed.
+
+## /sc:git commit
+
+Commits all changes after implementation completes. This is a fixed prompt — no customization needed per feature.
+
+**Rules**: Only commit after successful implementation. The commit message is auto-generated based on changes.
 
 ## Feature Sizing
 

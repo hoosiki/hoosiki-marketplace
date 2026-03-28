@@ -5,7 +5,7 @@ description: Generate optimized GitHub Spec Kit prompts (/speckit.specify, /spec
 
 # Generate Optimized Spec Kit Prompts
 
-Split a project into features and generate optimized `/speckit.specify`, `/speckit.plan`, `/speckit.tasks`, `/speckit.implement` prompts for each feature. Each feature gets its own folder with 4 individual prompt files.
+Split a project into features and generate optimized `/speckit.specify`, `/speckit.clarify`, `/speckit.plan`, `/speckit.tasks`, `/speckit.implement`, and `/sc:git commit` prompts for each feature. Each feature gets its own folder with 6 individual prompt files.
 
 ## Input
 
@@ -52,15 +52,17 @@ Split the project into features following these rules:
 
 Output a numbered feature list for confirmation awareness before proceeding.
 
-### 3. Generate 4-Stage Prompts per Feature
+### 3. Generate 6-Stage Prompts per Feature
 
-For each feature, generate all 4 prompts following strict stage separation. Read [references/speckit-prompt-guide.md](references/speckit-prompt-guide.md) for the rules on what each stage MUST and MUST NOT include.
+For each feature, generate all 6 prompts following strict stage separation. Read [references/speckit-prompt-guide.md](references/speckit-prompt-guide.md) for the rules on what each stage MUST and MUST NOT include.
 
 **Critical rules:**
 - `/speckit.specify` — WHAT + WHY only. Zero tech references. End with "What questions do you have?"
+- `/speckit.clarify` — Auto-accept recommended options to resolve spec ambiguities before planning.
 - `/speckit.plan` — HOW only. Tech stack, architecture, file paths. No feature requirements.
 - `/speckit.tasks` — ORDER only. Sequence, deps, tags `[NEW]`/`[MODIFY]`/`[TEST]`. No tech decisions.
 - `/speckit.implement` — RULES only. Scope `--tasks N-M`, commit strategy, failure behavior. No design changes.
+- `/sc:git commit` — Commit after implementation completes.
 
 **Mermaid diagram rules:**
 - Include Mermaid diagrams in specify and plan where they add clarity. Always pair with 1-2 sentences of explanation text before the code block.
@@ -76,30 +78,36 @@ Create output directory and write files. See [references/api_reference.md](refer
 
 **Directory**: `.speckit-prompts/` (project root)
 
-**Structure**: One folder per feature, each containing 4 stage files.
+**Structure**: One folder per feature, each containing 6 stage files.
 
 ```
 .speckit-prompts/
 ├── feature-001-user-authentication/
 │   ├── 01_specify.md
-│   ├── 02_plan.md
-│   ├── 03_tasks.md
-│   └── 04_implement.md
+│   ├── 02_clarify.md
+│   ├── 03_plan.md
+│   ├── 04_tasks.md
+│   ├── 05_implement.md
+│   └── 06_commit.md
 ├── feature-002-dashboard/
 │   ├── 01_specify.md
-│   ├── 02_plan.md
-│   ├── 03_tasks.md
-│   └── 04_implement.md
+│   ├── 02_clarify.md
+│   ├── 03_plan.md
+│   ├── 04_tasks.md
+│   ├── 05_implement.md
+│   └── 06_commit.md
 └── feature-003-api-endpoints/
     ├── 01_specify.md
-    ├── 02_plan.md
-    ├── 03_tasks.md
-    └── 04_implement.md
+    ├── 02_clarify.md
+    ├── 03_plan.md
+    ├── 04_tasks.md
+    ├── 05_implement.md
+    └── 06_commit.md
 ```
 
 **Folder naming**: `feature-{NNN}-{kebab-case-name}` (e.g., `feature-001-user-authentication`)
 
-**File content**: Each file contains only the prompt for that stage. Do not include frontmatter (YAML `---` blocks). The first line of each file must start directly with the `/speckit.specify`, `/speckit.plan`, `/speckit.tasks`, or `/speckit.implement` command.
+**File content**: Each file contains only the prompt for that stage. Do not include frontmatter (YAML `---` blocks). The first line of each file must start directly with the command (`/speckit.specify`, `/speckit.clarify`, `/speckit.plan`, `/speckit.tasks`, `/speckit.implement`, or `/sc:git`).
 
 ## Quality Checklist
 

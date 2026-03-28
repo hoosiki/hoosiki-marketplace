@@ -6,9 +6,11 @@
 .speckit-prompts/
 ├── feature-{NNN}-{kebab-case-name}/
 │   ├── 01_specify.md
-│   ├── 02_plan.md
-│   ├── 03_tasks.md
-│   └── 04_implement.md
+│   ├── 02_clarify.md
+│   ├── 03_plan.md
+│   ├── 04_tasks.md
+│   ├── 05_implement.md
+│   └── 06_commit.md
 ```
 
 ## Folder Naming Convention
@@ -68,7 +70,13 @@ flowchart TD
 What questions do you have?
 ```
 
-## 02_plan.md Template
+## 02_clarify.md Template
+
+```markdown
+/speckit.clarify auto-accept all recommended options
+```
+
+## 03_plan.md Template
 
 ```markdown
 /speckit.plan
@@ -130,7 +138,7 @@ Explicit Exclusions:
 - {exclusion}
 ```
 
-## 03_tasks.md Template
+## 04_tasks.md Template
 
 ```markdown
 /speckit.tasks
@@ -153,7 +161,7 @@ Dependencies:
 - {dependency info}
 ```
 
-## 04_implement.md Template
+## 05_implement.md Template
 
 ```markdown
 /speckit.implement --tasks 1-{N}
@@ -169,4 +177,10 @@ Code Style:
 Failure Handling:
 - Test failure → stop and report
 - Regression → rollback and report
+```
+
+## 06_commit.md Template
+
+```markdown
+/sc:git commit
 ```
