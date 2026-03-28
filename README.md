@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.16.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.17.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.16.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills |
+| [**lazy2work**](plugins/lazy2work/) | 1.17.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills |
 
 ---
 
@@ -279,17 +279,39 @@ Validation checklist:
 Workflow:
 
 1. Reads project information from the provided file
-2. Decomposes into features (1-5 day units, independently testable)
-3. Generates 6 prompts per feature:
-   - `/speckit.specify` — What + Why (tech-neutral, ends with "What questions do you have?")
-   - `/speckit.clarify` — Auto-accept recommended options to resolve spec ambiguities
-   - `/speckit.plan` — How (tech stack, architecture, file refs, exclusions)
-   - `/speckit.tasks` — Order (sequence, deps, `[NEW]`/`[MODIFY]`/`[TEST]` tags, 1 task = 1 commit)
-   - `/speckit.implement` — Rules (scope `--tasks N-M`, commit strategy, failure behavior)
-   - `/sc:git commit` — Commit after implementation completes
-4. Writes output to `.speckit-prompts/` with feature-based folder structure
+2. Extracts Mermaid diagrams and classifies them by stage placement
+3. Decomposes into features (1-5 day units, independently testable)
+4. Generates 6 prompts per feature following strict stage separation
+5. Writes output to `.speckit-prompts/` with feature-based folder structure
 
-Output structure:
+#### 6-Stage Role Separation
+
+| Stage | Role | Prompt Focus | MUST NOT Include |
+|-------|------|-------------|-----------------|
+| `/speckit.specify` | **What + Why** | Features, users, scenarios, constraints | Tech stack, architecture, code |
+| `/speckit.clarify` | **Refine** | Auto-accept recommended options for spec ambiguities | Manual intervention (auto mode) |
+| `/speckit.plan` | **How** | Tech stack, architecture, existing code refs | Feature requirements (in spec) |
+| `/speckit.tasks` | **Order** | Impl sequence, deps, TDD, task size | Tech decisions (in plan) |
+| `/speckit.implement` | **Rules** | Scope, commit strategy, code style | Design changes (go back to plan) |
+| `/sc:git commit` | **Commit** | Create git commit after implementation | Design changes, new features |
+
+#### Mermaid Diagram Classification
+
+Placement test: "Does this diagram remain valid if the tech stack changes?" — Yes → specify, No → plan.
+
+| Diagram Type | Stage | Rationale |
+|-------------|-------|-----------|
+| User workflow (flowchart, no tech terms) | **specify** | WHAT — user behavior flow |
+| User-system sequence (actor ↔ system) | **specify** | WHAT — user scenario visualization |
+| Business process flow | **specify** | WHAT — business process |
+| System architecture (components, layers) | **plan** | HOW — technical structure |
+| API sequence (client ↔ server ↔ DB) | **plan** | HOW — API call chain |
+| ERD / data model (erDiagram) | **plan** | HOW — database schema |
+| Data flow (service-to-service) | **plan** | HOW — data movement paths |
+| State machine (stateDiagram) | **plan** | HOW — entity state transitions |
+| Deployment structure (Docker, cloud) | **plan** | HOW — infrastructure |
+
+#### Output Structure
 
 ```
 .speckit-prompts/
@@ -301,22 +323,30 @@ Output structure:
 │   ├── 05_implement.md
 │   └── 06_commit.md
 ├── feature-002-dashboard/
-│   ├── 01_specify.md
-│   ├── 02_clarify.md
-│   ├── 03_plan.md
-│   ├── 04_tasks.md
-│   ├── 05_implement.md
-│   └── 06_commit.md
+│   └── ...
 └── feature-003-api-endpoints/
-    ├── 01_specify.md
-    ├── 02_clarify.md
-    ├── 03_plan.md
-    ├── 04_tasks.md
-    ├── 05_implement.md
-    └── 06_commit.md
+    └── ...
 ```
 
-Each prompt follows strict stage separation — specify never mentions tech, clarify auto-accepts recommended options, plan never repeats features, tasks never makes tech decisions, implement never changes design, commit finalizes changes.
+#### Quality Checklist
+
+Every generated feature is verified against:
+
+| Check | Rule |
+|-------|------|
+| /speckit.specify has no tech terms | Tech-neutral (survives stack change) |
+| /speckit.specify ends with "What questions do you have?" | Always present |
+| /speckit.specify has Out of Scope section | Prevents AI scope creep |
+| /speckit.specify Mermaid has no tech terms | No Django, PostgreSQL, etc. in nodes |
+| /speckit.plan references specific file paths | Not vague "follow patterns" |
+| /speckit.plan has architecture + API sequence diagrams | Mermaid with explanation text |
+| /speckit.plan has explicit exclusions | Prevents AI adding Docker/CI/CD |
+| /speckit.tasks uses `[NEW]`/`[MODIFY]`/`[TEST]` tags | Every task tagged |
+| /speckit.tasks has 1 task = 1 commit size | Not too large |
+| /speckit.implement uses `--tasks N-M` | Never all tasks at once |
+| /speckit.implement has failure behavior | Stop and report on failure |
+| Each Mermaid block = one concern | No combined architecture + ERD blocks |
+| Success criteria are measurable | "< 1s" not "fast" |
 
 </details>
 
@@ -674,6 +704,11 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.17.0 (2026-03-28)
+
+- **README: enriched generate-optimized-spec-kit-prompt documentation** — added 6-stage role separation table, Mermaid diagram classification table with placement test, and full quality checklist (13 checks) to README details section. Consolidated output structure example
+- **Version bump**: 1.16.0 → 1.17.0
 
 ### v1.16.0 (2026-03-28)
 
