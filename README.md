@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.17.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.18.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.17.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills |
+| [**lazy2work**](plugins/lazy2work/) | 1.18.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills |
 
 ---
 
@@ -44,7 +44,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 - Python 3.10+ (for skills scripts and webhook hooks)
 - Node.js 18+ (for MCP setup commands that use `npx`)
 
-### Skills (6)
+### Skills (7)
 
 | Skill | Command | Description |
 |-------|---------|-------------|
@@ -54,6 +54,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 | **generate-optimized-spec-kit-prompt** | `/lazy2work:generate-optimized-spec-kit-prompt` | Generate complete Spec Kit prompts (specify/clarify/plan/tasks/implement/commit) for all features — splits project into 1-5 day features, generates 6-stage prompts per feature with Mermaid diagrams and auto-clarify/auto-commit steps |
 | **pyright-setup** | `/lazy2work:pyright-setup` | Auto-configure Pyright for Python projects — detects Python version from venv, adds `[tool.pyright]` to pyproject.toml, resolves "Import could not be resolved" LSP errors in Neovim/VS Code |
 | **apply-all-sc-save** | `/lazy2work:apply-all-sc-save` | Broadcast `/sc:save` to all Claude Code panes in the current tmux session — auto-detects Claude panes, excludes self, supports `--dry-run`, `--all-sessions`, and custom commands |
+| **fix-mermaid** | `/lazy2work:fix-mermaid` | Fix Mermaid diagram syntax errors in Markdown files — detects reserved word conflicts, Unicode/Langium parser issues, message escaping problems. Bundled Python script for automated lint and auto-fix (`--fix`) |
 
 <details>
 <summary><strong>up2date — Usage Examples</strong></summary>
@@ -443,6 +444,70 @@ Notes:
 
 </details>
 
+<details>
+<summary><strong>fix-mermaid — Usage Examples</strong></summary>
+
+**Lint a file (report issues without changing):**
+
+```bash
+python3 plugins/lazy2work/skills/fix-mermaid/scripts/fix_mermaid.py docs/PROJECT_ANALYSIS.md
+```
+
+**Auto-fix in place:**
+
+```bash
+python3 plugins/lazy2work/skills/fix-mermaid/scripts/fix_mermaid.py docs/PROJECT_ANALYSIS.md --fix
+```
+
+**Scan an entire directory:**
+
+```bash
+python3 plugins/lazy2work/skills/fix-mermaid/scripts/fix_mermaid.py docs/ --fix
+```
+
+**JSON output (for CI/scripts):**
+
+```bash
+python3 plugins/lazy2work/skills/fix-mermaid/scripts/fix_mermaid.py docs/ --json
+```
+
+**Or invoke as a skill in Claude Code:**
+
+```
+/lazy2work:fix-mermaid
+```
+
+> Just mention "mermaid 오류", "mermaid fix", "diagram broken", or "Syntax error in text mermaid version" in your prompt and the skill will trigger automatically.
+
+What the script detects and fixes:
+
+| Category | Examples |
+|----------|---------|
+| **Reserved words** | `participant OPT as Optuna` → `participant OPTA as Optuna` (13 reserved words) |
+| **Message escaping** | `V-->>C: 200 OK {id}` → `V-->>C: 200 OK #123;id#125;` |
+| **Unicode issues** | Smart quotes `""` → `""`, fullwidth CJK `（）` → `()`, invisible chars removed |
+| **Typographic dashes** | Em dash `—` → `--`, en dash `–` → `-` |
+
+Example output:
+
+```
+Found 5 issue(s):
+
+Block | Line | Rule                 | Before
+--------------------------------------------------------------------------------
+    1 |    7 | reserved-word        | participant OPT as Optuna
+    1 |    9 | message-escape       | CEL->>OPTA: create_study(direction="minimize")
+    2 |   19 | message-escape       | C->>V: POST /api/users/{id}/ {name: "test"}
+    2 |   20 | message-escape       | V-->>C: 200 OK {status: "ok", data: [1, 2]}
+    3 |   27 | fullwidth-cjk        | A["데이터（원본）"] --> B
+
+Run with --fix to apply corrections.
+```
+
+Reference documentation: `references/mermaid-v11-syntax.md` covers 18 sections including all diagram types, arrow syntax, Unicode replacement tables, reserved word list, and entity escaping guide.
+
+</details>
+
 ### Setup Commands (7)
 
 One-command MCP server installers accessible via `/lazy2work:setup:*`:
@@ -664,6 +729,10 @@ hoosiki-marketplace/
 │       │   ├── apply-all-sc-save/
 │       │   │   ├── SKILL.md
 │       │   │   └── scripts/
+│       │   ├── fix-mermaid/
+│       │   │   ├── SKILL.md
+│       │   │   ├── scripts/
+│       │   │   └── references/
 │       │   └── up2date/
 │       │       ├── SKILL.md
 │       │       ├── scripts/
@@ -704,6 +773,12 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.18.0 (2026-03-31)
+
+- **New skill: fix-mermaid** — Mermaid diagram linter and auto-fixer for Markdown files. Detects and fixes sequence diagram reserved word conflicts (13 keywords including `opt`, `alt`, `par`, `end`), Unicode/Langium parser issues (smart quotes, fullwidth CJK punctuation, invisible characters, typographic dashes), and message text escaping (`{}[]"` → Mermaid entities). Bundled Python script (`scripts/fix_mermaid.py`) supports lint-only, `--fix`, and `--json` modes
+- **fix-mermaid reference**: Comprehensive `mermaid-v11-syntax.md` (18 sections, 966 lines) covering all diagram types, arrow syntax, reserved words, Unicode replacement tables, and entity escaping
+- **Version bump**: 1.17.0 → 1.18.0
 
 ### v1.17.0 (2026-03-28)
 

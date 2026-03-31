@@ -17,3 +17,6 @@ claude-toolkit-plugin-plan.md
 .junie/
 skills-lock.json
 *.skill
+rag_agent/
+tests/
+requirements-rag.txt
