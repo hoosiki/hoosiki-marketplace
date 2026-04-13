@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.18.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.19.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.18.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills |
+| [**lazy2work**](plugins/lazy2work/) | 1.19.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, and Hamilton spec-driven pipelines |
 
 ---
 
@@ -44,7 +44,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 - Python 3.10+ (for skills scripts and webhook hooks)
 - Node.js 18+ (for MCP setup commands that use `npx`)
 
-### Skills (7)
+### Skills (8)
 
 | Skill | Command | Description |
 |-------|---------|-------------|
@@ -55,6 +55,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 | **pyright-setup** | `/lazy2work:pyright-setup` | Auto-configure Pyright for Python projects — detects Python version from venv, adds `[tool.pyright]` to pyproject.toml, resolves "Import could not be resolved" LSP errors in Neovim/VS Code |
 | **apply-all-sc-save** | `/lazy2work:apply-all-sc-save` | Broadcast `/sc:save` to all Claude Code panes in the current tmux session — auto-detects Claude panes, excludes self, supports `--dry-run`, `--all-sessions`, and custom commands |
 | **fix-mermaid** | `/lazy2work:fix-mermaid` | Fix Mermaid diagram syntax errors in Markdown files — detects reserved word conflicts, Unicode/Langium parser issues, message escaping problems. Bundled Python script for automated lint and auto-fix (`--fix`) |
+| **hamilton-harness** | `/lazy2work:hamilton-harness` | Build Hamilton data pipelines through a spec-driven workflow — 4 modes (prompt→YAML, validate, stub+viz, modify), Pydantic schemas, Mermaid/Graphviz/Hamilton rendering, 3 domain examples (ETL/ML/RAG). Self-contained — no plugin-level hooks or rules needed |
 
 <details>
 <summary><strong>up2date — Usage Examples</strong></summary>
@@ -508,6 +509,131 @@ Reference documentation: `references/mermaid-v11-syntax.md` covers 18 sections i
 
 </details>
 
+<details>
+<summary><strong>hamilton-harness — Usage Examples</strong></summary>
+
+**One-time setup (Python deps + Graphviz binary):**
+
+```bash
+uv pip install "sf-hamilton[visualization,pandera]" pydantic hypothesis pyyaml jsonschema networkx
+brew install graphviz   # macOS
+# Ubuntu: sudo apt-get install -y graphviz
+```
+
+Verify: `python -c "import hamilton, pydantic, hypothesis; print('ok')"` and `dot -V`.
+
+---
+
+**F1 — Natural-language → YAML spec:**
+
+```
+/lazy2work:hamilton-harness 주문 로그 CSV를 읽어서 일자별 매출 집계 Parquet를 만드는 파이프라인 만들어줘
+```
+
+Claude follows the 6-step extraction protocol (intent → inputs → outputs → intermediates → types → invariants) and writes `specs/orders_etl.yaml`. Asks clarifying questions if the input source, output form, or stage count is ambiguous.
+
+---
+
+**F2 — Validate an existing YAML:**
+
+```bash
+python $CLAUDE_SKILL_DIR/scripts/validate.py specs/orders_etl.yaml
+```
+
+Seven-layer validation (L1 schema → L7 invariant syntax). Failure report cites the failing layer and suggests a fix. F3 is blocked until F2 passes.
+
+---
+
+**F3 — Generate Hamilton stub + render DAG:**
+
+```bash
+# Stub only
+python $CLAUDE_SKILL_DIR/scripts/viz.py specs/orders_etl.yaml --stub-only
+
+# Stub + Mermaid
+python $CLAUDE_SKILL_DIR/scripts/viz.py specs/orders_etl.yaml --format mermaid
+
+# Stub + PNG via Graphviz
+python $CLAUDE_SKILL_DIR/scripts/viz.py specs/orders_etl.yaml --format graphviz
+
+# All three formats (mermaid, graphviz, hamilton)
+python $CLAUDE_SKILL_DIR/scripts/viz.py specs/orders_etl.yaml --format all
+```
+
+Writes:
+
+```
+build/stubs/orders_etl_stub.py          # Hamilton function stubs + Pydantic schemas
+build/dags/spec/orders_etl.mmd          # Mermaid source
+build/dags/spec/orders_etl.png          # Graphviz render
+build/dags/spec/orders_etl.meta.json    # Driver metadata (for CI diffs)
+```
+
+---
+
+**F4 — Modify an existing spec (diff-first):**
+
+```
+/lazy2work:hamilton-harness specs/orders_etl.yaml 에 'avg_order_value' 노드 추가해줘. clean_orders 를 입력으로 받고 범위는 [0, 100000].
+```
+
+Claude shows a unified YAML diff + destructive-change impact summary ("this breaks 2 downstream nodes: X, Y") and requires explicit confirmation before writing. Re-runs F2 before the write lands.
+
+---
+
+**Quickstart — ETL example end-to-end:**
+
+```
+/lazy2work:hamilton-harness Walk me through the ETL example. Explain the spec and render it as a Mermaid diagram.
+```
+
+Reads `examples/etl/specs/orders_etl.yaml`, explains each node, and pastes a Mermaid diagram inline. Three domains shipped:
+
+| Directory | Domain | Nodes |
+|-----------|--------|-------|
+| `examples/etl/` | Order log → daily aggregated Parquet | Input CSV → clean → enrich → daily aggregate |
+| `examples/ml-training/` | Churn prediction feature engineering + training | Raw events → features → train/test split → model |
+| `examples/rag/` | Documents → chunks → embeddings → vector index | Docs → chunker → embedder → vector store |
+
+---
+
+**Workflow — 7 stages for high-complexity requests:**
+
+Hamilton-harness scores the user's request against 6 signals (pipeline keywords, stage count, external systems, node count, regulation, speed hints). **Score ≥ 3** enforces the full 7-stage flow:
+
+```
+1. SPEC             → F1 writes specs/<name>.yaml
+2. VALIDATE         → F2 must pass
+3. STRUCTURE GATE   → F3 renders for review
+4. PBT SCAFFOLD     → Hypothesis property tests from invariants
+5. IMPLEMENT        → fill function bodies
+6. RUNTIME CHECK    → Hamilton Driver executes, @check_output verifies
+7. LINEAGE DEBUG    → dr.what_is_upstream_of(node) on failure
+```
+
+**Score < 3** → collapses to F1 → F3 (`--stub-only`) → implement.
+
+The complexity score is logged to `build/metrics/session-<timestamp>.json` for audit.
+
+---
+
+**Supporting docs inside the skill** (read on demand):
+
+| File | Purpose |
+|------|---------|
+| `SPEC.md` | Full YAML schema reference (read before writing a spec) |
+| `LAYOUT.md` | Target project layout the skill scaffolds into |
+| `QUICKSTART.md` | 10-minute onboarding tutorial |
+| `DEBUG.md` | Decision tree for three common failure modes |
+| `METRICS.md` | Session metrics logging schema |
+| `CHANGELOG.md` | Skill-independent SemVer history (currently 1.0.0) |
+
+**Trigger phrases (Korean + English)** — the skill auto-activates on: `파이프라인 만들어`, `DAG 설계`, `DAG 시각화`, `시각화해줘`, `YAML 스펙 검증`, `Hamilton으로`, `ETL 구현`, `feature engineering`, `RAG 인덱싱`, `ML 학습 파이프라인`, `data pipeline`.
+
+**Self-contained design**: no plugin-level hooks, commands, or rules are required. All assets live under `${CLAUDE_SKILL_DIR}` and visualization is **pull-based** — it only renders when the user explicitly asks.
+
+</details>
+
 ### Setup Commands (7)
 
 One-command MCP server installers accessible via `/lazy2work:setup:*`:
@@ -733,6 +859,18 @@ hoosiki-marketplace/
 │       │   │   ├── SKILL.md
 │       │   │   ├── scripts/
 │       │   │   └── references/
+│       │   ├── hamilton-harness/
+│       │   │   ├── SKILL.md
+│       │   │   ├── SPEC.md                ← YAML schema reference
+│       │   │   ├── LAYOUT.md              ← project layout the skill scaffolds
+│       │   │   ├── QUICKSTART.md          ← 10-minute onboarding
+│       │   │   ├── DEBUG.md               ← failure-mode decision tree
+│       │   │   ├── METRICS.md             ← session metrics schema
+│       │   │   ├── CHANGELOG.md           ← skill-independent SemVer
+│       │   │   ├── scripts/               ← viz.py, validate.py, yaml_to_*.py
+│       │   │   ├── templates/             ← JSON Schema (Draft 2020-12)
+│       │   │   ├── examples/              ← etl, ml-training, rag
+│       │   │   └── tests/
 │       │   └── up2date/
 │       │       ├── SKILL.md
 │       │       ├── scripts/
@@ -773,6 +911,20 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.19.0 (2026-04-13)
+
+- **New skill: hamilton-harness** — spec-driven workflow for building Hamilton data pipelines. Four operating modes: F1 (prompt → YAML spec), F2 (validate via 7-layer check: schema → name uniqueness → cycle → orphan → dangling reference → type resolution → invariant syntax), F3 (generate Hamilton function stubs + Pydantic schemas with optional Mermaid/Graphviz/Hamilton rendering), F4 (diff-first YAML modification with destructive-change classification)
+- **hamilton-harness: 7-stage workflow** — complexity-score gate (≥ 3 enforces SPEC → VALIDATE → STRUCTURE GATE → PBT SCAFFOLD → IMPLEMENT → RUNTIME CHECK → LINEAGE DEBUG; < 3 allows F1 → F3 `--stub-only` → implement)
+- **hamilton-harness: four invariant kinds** — `range: [min, max]`, `no_nulls: true`, `values: [...]`, `regex: "..."` mapped onto `@check_output` decorators at runtime and Hypothesis property-test generation at build time
+- **hamilton-harness: self-contained design** — no plugin-level hooks, commands, or rules are wired; assets live entirely under `${CLAUDE_SKILL_DIR}`. Visualization is **pull-based** (natural-language keyword + context-window + negation-filter safety rules) to avoid false triggers
+- **hamilton-harness: three example domains** — `examples/etl/` (order log → daily aggregated Parquet), `examples/ml-training/` (churn prediction feature engineering + training), `examples/rag/` (documents → chunks → embeddings → vector index)
+- **hamilton-harness: supporting docs** — `SPEC.md` (schema reference), `LAYOUT.md` (target project layout), `QUICKSTART.md` (10-minute onboarding), `DEBUG.md` (three common failure modes), `METRICS.md` (session logging schema), plus skill-independent `CHANGELOG.md` starting at 1.0.0
+- **hamilton-harness: scripts** — `viz.py` (F3 orchestrator), `validate.py` (F2 standalone), `yaml_to_mermaid.py`, `yaml_to_graphviz.py`, `yaml_to_hamilton_stub.py`, `dump_impl_meta.py` (CI Driver metadata diff), `row_validator.py` (Pydantic sample-based DataFrame validator, default n=100)
+- **README: hamilton-harness usage examples** — added a dedicated `<details>` section covering one-time deps setup, F1 (prompt→YAML), F2 (validate), F3 (stub+viz with `--format mermaid|graphviz|hamilton|all`), F4 (diff-first modify), quickstart walkthrough, the 7-stage workflow with complexity scoring, and the list of trigger phrases (Korean + English)
+- **README: Repository Structure** — added `hamilton-harness/` tree with `SPEC.md`, `LAYOUT.md`, `QUICKSTART.md`, `DEBUG.md`, `METRICS.md`, `CHANGELOG.md`, `scripts/`, `templates/`, `examples/`, and `tests/`
+- **marketplace.json sync** — caught up from 1.10.0 → 1.19.0 (metadata + plugins[0]) and updated its description/tags/keywords to reflect the Hamilton and Mermaid additions
+- **Version bump**: 1.18.0 → 1.19.0
 
 ### v1.18.0 (2026-03-31)
 

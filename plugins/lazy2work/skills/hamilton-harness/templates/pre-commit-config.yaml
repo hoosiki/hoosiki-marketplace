@@ -1,0 +1,19 @@
+# hamilton-harness pre-commit hook
+#
+# Copy this to your project's .pre-commit-config.yaml (or merge with existing).
+# Runs validate.py on any staged *.yaml under specs/.
+#
+# Install with:
+#     pip install pre-commit
+#     pre-commit install
+
+repos:
+  - repo: local
+    hooks:
+      - id: hamilton-harness-validate
+        name: hamilton-harness spec validation
+        entry: python $CLAUDE_SKILL_DIR/scripts/validate.py
+        language: system
+        files: ^specs/.*\.yaml$
+        pass_filenames: true
+        verbose: true

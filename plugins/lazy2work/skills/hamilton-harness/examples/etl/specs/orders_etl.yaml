@@ -1,0 +1,60 @@
+name: orders_etl
+description: >-
+  Daily aggregation of order events from CSV into a clean Parquet report.
+  Demonstrates external file inputs, row-level schema validation on the raw
+  table, and range invariants on the aggregated output.
+version: 1.0.0
+
+schemas:
+  - name: OrderRow
+    fields:
+      order_id: { type: int, ge: 0 }
+      user_id:  { type: int, ge: 0 }
+      amount:   { type: float, ge: 0.0 }
+      ts:       { type: datetime }
+
+nodes:
+  # ---- external inputs --------------------------------------------------
+  - name: order_csv_path
+    type: str
+    source: input
+    description: Filesystem path to the raw orders CSV.
+
+  - name: report_parquet_path
+    type: str
+    source: input
+    description: Destination path for the aggregated Parquet report.
+
+  # ---- computed nodes ---------------------------------------------------
+  - name: raw_orders
+    type: pd.DataFrame
+    inputs: [order_csv_path]
+    description: Raw CSV loaded as a DataFrame, validated row-by-row against OrderRow.
+    tags:
+      owner: data-eng
+      importance: high
+
+  - name: cleaned_orders
+    type: pd.DataFrame
+    inputs: [raw_orders]
+    description: Duplicates removed, timestamps normalized to UTC, amount ≥ 0.
+    invariants:
+      - no_nulls: true
+
+  - name: daily_totals
+    type: pd.DataFrame
+    inputs: [cleaned_orders]
+    description: Daily sum of amount per user.
+    invariants:
+      - range: [0.0, 1000000000.0]
+      - no_nulls: true
+    tags:
+      owner: data-eng
+      importance: critical
+
+  - name: written_report_path
+    type: str
+    inputs: [daily_totals, report_parquet_path]
+    description: Path returned after writing daily_totals to Parquet.
+    tags:
+      importance: high

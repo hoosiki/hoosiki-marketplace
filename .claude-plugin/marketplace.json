@@ -6,20 +6,20 @@
   },
   "metadata": {
     "description": "Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.",
-    "version": "1.10.0"
+    "version": "1.19.0"
   },
   "plugins": [
     {
       "name": "lazy2work",
       "source": "./plugins/lazy2work",
-      "description": "One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills for arXiv analysis and package updates.",
-      "version": "1.10.0",
+      "description": "One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills for arXiv analysis, package updates, and Hamilton spec-driven pipelines.",
+      "version": "1.19.0",
       "author": {
         "name": "Junsang Park"
       },
       "category": "productivity",
-      "tags": ["mcp-installer", "webhook-hooks", "paper-analysis", "package-updater"],
-      "keywords": ["superclaude", "mcp", "webhook", "tavily", "serena", "context7", "arxiv", "homebrew", "notification", "productivity"]
+      "tags": ["mcp-installer", "webhook-hooks", "paper-analysis", "package-updater", "data-pipeline"],
+      "keywords": ["superclaude", "mcp", "webhook", "tavily", "serena", "context7", "arxiv", "homebrew", "notification", "productivity", "mermaid", "diagram-fixer", "hamilton", "dag", "pipeline"]
     }
   ]
 }

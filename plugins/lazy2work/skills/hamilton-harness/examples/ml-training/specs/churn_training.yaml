@@ -1,0 +1,78 @@
+name: churn_training
+description: >-
+  Customer churn prediction training pipeline. Takes an event log, produces
+  features, splits train/val, trains a model, evaluates, and returns metrics.
+version: 1.0.0
+
+schemas:
+  - name: ModelMetrics
+    fields:
+      roc_auc: { type: float, ge: 0.0, le: 1.0, description: ROC AUC }
+      pr_auc:  { type: float, ge: 0.0, le: 1.0, description: Precision-Recall AUC }
+      brier:   { type: float, ge: 0.0, le: 1.0 }
+      sample_size: { type: int, ge: 1 }
+
+nodes:
+  # ---- inputs -----------------------------------------------------------
+  - name: events_df
+    type: pd.DataFrame
+    source: input
+
+  - name: label_df
+    type: pd.DataFrame
+    source: input
+
+  - name: model_config
+    type: dict
+    source: input
+
+  # ---- feature pipeline -------------------------------------------------
+  - name: user_tenure_days
+    type: pd.Series
+    inputs: [events_df]
+    description: Days between first and last event per user.
+    invariants:
+      - range: [0, 3650]
+
+  - name: user_avg_order_value
+    type: pd.Series
+    inputs: [events_df]
+    invariants:
+      - range: [0.0, 10000000.0]
+      - no_nulls: true
+
+  - name: features
+    type: pd.DataFrame
+    inputs: [user_tenure_days, user_avg_order_value]
+    description: Joined user-level feature table.
+
+  - name: labelled_features
+    type: pd.DataFrame
+    inputs: [features, label_df]
+    description: Features joined with binary churn label.
+
+  # ---- train / val split ------------------------------------------------
+  - name: train_set
+    type: pd.DataFrame
+    inputs: [labelled_features]
+
+  - name: val_set
+    type: pd.DataFrame
+    inputs: [labelled_features]
+
+  # ---- model training & evaluation --------------------------------------
+  - name: trained_model
+    type: object
+    inputs: [train_set, model_config]
+    description: Fitted classifier (sklearn-compatible).
+    tags:
+      owner: ml-team
+      importance: critical
+
+  - name: metrics
+    type: ModelMetrics
+    inputs: [trained_model, val_set]
+    description: Held-out evaluation metrics.
+    tags:
+      owner: ml-team
+      importance: critical

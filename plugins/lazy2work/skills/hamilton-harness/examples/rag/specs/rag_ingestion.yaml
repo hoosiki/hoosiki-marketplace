@@ -1,0 +1,63 @@
+name: rag_ingestion
+description: >-
+  Document ingestion pipeline for a retrieval-augmented generation (RAG) app.
+  Loads files from a directory, chunks them, embeds the chunks, and writes
+  everything into a vector index.
+version: 1.0.0
+
+schemas:
+  - name: Chunk
+    fields:
+      doc_id:    { type: str, min_length: 1 }
+      chunk_id:  { type: int, ge: 0 }
+      text:      { type: str, min_length: 1 }
+      start_char: { type: int, ge: 0 }
+      end_char:   { type: int, ge: 0 }
+
+nodes:
+  # ---- inputs -----------------------------------------------------------
+  - name: docs_dir
+    type: str
+    source: input
+    description: Directory containing PDF / Markdown / TXT files.
+
+  - name: embedding_model_name
+    type: str
+    source: input
+    description: Embedding model identifier (e.g., "text-embedding-3-small").
+
+  - name: vector_store_path
+    type: str
+    source: input
+
+  - name: chunk_size
+    type: int
+    source: input
+    description: Target chunk length in characters (e.g., 1000).
+
+  # ---- document loading & chunking --------------------------------------
+  - name: loaded_docs
+    type: list
+    inputs: [docs_dir]
+    description: Raw file contents keyed by filename.
+
+  - name: chunks
+    type: list
+    inputs: [loaded_docs, chunk_size]
+    description: List of Chunk objects.
+
+  # ---- embedding --------------------------------------------------------
+  - name: embeddings
+    type: np.ndarray
+    inputs: [chunks, embedding_model_name]
+    description: (n_chunks, embedding_dim) array of float32 embeddings.
+    invariants:
+      - no_nulls: true
+
+  - name: vector_index_path
+    type: str
+    inputs: [embeddings, chunks, vector_store_path]
+    description: Path to persisted vector store (e.g., Qdrant / FAISS file).
+    tags:
+      owner: rag-team
+      importance: critical

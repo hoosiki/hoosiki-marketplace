@@ -1,0 +1,70 @@
+# hamilton-harness DAG Gate
+#
+# Copy this to your project's .github/workflows/dag-gate.yml
+# Runs validate.py on every PR that touches specs/ or src/pipelines/
+# and compares the spec DAG against the impl DAG.
+
+name: DAG Gate (hamilton-harness)
+
+on:
+  pull_request:
+    paths:
+      - "specs/**/*.yaml"
+      - "src/pipelines/**/*.py"
+      - "tests/test_dag_matches_spec.py"
+
+jobs:
+  dag-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install system graphviz
+        run: sudo apt-get update && sudo apt-get install -y graphviz
+
+      - name: Install Python deps
+        run: |
+          pip install -r requirements.txt
+          pip install "sf-hamilton[visualization]" pydantic pyyaml jsonschema networkx
+
+      - name: Validate every spec
+        run: |
+          for spec in specs/*.yaml; do
+            echo "=== Validating $spec ==="
+            python "$CLAUDE_SKILL_DIR/scripts/validate.py" "$spec" --strict
+          done
+
+      - name: Generate spec DAG metadata
+        run: |
+          mkdir -p build/dags/spec build/stubs
+          for spec in specs/*.yaml; do
+            python "$CLAUDE_SKILL_DIR/scripts/viz.py" "$spec" --stub-only
+          done
+
+      - name: Generate impl DAG metadata
+        run: |
+          mkdir -p build/dags/impl
+          for module in src/pipelines/*.py; do
+            name=$(basename "$module" .py)
+            python "$CLAUDE_SKILL_DIR/scripts/dump_impl_meta.py" \
+              "src.pipelines.$name" "build/dags/impl/$name.meta.json"
+          done
+
+      - name: Run DAG structure tests
+        run: pytest tests/test_dag_matches_spec.py -v
+
+      - name: Upload DAG artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dag-diagrams
+          path: |
+            build/dags/**/*.png
+            build/dags/**/*.meta.json
+            build/stubs/*.py
+          retention-days: 14
