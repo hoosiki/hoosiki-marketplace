@@ -27,7 +27,7 @@ Then say:
 
 > Walk me through the ETL example. Explain the spec and render it as a Mermaid diagram.
 
-Claude should read `examples/etl/specs/orders_etl.yaml` and produce a Mermaid diagram in the chat.
+Claude should read `examples/etl/dag_specs/orders_etl.yaml` and produce a Mermaid diagram in the chat.
 
 ## Step 2 — Copy the example into a fresh project
 
@@ -36,13 +36,13 @@ mkdir -p ~/my-first-pipeline/hamilton_pipeline && cd ~/my-first-pipeline/hamilto
 cp -r $(python -c "import os; print(os.path.expanduser('~/.claude/plugins/cache/lazy2work@*/plugins/lazy2work/skills/hamilton-harness/examples/etl/'))")* .
 ```
 
-You now have `specs/`, `src/`, `tests/` under `my-first-pipeline/hamilton_pipeline/`. All subsequent commands run from inside `hamilton_pipeline/`.
+You now have `dag_specs/`, `src/`, `tests/` under `my-first-pipeline/hamilton_pipeline/`. All subsequent commands run from inside `hamilton_pipeline/`.
 
 ## Step 3 — Validate the spec
 
 ```bash
 cd ~/my-first-pipeline/hamilton_pipeline   # if not already there
-python "$CLAUDE_SKILL_DIR/scripts/validate.py" specs/orders_etl.yaml
+python "$CLAUDE_SKILL_DIR/scripts/validate.py" dag_specs/orders_etl.yaml
 ```
 
 Expected output ends with `PASSED`.
@@ -50,7 +50,7 @@ Expected output ends with `PASSED`.
 ## Step 4 — Render + generate stubs
 
 ```bash
-python "$CLAUDE_SKILL_DIR/scripts/viz.py" specs/orders_etl.yaml --format all
+python "$CLAUDE_SKILL_DIR/scripts/viz.py" dag_specs/orders_etl.yaml --format all
 ```
 
 This writes (all inside `hamilton_pipeline/`):

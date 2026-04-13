@@ -19,10 +19,10 @@ mkdir -p hamilton_pipeline && cp -r "$CLAUDE_SKILL_DIR/examples/etl/"* hamilton_
 cd hamilton_pipeline
 
 # 1. Validate
-python "$CLAUDE_SKILL_DIR/scripts/validate.py" specs/orders_etl.yaml
+python "$CLAUDE_SKILL_DIR/scripts/validate.py" dag_specs/orders_etl.yaml
 
 # 2. Render + generate stubs
-python "$CLAUDE_SKILL_DIR/scripts/viz.py" specs/orders_etl.yaml --format all
+python "$CLAUDE_SKILL_DIR/scripts/viz.py" dag_specs/orders_etl.yaml --format all
 
 # 3. Copy the generated stub into src/pipelines/ and fill in the bodies:
 #    cp build/stubs/orders_etl_stub.py src/pipelines/orders_etl.py

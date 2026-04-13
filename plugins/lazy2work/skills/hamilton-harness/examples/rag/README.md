@@ -21,7 +21,7 @@ from there:
 ```bash
 mkdir -p hamilton_pipeline && cp -r "$CLAUDE_SKILL_DIR/examples/rag/"* hamilton_pipeline/
 cd hamilton_pipeline
-python "$CLAUDE_SKILL_DIR/scripts/viz.py" specs/rag_ingestion.yaml --format mermaid
+python "$CLAUDE_SKILL_DIR/scripts/viz.py" dag_specs/rag_ingestion.yaml --format mermaid
 ```
 
 Or experiment in-place: `cd "$CLAUDE_SKILL_DIR/examples/rag"` and run the same

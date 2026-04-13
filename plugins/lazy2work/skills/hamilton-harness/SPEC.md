@@ -1,6 +1,6 @@
 # YAML Spec Reference — hamilton-harness v1.0
 
-The ground-truth schema for pipeline specs consumed by this skill. Every YAML under `specs/` must conform to this document.
+The ground-truth schema for pipeline specs consumed by this skill. Every YAML under `dag_specs/` must conform to this document.
 
 ## Top-level structure
 

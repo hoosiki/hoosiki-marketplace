@@ -69,7 +69,7 @@ The timestamp is the session start, ISO 8601, with colons replaced by `-` for fi
 
 | `event` | Stage | When fired |
 |---------|-------|-----------|
-| `spec_created` | 1 | F1 wrote `specs/<name>.yaml` |
+| `spec_created` | 1 | F1 wrote `dag_specs/<name>.yaml` |
 | `validation` | 2 | F2 ran (`outcome`: `success` / `fail`) |
 | `stub_generated` | 3 | `yaml_to_hamilton_stub.py` finished |
 | `viz_rendered` | 3 | A Mermaid/Graphviz/Hamilton render succeeded |

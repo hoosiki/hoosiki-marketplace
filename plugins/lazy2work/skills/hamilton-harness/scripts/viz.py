@@ -2,11 +2,11 @@
 and optionally renders the DAG in Mermaid / Graphviz / Hamilton formats.
 
 Usage:
-    python viz.py specs/<name>.yaml
-    python viz.py specs/<name>.yaml --format mermaid
-    python viz.py specs/<name>.yaml --format all
-    python viz.py specs/<name>.yaml --stub-only
-    python viz.py specs/<name>.yaml --no-stub
+    python viz.py dag_specs/<name>.yaml
+    python viz.py dag_specs/<name>.yaml --format mermaid
+    python viz.py dag_specs/<name>.yaml --format all
+    python viz.py dag_specs/<name>.yaml --stub-only
+    python viz.py dag_specs/<name>.yaml --no-stub
 """
 from __future__ import annotations
 

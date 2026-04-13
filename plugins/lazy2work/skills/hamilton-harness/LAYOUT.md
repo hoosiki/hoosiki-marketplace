@@ -6,7 +6,7 @@ When you use `hamilton-harness` in a project, it expects (and scaffolds) the fol
 your-project/
 ├── CLAUDE.md                                   # Project rules; mentions hamilton-harness
 └── hamilton_pipeline/                          # All pipeline assets live here
-    ├── specs/                                  # Single source of truth (human-edited)
+    ├── dag_specs/                                  # Single source of truth (human-edited)
     │   └── *.yaml
     ├── src/
     │   ├── pipelines/                          # Hamilton modules (one file per pipeline)
@@ -34,13 +34,13 @@ your-project/
 ## Why a dedicated `hamilton_pipeline/` folder
 
 - **Clear ownership.** Other parts of your repo (Django apps, web UI, notebooks) never collide with pipeline assets.
-- **Single CWD for commands.** Every CLI invocation (`validate.py`, `viz.py`) runs from inside `hamilton_pipeline/`, so the scripts' CWD-relative `build/` and `specs/` paths resolve predictably.
-- **CI-friendly.** `.github/workflows/dag-gate.yml` and `.pre-commit-config.yaml` filter on `hamilton_pipeline/specs/**.yaml` and `hamilton_pipeline/src/pipelines/**.py` — no cross-contamination with unrelated code.
+- **Single CWD for commands.** Every CLI invocation (`validate.py`, `viz.py`) runs from inside `hamilton_pipeline/`, so the scripts' CWD-relative `build/` and `dag_specs/` paths resolve predictably.
+- **CI-friendly.** `.github/workflows/dag-gate.yml` and `.pre-commit-config.yaml` filter on `hamilton_pipeline/dag_specs/**.yaml` and `hamilton_pipeline/src/pipelines/**.py` — no cross-contamination with unrelated code.
 - **Easy deletion / extraction.** The whole pipeline stack can be moved to a sibling repo by copying `hamilton_pipeline/` alone.
 
 ## Guardrails
 
-1. **`hamilton_pipeline/specs/` is human-only** — Claude may propose changes through F4 but writes only after the user confirms the diff.
+1. **`hamilton_pipeline/dag_specs/` is human-only** — Claude may propose changes through F4 but writes only after the user confirms the diff.
 2. **`hamilton_pipeline/build/` is throwaway** — add `hamilton_pipeline/build/` to `.gitignore`. A clean run must be able to regenerate everything in here.
 3. **`hamilton_pipeline/runs/` is committed** — execution artifacts are the ground truth for audits. They're reproducibility anchors, not transient files.
 4. **`hamilton_pipeline/src/schemas.py` is generated** — prefer regenerating through F3 over hand-editing. If a hand edit is needed, delete the generated header comment so we know.
@@ -51,8 +51,8 @@ All CLI commands assume you are inside `hamilton_pipeline/`:
 
 ```bash
 cd hamilton_pipeline
-python "$CLAUDE_SKILL_DIR/scripts/validate.py" specs/<name>.yaml
-python "$CLAUDE_SKILL_DIR/scripts/viz.py"       specs/<name>.yaml --format all
+python "$CLAUDE_SKILL_DIR/scripts/validate.py" dag_specs/<name>.yaml
+python "$CLAUDE_SKILL_DIR/scripts/viz.py"       dag_specs/<name>.yaml --format all
 ```
 
 Running from the repo root requires the `hamilton_pipeline/` prefix on every path and still writes `build/` into the repo root — prefer the `cd` approach.
@@ -82,7 +82,7 @@ The skill does NOT auto-scaffold. When a user asks, read these templates and wri
 
 Two templates live in `templates/`:
 
-- `pre-commit-config.yaml` — runs `validate.py` on staged specs under `hamilton_pipeline/specs/` before each commit.
+- `pre-commit-config.yaml` — runs `validate.py` on staged specs under `hamilton_pipeline/dag_specs/` before each commit.
 - `github-workflow-dag-gate.yml` — on PR, re-runs validation + checks that the impl module's Driver metadata matches the spec.
 
 Copy them into the target project's `.pre-commit-config.yaml` and `.github/workflows/dag-gate.yml` respectively.

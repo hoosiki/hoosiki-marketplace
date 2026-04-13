@@ -16,7 +16,7 @@ from there:
 ```bash
 mkdir -p hamilton_pipeline && cp -r "$CLAUDE_SKILL_DIR/examples/ml-training/"* hamilton_pipeline/
 cd hamilton_pipeline
-python "$CLAUDE_SKILL_DIR/scripts/viz.py" specs/churn_training.yaml --format all
+python "$CLAUDE_SKILL_DIR/scripts/viz.py" dag_specs/churn_training.yaml --format all
 ```
 
 Or experiment in-place: `cd "$CLAUDE_SKILL_DIR/examples/ml-training"` and run

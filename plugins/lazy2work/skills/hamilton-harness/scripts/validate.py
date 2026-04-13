@@ -10,7 +10,7 @@ Runs seven layers of validation:
     L7 invariant syntax
 
 Usage:
-    python validate.py specs/<name>.yaml [--strict] [--json] [--schema PATH]
+    python validate.py dag_specs/<name>.yaml [--strict] [--json] [--schema PATH]
 
 Exit codes:
     0  valid

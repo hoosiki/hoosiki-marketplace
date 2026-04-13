@@ -532,7 +532,7 @@ Verify: `python -c "import hamilton, pydantic, hypothesis; print('ok')"` and `do
 /lazy2work:hamilton-harness 주문 로그 CSV를 읽어서 일자별 매출 집계 Parquet를 만드는 파이프라인 만들어줘
 ```
 
-Claude follows the 6-step extraction protocol (intent → inputs → outputs → intermediates → types → invariants) and writes `hamilton_pipeline/specs/orders_etl.yaml`. Asks clarifying questions if the input source, output form, or stage count is ambiguous.
+Claude follows the 6-step extraction protocol (intent → inputs → outputs → intermediates → types → invariants) and writes `hamilton_pipeline/dag_specs/orders_etl.yaml`. Asks clarifying questions if the input source, output form, or stage count is ambiguous.
 
 ---
 
@@ -540,7 +540,7 @@ Claude follows the 6-step extraction protocol (intent → inputs → outputs →
 
 ```bash
 cd hamilton_pipeline
-python "$CLAUDE_SKILL_DIR/scripts/validate.py" specs/orders_etl.yaml
+python "$CLAUDE_SKILL_DIR/scripts/validate.py" dag_specs/orders_etl.yaml
 ```
 
 Seven-layer validation (L1 schema → L7 invariant syntax). Failure report cites the failing layer and suggests a fix. F3 is blocked until F2 passes.
@@ -553,16 +553,16 @@ Seven-layer validation (L1 schema → L7 invariant syntax). Failure report cites
 cd hamilton_pipeline
 
 # Stub only
-python "$CLAUDE_SKILL_DIR/scripts/viz.py" specs/orders_etl.yaml --stub-only
+python "$CLAUDE_SKILL_DIR/scripts/viz.py" dag_specs/orders_etl.yaml --stub-only
 
 # Stub + Mermaid
-python "$CLAUDE_SKILL_DIR/scripts/viz.py" specs/orders_etl.yaml --format mermaid
+python "$CLAUDE_SKILL_DIR/scripts/viz.py" dag_specs/orders_etl.yaml --format mermaid
 
 # Stub + PNG via Graphviz
-python "$CLAUDE_SKILL_DIR/scripts/viz.py" specs/orders_etl.yaml --format graphviz
+python "$CLAUDE_SKILL_DIR/scripts/viz.py" dag_specs/orders_etl.yaml --format graphviz
 
 # All three formats (mermaid, graphviz, hamilton)
-python "$CLAUDE_SKILL_DIR/scripts/viz.py" specs/orders_etl.yaml --format all
+python "$CLAUDE_SKILL_DIR/scripts/viz.py" dag_specs/orders_etl.yaml --format all
 ```
 
 Writes (all inside `hamilton_pipeline/`):
@@ -579,7 +579,7 @@ build/dags/spec/orders_etl.meta.json    # Driver metadata (for CI diffs)
 **F4 — Modify an existing spec (diff-first):**
 
 ```
-/lazy2work:hamilton-harness hamilton_pipeline/specs/orders_etl.yaml 에 'avg_order_value' 노드 추가해줘. clean_orders 를 입력으로 받고 범위는 [0, 100000].
+/lazy2work:hamilton-harness hamilton_pipeline/dag_specs/orders_etl.yaml 에 'avg_order_value' 노드 추가해줘. clean_orders 를 입력으로 받고 범위는 [0, 100000].
 ```
 
 Claude shows a unified YAML diff + destructive-change impact summary ("this breaks 2 downstream nodes: X, Y") and requires explicit confirmation before writing. Re-runs F2 before the write lands.
@@ -592,7 +592,7 @@ Claude shows a unified YAML diff + destructive-change impact summary ("this brea
 /lazy2work:hamilton-harness Walk me through the ETL example. Explain the spec and render it as a Mermaid diagram.
 ```
 
-Reads `examples/etl/specs/orders_etl.yaml`, explains each node, and pastes a Mermaid diagram inline. Three domains shipped:
+Reads `examples/etl/dag_specs/orders_etl.yaml`, explains each node, and pastes a Mermaid diagram inline. Three domains shipped:
 
 | Directory | Domain | Nodes |
 |-----------|--------|-------|
@@ -607,7 +607,7 @@ Reads `examples/etl/specs/orders_etl.yaml`, explains each node, and pastes a Mer
 Hamilton-harness scores the user's request against 6 signals (pipeline keywords, stage count, external systems, node count, regulation, speed hints). **Score ≥ 3** enforces the full 7-stage flow:
 
 ```
-1. SPEC             → F1 writes specs/<name>.yaml
+1. SPEC             → F1 writes dag_specs/<name>.yaml
 2. VALIDATE         → F2 must pass
 3. STRUCTURE GATE   → F3 renders for review
 4. PBT SCAFFOLD     → Hypothesis property tests from invariants
@@ -926,11 +926,11 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 - **hamilton-harness: three example domains** — `examples/etl/` (order log → daily aggregated Parquet), `examples/ml-training/` (churn prediction feature engineering + training), `examples/rag/` (documents → chunks → embeddings → vector index)
 - **hamilton-harness: supporting docs** — `SPEC.md` (schema reference), `LAYOUT.md` (target project layout), `QUICKSTART.md` (10-minute onboarding), `DEBUG.md` (three common failure modes), `METRICS.md` (session logging schema), plus skill-independent `CHANGELOG.md`
 - **hamilton-harness: scripts** — `viz.py` (F3 orchestrator), `validate.py` (F2 standalone), `yaml_to_mermaid.py`, `yaml_to_graphviz.py`, `yaml_to_hamilton_stub.py`, `dump_impl_meta.py` (CI Driver metadata diff), `row_validator.py` (Pydantic sample-based DataFrame validator, default n=100)
-- **hamilton-harness: top-level `hamilton_pipeline/` folder wrapper** — all pipeline assets (`specs/`, `src/`, `tests/`, `build/`, `runs/`) live under a single `hamilton_pipeline/` directory at the user's project root, keeping them isolated from Django apps, notebooks, web UI, and other repo contents. Scripts use CWD-relative paths; the working-directory convention is `cd hamilton_pipeline/` before invoking `validate.py`/`viz.py`
+- **hamilton-harness: top-level `hamilton_pipeline/` folder wrapper** — all pipeline assets (`dag_specs/`, `src/`, `tests/`, `build/`, `runs/`) live under a single `hamilton_pipeline/` directory at the user's project root, keeping them isolated from Django apps, notebooks, web UI, and other repo contents. Scripts use CWD-relative paths; the working-directory convention is `cd hamilton_pipeline/` before invoking `validate.py`/`viz.py`
 - **hamilton-harness: docs reflect the `hamilton_pipeline/` layout** — `LAYOUT.md` (tree rooted under `hamilton_pipeline/` + "Why a dedicated folder" rationale + bootstrap command + working-directory convention), `SKILL.md` Paths and conventions, `QUICKSTART.md` (all `cd` and relative-path examples), `DEBUG.md` (`cd hamilton_pipeline/` in validation and upstream-display examples), `METRICS.md` (`hamilton_pipeline/build/metrics/` path)
-- **hamilton-harness: templates scoped to `hamilton_pipeline/`** — `CLAUDE.md.tpl` rules reference `hamilton_pipeline/*` paths; `README.md.tpl` uses `cd hamilton_pipeline` consistently; `.gitignore.tpl` excludes `hamilton_pipeline/build/`; `pre-commit-config.yaml` regex `^hamilton_pipeline/specs/.*\.yaml$`; `github-workflow-dag-gate.yml` uses `defaults.run.working-directory: hamilton_pipeline` with all trigger paths and `upload-artifact` paths prefixed
+- **hamilton-harness: templates scoped to `hamilton_pipeline/`** — `CLAUDE.md.tpl` rules reference `hamilton_pipeline/*` paths; `README.md.tpl` uses `cd hamilton_pipeline` consistently; `.gitignore.tpl` excludes `hamilton_pipeline/build/`; `pre-commit-config.yaml` regex `^hamilton_pipeline/dag_specs/.*\.yaml$`; `github-workflow-dag-gate.yml` uses `defaults.run.working-directory: hamilton_pipeline` with all trigger paths and `upload-artifact` paths prefixed
 - **hamilton-harness: skill CHANGELOG** — internal skill-independent SemVer at 1.1.0 (1.0.0 initial release + 1.1.0 layout wrapper with full `git mv` migration guide)
-- **README: hamilton-harness usage examples** — added a dedicated `<details>` section covering one-time deps setup, F1 (prompt→YAML), F2 (validate), F3 (stub+viz with `--format mermaid|graphviz|hamilton|all`), F4 (diff-first modify), quickstart walkthrough, the 7-stage workflow with complexity scoring, and the list of trigger phrases (Korean + English). All F1/F2/F3/F4 blocks show the `cd hamilton_pipeline` working-directory convention and `hamilton_pipeline/specs/*.yaml` paths
+- **README: hamilton-harness usage examples** — added a dedicated `<details>` section covering one-time deps setup, F1 (prompt→YAML), F2 (validate), F3 (stub+viz with `--format mermaid|graphviz|hamilton|all`), F4 (diff-first modify), quickstart walkthrough, the 7-stage workflow with complexity scoring, and the list of trigger phrases (Korean + English). All F1/F2/F3/F4 blocks show the `cd hamilton_pipeline` working-directory convention and `hamilton_pipeline/dag_specs/*.yaml` paths
 - **README: Repository Structure** — added `hamilton-harness/` tree with `SPEC.md`, `LAYOUT.md`, `QUICKSTART.md`, `DEBUG.md`, `METRICS.md`, `CHANGELOG.md`, `scripts/`, `templates/`, `examples/`, and `tests/` (annotated to note the skill scaffolds `hamilton_pipeline/` in user projects)
 - **marketplace.json sync** — caught up from 1.10.0 → 1.19.0 (metadata + plugins[0]) and updated its description/tags/keywords to reflect the Hamilton and Mermaid additions
 - **Version bump**: 1.18.0 → 1.19.0

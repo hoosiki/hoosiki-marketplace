@@ -17,7 +17,7 @@ Each entry points to a dedicated procedure below. Work each procedure sequential
 1. Run `validate.py` with `--strict` and `-v` for full detail (from inside `hamilton_pipeline/`):
    ```bash
    cd "$CLAUDE_PROJECT_DIR/hamilton_pipeline"
-   python "$CLAUDE_SKILL_DIR/scripts/validate.py" specs/<name>.yaml --strict
+   python "$CLAUDE_SKILL_DIR/scripts/validate.py" dag_specs/<name>.yaml --strict
    ```
 2. Copy the first reported error. The layer prefix tells you what to fix:
    - **L1 schema** — the YAML is missing a required field or has the wrong type. Open `SPEC.md` §1 and compare.

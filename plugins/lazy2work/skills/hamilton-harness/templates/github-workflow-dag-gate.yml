@@ -1,7 +1,7 @@
 # hamilton-harness DAG Gate
 #
 # Copy this to your project's .github/workflows/dag-gate.yml
-# Runs validate.py on every PR that touches hamilton_pipeline/specs/ or
+# Runs validate.py on every PR that touches hamilton_pipeline/dag_specs/ or
 # hamilton_pipeline/src/pipelines/ and compares the spec DAG against the impl DAG.
 
 name: DAG Gate (hamilton-harness)
@@ -9,7 +9,7 @@ name: DAG Gate (hamilton-harness)
 on:
   pull_request:
     paths:
-      - "hamilton_pipeline/specs/**/*.yaml"
+      - "hamilton_pipeline/dag_specs/**/*.yaml"
       - "hamilton_pipeline/src/pipelines/**/*.py"
       - "hamilton_pipeline/tests/test_dag_matches_spec.py"
 
@@ -37,7 +37,7 @@ jobs:
 
       - name: Validate every spec
         run: |
-          for spec in specs/*.yaml; do
+          for spec in dag_specs/*.yaml; do
             echo "=== Validating $spec ==="
             python "$CLAUDE_SKILL_DIR/scripts/validate.py" "$spec" --strict
           done
@@ -45,7 +45,7 @@ jobs:
       - name: Generate spec DAG metadata
         run: |
           mkdir -p build/dags/spec build/stubs
-          for spec in specs/*.yaml; do
+          for spec in dag_specs/*.yaml; do
             python "$CLAUDE_SKILL_DIR/scripts/viz.py" "$spec" --stub-only
           done
 

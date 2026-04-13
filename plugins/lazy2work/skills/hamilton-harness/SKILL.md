@@ -23,7 +23,7 @@ A self-contained skill that makes Claude Code build Hamilton pipelines through a
 Activate this skill when the user asks to:
 
 - **Design** a new data pipeline, ETL job, ML training flow, RAG ingestion, feature engineering chain, or any multi-step DAG-shaped computation.
-- **Validate** an existing `specs/*.yaml` against the Hamilton-harness schema.
+- **Validate** an existing `dag_specs/*.yaml` against the Hamilton-harness schema.
 - **Implement** Python Hamilton code from a YAML spec.
 - **Visualize** a pipeline (Mermaid, Graphviz PNG/SVG, or Hamilton Driver rendering).
 - **Modify** an existing YAML spec (add/remove/rewire nodes) safely.
@@ -62,7 +62,7 @@ Parse the user's request and dispatch to the correct mode. Usually only one mode
 ## 7-stage workflow (for high-complexity tasks)
 
 ```
-Stage 1  SPEC          — F1 writes specs/<name>.yaml
+Stage 1  SPEC          — F1 writes dag_specs/<name>.yaml
 Stage 2  VALIDATE      — F2 must pass before moving on
 Stage 3  STRUCTURE GATE — F3 render (optional but recommended when reviewing)
 Stage 4  PBT SCAFFOLD  — generate tests/test_properties/ stubs (Hypothesis)
@@ -133,7 +133,7 @@ The script runs F2 internally, generates the Hamilton stub + Pydantic schemas, a
 
 When the user wants to change an existing spec, do NOT write the updated YAML immediately. Instead:
 
-1. Read `specs/<name>.yaml`.
+1. Read `dag_specs/<name>.yaml`.
 2. Draft the proposed change in memory.
 3. Classify each change — check against the destructive-change table below.
 4. Show the user a unified diff of the YAML, plus a summary of destructive impact.
@@ -159,7 +159,7 @@ Always include the expected downstream impact ("this will break 2 downstream nod
 ## Paths and conventions
 
 - `${CLAUDE_SKILL_DIR}` → this skill's directory; use it for every internal script call.
-- `${CLAUDE_PROJECT_DIR}` → the user's project root. **All pipeline assets live under `${CLAUDE_PROJECT_DIR}/hamilton_pipeline/`** (see `LAYOUT.md`). Reach `specs/`, `src/`, `tests/`, `build/`, `runs/` through that prefix.
+- `${CLAUDE_PROJECT_DIR}` → the user's project root. **All pipeline assets live under `${CLAUDE_PROJECT_DIR}/hamilton_pipeline/`** (see `LAYOUT.md`). Reach `dag_specs/`, `src/`, `tests/`, `build/`, `runs/` through that prefix.
 - CLI commands assume the CWD is `${CLAUDE_PROJECT_DIR}/hamilton_pipeline/` so the scripts' CWD-relative `build/` output lands inside the pipeline folder, not the repo root.
 - Never reach into the plugin root. The skill is self-contained; all skill assets live under `${CLAUDE_SKILL_DIR}`.
 

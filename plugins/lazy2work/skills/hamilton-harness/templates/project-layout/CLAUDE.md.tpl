@@ -7,14 +7,14 @@ plugin) for spec-driven development. **All pipeline assets live under
 
 ## Core rules
 
-- **`hamilton_pipeline/specs/*.yaml` is the single source of truth.** Modify
+- **`hamilton_pipeline/dag_specs/*.yaml` is the single source of truth.** Modify
   specs first, then regenerate code from them. Do not hand-edit
   `hamilton_pipeline/src/pipelines/*.py` ahead of the spec.
 - **Every pipeline follows the 7-stage flow** (SPEC → VALIDATE → STRUCTURE GATE
   → PBT → IMPLEMENT → RUNTIME CHECK → LINEAGE DEBUG). For low-complexity
   scripts (score < 3), collapse to SPEC → IMPLEMENT.
 - **`hamilton_pipeline/build/` is throwaway.** Anything in there must be
-  regenerable from `hamilton_pipeline/specs/` and `hamilton_pipeline/src/`.
+  regenerable from `hamilton_pipeline/dag_specs/` and `hamilton_pipeline/src/`.
   Never commit it (`.gitignore` already excludes it).
 - **`hamilton_pipeline/runs/` is the audit trail.** Commit execution artifacts
   here so downstream consumers can trace lineage.
@@ -23,7 +23,7 @@ plugin) for spec-driven development. **All pipeline assets live under
 
 ## How to invoke the skill
 
-- Natural language: "Design a pipeline that …", "validate hamilton_pipeline/specs/churn.yaml",
+- Natural language: "Design a pipeline that …", "validate hamilton_pipeline/dag_specs/churn.yaml",
   "render the DAG as mermaid", "add a node for X".
 - Slash command: `/hamilton-harness [--viz] [--viz-format FMT] [spec-name]`.
 
