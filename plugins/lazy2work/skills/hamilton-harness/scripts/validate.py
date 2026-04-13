@@ -43,17 +43,189 @@ except ImportError:
     HAVE_NETWORKX = False
 
 # ----- built-in type set for L6 ----------------------------------------------
+# Organized by ecosystem so new libraries can be added in isolation.
+# When you add a new type here, also extend `_TYPE_MAP` and `_IMPORTS_FOR`
+# in yaml_to_hamilton_stub.py so the stub generator emits the right imports.
 
-BUILTIN_TYPES = {
-    "int", "float", "str", "bool", "bytes", "list", "dict", "tuple", "set",
+# stdlib
+BUILTIN_TYPES: set[str] = {
+    "int", "float", "complex", "str", "bool", "bytes", "bytearray", "memoryview",
+    "list", "dict", "tuple", "set", "frozenset", "range",
     "object", "None", "Any",
 }
-PANDAS_TYPES = {"pd.DataFrame", "pd.Series"}
-NUMPY_TYPES = {"np.ndarray"} | {f"np.{t}" for t in ("int8", "int16", "int32", "int64",
-                                                    "uint8", "uint16", "uint32", "uint64",
-                                                    "float16", "float32", "float64", "bool_")}
-DATETIME_TYPES = {"datetime", "date", "time", "timedelta"}
-PATHLIB_TYPES = {"Path", "PurePath"}
+PATHLIB_TYPES: set[str] = {
+    "Path", "PurePath", "PosixPath", "WindowsPath",
+    "PurePosixPath", "PureWindowsPath",
+}
+DATETIME_TYPES: set[str] = {
+    "datetime", "date", "time", "timedelta", "timezone", "tzinfo",
+}
+IO_TYPES: set[str] = {
+    "BytesIO", "StringIO",
+    "TextIOWrapper", "BufferedReader", "BufferedWriter", "FileIO",
+}
+
+# Data analysis — tabular
+PANDAS_TYPES: set[str] = {
+    "pd.DataFrame", "pd.Series",
+    "pd.Index", "pd.MultiIndex", "pd.RangeIndex",
+    "pd.DatetimeIndex", "pd.TimedeltaIndex", "pd.PeriodIndex", "pd.IntervalIndex",
+    "pd.Categorical", "pd.CategoricalIndex",
+    "pd.Timestamp", "pd.Timedelta", "pd.Period", "pd.Interval",
+    "pd.Grouper", "pd.NaT",
+}
+POLARS_TYPES: set[str] = {
+    "pl.DataFrame", "pl.LazyFrame", "pl.Series", "pl.Expr", "pl.DataType",
+}
+PYARROW_TYPES: set[str] = {
+    "pa.Table", "pa.RecordBatch", "pa.Array", "pa.ChunkedArray",
+    "pa.Schema", "pa.Field", "pa.DataType",
+}
+
+# Numerical computing
+NUMPY_TYPES: set[str] = {"np.ndarray", "np.matrix", "np.recarray",
+                         "np.ma.MaskedArray", "np.dtype", "np.generic",
+                         "np.number", "np.integer", "np.floating", "np.complexfloating"}
+NUMPY_DTYPES: set[str] = {f"np.{t}" for t in (
+    "int8", "int16", "int32", "int64", "intp",
+    "uint8", "uint16", "uint32", "uint64", "uintp",
+    "float16", "float32", "float64", "float128",
+    "complex64", "complex128", "complex256",
+    "bool_", "byte", "ubyte", "short", "ushort",
+    "intc", "uintc", "longlong", "ulonglong",
+    "half", "single", "double", "longdouble",
+    "csingle", "cdouble", "clongdouble",
+    "str_", "bytes_", "void", "object_",
+)}
+SCIPY_SPARSE_TYPES: set[str] = {
+    "sp.csr_matrix", "sp.csc_matrix", "sp.coo_matrix",
+    "sp.lil_matrix", "sp.dok_matrix", "sp.bsr_matrix",
+    "sp.dia_matrix", "sp.spmatrix",
+}
+
+# Classical ML
+SKLEARN_TYPES: set[str] = {
+    "sklearn.base.BaseEstimator", "sklearn.pipeline.Pipeline",
+    "sklearn.pipeline.FeatureUnion", "sklearn.compose.ColumnTransformer",
+    "BaseEstimator", "ClassifierMixin", "RegressorMixin",
+    "TransformerMixin", "ClusterMixin", "Pipeline",
+    "FeatureUnion", "ColumnTransformer",
+    "StandardScaler", "MinMaxScaler", "RobustScaler",
+    "OneHotEncoder", "LabelEncoder", "OrdinalEncoder",
+    "TfidfVectorizer", "CountVectorizer",
+}
+XGBOOST_TYPES: set[str] = {
+    "xgb.Booster", "xgb.DMatrix", "xgb.QuantileDMatrix",
+    "xgb.XGBClassifier", "xgb.XGBRegressor", "xgb.XGBRanker", "xgb.XGBRFRegressor",
+}
+LIGHTGBM_TYPES: set[str] = {
+    "lgb.Booster", "lgb.Dataset",
+    "lgb.LGBMClassifier", "lgb.LGBMRegressor", "lgb.LGBMRanker",
+}
+CATBOOST_TYPES: set[str] = {
+    "cb.CatBoost", "cb.Pool",
+    "cb.CatBoostClassifier", "cb.CatBoostRegressor", "cb.CatBoostRanker",
+}
+
+# Deep learning
+TENSORFLOW_TYPES: set[str] = {
+    "tf.Tensor", "tf.Variable", "tf.SparseTensor", "tf.RaggedTensor",
+    "tf.TensorArray", "tf.TensorSpec", "tf.dtypes.DType",
+    "tf.data.Dataset", "tf.data.Iterator",
+    "tf.keras.Model", "tf.keras.Sequential",
+    "tf.keras.layers.Layer", "tf.keras.losses.Loss",
+    "tf.keras.optimizers.Optimizer", "tf.keras.callbacks.Callback",
+    "tf.keras.metrics.Metric", "tf.keras.utils.Sequence",
+    "tf.train.Checkpoint", "tf.saved_model.SavedModel",
+}
+KERAS_TYPES: set[str] = {
+    "keras.Model", "keras.Sequential",
+    "keras.layers.Layer", "keras.losses.Loss",
+    "keras.optimizers.Optimizer", "keras.callbacks.Callback",
+    "keras.metrics.Metric", "keras.Input",
+}
+PYTORCH_TYPES: set[str] = {
+    "torch.Tensor", "torch.nn.Module", "torch.nn.Parameter",
+    "torch.utils.data.Dataset", "torch.utils.data.DataLoader",
+    "torch.utils.data.IterableDataset", "torch.utils.data.Sampler",
+    "torch.optim.Optimizer", "torch.optim.lr_scheduler.LRScheduler",
+    "torch.optim.lr_scheduler._LRScheduler",
+    "torch.cuda.Stream", "torch.cuda.Event",
+    "torch.device", "torch.dtype", "torch.Size", "torch.Generator",
+    "torch.distributions.Distribution",
+    "torchvision.transforms.Compose", "torchvision.datasets.VisionDataset",
+}
+JAX_TYPES: set[str] = {
+    "jax.Array", "jnp.ndarray", "jax.numpy.ndarray",
+    "jax.random.PRNGKey", "jax.tree_util.PyTreeDef",
+}
+ONNX_TYPES: set[str] = {
+    "onnx.ModelProto", "onnx.GraphProto", "onnx.TensorProto", "onnx.NodeProto",
+}
+
+# NLP — HuggingFace
+HF_TRANSFORMERS_TYPES: set[str] = {
+    "PreTrainedModel", "PreTrainedTokenizer", "PreTrainedTokenizerFast",
+    "PreTrainedTokenizerBase", "PretrainedConfig", "PreTrainedFeatureExtractor",
+    "AutoModel", "AutoModelForCausalLM", "AutoModelForMaskedLM",
+    "AutoModelForSeq2SeqLM", "AutoModelForSequenceClassification",
+    "AutoModelForTokenClassification", "AutoModelForQuestionAnswering",
+    "AutoModelForImageClassification",
+    "AutoTokenizer", "AutoConfig", "AutoFeatureExtractor", "AutoProcessor",
+    "Pipeline", "BatchEncoding", "BatchFeature",
+    "TrainingArguments", "Trainer", "Seq2SeqTrainingArguments",
+}
+HF_DATASETS_TYPES: set[str] = {
+    "datasets.Dataset", "datasets.DatasetDict",
+    "datasets.IterableDataset", "datasets.IterableDatasetDict",
+    "datasets.Features", "datasets.ClassLabel", "datasets.Value",
+}
+SENTENCE_TRANSFORMERS_TYPES: set[str] = {"SentenceTransformer", "CrossEncoder"}
+
+# NLP — others
+SPACY_TYPES: set[str] = {
+    "spacy.Language", "spacy.tokens.Doc", "spacy.tokens.Span",
+    "spacy.tokens.Token", "spacy.vocab.Vocab", "spacy.lexeme.Lexeme",
+}
+NLTK_TYPES: set[str] = {
+    "nltk.Text", "nltk.FreqDist", "nltk.ConditionalFreqDist",
+}
+GENSIM_TYPES: set[str] = {
+    "gensim.models.KeyedVectors", "gensim.models.Word2Vec",
+    "gensim.models.Doc2Vec", "gensim.models.FastText",
+    "gensim.models.LdaModel", "gensim.models.TfidfModel",
+    "gensim.corpora.Dictionary",
+}
+
+# LangChain / RAG / vector stores
+LANGCHAIN_TYPES: set[str] = {
+    "langchain_core.documents.Document",
+    "langchain_core.messages.BaseMessage", "langchain_core.messages.AIMessage",
+    "langchain_core.messages.HumanMessage", "langchain_core.messages.SystemMessage",
+    "langchain_core.language_models.BaseLanguageModel",
+    "langchain_core.language_models.BaseChatModel",
+    "langchain_core.embeddings.Embeddings",
+    "langchain_core.retrievers.BaseRetriever",
+    "langchain_core.vectorstores.VectorStore",
+    "langchain_core.tools.BaseTool",
+    "langchain_core.runnables.Runnable", "langchain_core.runnables.RunnableSequence",
+    "langchain_core.output_parsers.BaseOutputParser",
+}
+VECTOR_STORE_TYPES: set[str] = {
+    "Chroma", "FAISS", "Pinecone", "Qdrant",
+    "Weaviate", "Milvus", "Redis", "ElasticVectorSearch",
+    "QdrantVectorStore", "ChromaVectorStore", "PineconeVectorStore",
+    "InMemoryVectorStore",
+}
+
+# Image processing
+IMAGE_TYPES: set[str] = {
+    "PIL.Image.Image", "Image.Image",
+    "cv2.Mat", "cv2.UMat",
+}
+
+# Validation / serialization
+PYDANTIC_TYPES: set[str] = {"pydantic.BaseModel", "BaseModel"}
 
 
 # ----- data classes -----------------------------------------------------------
@@ -217,12 +389,33 @@ def layer_5_dangling(spec: dict, report: Report) -> bool:
 
 
 def layer_6_types(spec: dict, report: Report, strict: bool) -> bool:
-    """Check every `type` resolves to a builtin, pandas, numpy, datetime,
+    """Check every `type` resolves to a builtin, a recognized library type,
     or a declared schema.
+
+    Recognized ecosystems (see the type set definitions above):
+        stdlib: builtins, pathlib, datetime, io
+        data analysis: pandas, polars, pyarrow, numpy (incl. dtypes), scipy.sparse
+        classical ML: sklearn, xgboost, lightgbm, catboost
+        deep learning: tensorflow, keras, pytorch, jax, onnx
+        NLP: huggingface transformers/datasets, sentence-transformers,
+             spacy, nltk, gensim
+        RAG / vector stores: langchain_core, common vector store classes
+        image: PIL, cv2
+        validation: pydantic
     """
     declared_schemas = {s["name"] for s in spec.get("schemas", []) or []}
-    known = (BUILTIN_TYPES | PANDAS_TYPES | NUMPY_TYPES | DATETIME_TYPES
-             | PATHLIB_TYPES | declared_schemas)
+    known = (
+        BUILTIN_TYPES | PATHLIB_TYPES | DATETIME_TYPES | IO_TYPES
+        | PANDAS_TYPES | POLARS_TYPES | PYARROW_TYPES
+        | NUMPY_TYPES | NUMPY_DTYPES | SCIPY_SPARSE_TYPES
+        | SKLEARN_TYPES | XGBOOST_TYPES | LIGHTGBM_TYPES | CATBOOST_TYPES
+        | TENSORFLOW_TYPES | KERAS_TYPES | PYTORCH_TYPES | JAX_TYPES | ONNX_TYPES
+        | HF_TRANSFORMERS_TYPES | HF_DATASETS_TYPES | SENTENCE_TRANSFORMERS_TYPES
+        | SPACY_TYPES | NLTK_TYPES | GENSIM_TYPES
+        | LANGCHAIN_TYPES | VECTOR_STORE_TYPES
+        | IMAGE_TYPES | PYDANTIC_TYPES
+        | declared_schemas
+    )
 
     unresolved = []
     for node in spec.get("nodes", []):
