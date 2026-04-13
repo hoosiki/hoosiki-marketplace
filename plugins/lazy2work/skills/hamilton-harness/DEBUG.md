@@ -14,9 +14,10 @@ Each entry points to a dedicated procedure below. Work each procedure sequential
 
 ## A. Validation failure (F2 layer)
 
-1. Run `validate.py` with `--strict` and `-v` for full detail:
+1. Run `validate.py` with `--strict` and `-v` for full detail (from inside `hamilton_pipeline/`):
    ```bash
-   python ${CLAUDE_SKILL_DIR}/scripts/validate.py specs/<name>.yaml --strict
+   cd "$CLAUDE_PROJECT_DIR/hamilton_pipeline"
+   python "$CLAUDE_SKILL_DIR/scripts/validate.py" specs/<name>.yaml --strict
    ```
 2. Copy the first reported error. The layer prefix tells you what to fix:
    - **L1 schema** — the YAML is missing a required field or has the wrong type. Open `SPEC.md` §1 and compare.
@@ -33,7 +34,7 @@ Each entry points to a dedicated procedure below. Work each procedure sequential
 ## B. Runtime contract violation (@check_output or Pydantic)
 
 1. Note the failing node name from the traceback (it will appear as `<node>_raw_check_output_...`).
-2. Open a Python shell or a small script:
+2. Open a Python shell or a small script (run from inside `hamilton_pipeline/`):
    ```python
    from hamilton import driver
    import src.pipelines.<module> as pipeline

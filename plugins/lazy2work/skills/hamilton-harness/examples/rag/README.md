@@ -15,10 +15,17 @@ chunks → embeddings → vector index.
 
 ## Try it
 
+Copy the example contents into your project's `hamilton_pipeline/`, then run
+from there:
+
 ```bash
-cd examples/rag
-python $CLAUDE_SKILL_DIR/scripts/viz.py specs/rag_ingestion.yaml --format mermaid
+mkdir -p hamilton_pipeline && cp -r "$CLAUDE_SKILL_DIR/examples/rag/"* hamilton_pipeline/
+cd hamilton_pipeline
+python "$CLAUDE_SKILL_DIR/scripts/viz.py" specs/rag_ingestion.yaml --format mermaid
 ```
+
+Or experiment in-place: `cd "$CLAUDE_SKILL_DIR/examples/rag"` and run the same
+`viz.py` command.
 
 The Mermaid output is copy-pasteable into a PR description or Notion page.
 

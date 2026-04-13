@@ -10,10 +10,17 @@ Customer-churn prediction training pipeline. Highlights:
 
 ## Try it
 
+Copy the example contents into your project's `hamilton_pipeline/`, then run
+from there:
+
 ```bash
-cd examples/ml-training
-python $CLAUDE_SKILL_DIR/scripts/viz.py specs/churn_training.yaml --format all
+mkdir -p hamilton_pipeline && cp -r "$CLAUDE_SKILL_DIR/examples/ml-training/"* hamilton_pipeline/
+cd hamilton_pipeline
+python "$CLAUDE_SKILL_DIR/scripts/viz.py" specs/churn_training.yaml --format all
 ```
+
+Or experiment in-place: `cd "$CLAUDE_SKILL_DIR/examples/ml-training"` and run
+the same `viz.py` command.
 
 Open `build/dags/spec/churn_training.png` to see the DAG. Notice how
 `train_set` and `val_set` both depend on `labelled_features` — the tool places

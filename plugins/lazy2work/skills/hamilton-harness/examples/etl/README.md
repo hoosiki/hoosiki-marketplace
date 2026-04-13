@@ -10,19 +10,27 @@ report. Shows:
 
 ## Try it
 
+The example's contents are laid out as a mini `hamilton_pipeline/` directory —
+copy them into your project's `hamilton_pipeline/` and run from there:
+
 ```bash
-cd examples/etl
+# From your project root:
+mkdir -p hamilton_pipeline && cp -r "$CLAUDE_SKILL_DIR/examples/etl/"* hamilton_pipeline/
+cd hamilton_pipeline
 
 # 1. Validate
-python $CLAUDE_SKILL_DIR/scripts/validate.py specs/orders_etl.yaml
+python "$CLAUDE_SKILL_DIR/scripts/validate.py" specs/orders_etl.yaml
 
 # 2. Render + generate stubs
-python $CLAUDE_SKILL_DIR/scripts/viz.py specs/orders_etl.yaml --format all
+python "$CLAUDE_SKILL_DIR/scripts/viz.py" specs/orders_etl.yaml --format all
 
 # 3. Copy the generated stub into src/pipelines/ and fill in the bodies:
 #    cp build/stubs/orders_etl_stub.py src/pipelines/orders_etl.py
 #    cp build/stubs/schemas.py src/schemas.py
 ```
+
+Or stay inside the skill's example directory (`cd $CLAUDE_SKILL_DIR/examples/etl`)
+to play with it without touching your project layout.
 
 ## Key teaching points
 

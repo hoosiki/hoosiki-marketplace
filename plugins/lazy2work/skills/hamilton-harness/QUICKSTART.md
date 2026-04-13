@@ -1,6 +1,6 @@
 # Quickstart — 10 minutes to your first pipeline
 
-This walkthrough uses the `etl` example to get you from zero to a rendered DAG.
+This walkthrough uses the `etl` example to get you from zero to a rendered DAG. All pipeline assets live under a single `hamilton_pipeline/` directory at your project root — see `LAYOUT.md` for details.
 
 ## Prerequisites (one-time)
 
@@ -32,16 +32,17 @@ Claude should read `examples/etl/specs/orders_etl.yaml` and produce a Mermaid di
 ## Step 2 — Copy the example into a fresh project
 
 ```bash
-mkdir -p ~/my-first-pipeline && cd ~/my-first-pipeline
+mkdir -p ~/my-first-pipeline/hamilton_pipeline && cd ~/my-first-pipeline/hamilton_pipeline
 cp -r $(python -c "import os; print(os.path.expanduser('~/.claude/plugins/cache/lazy2work@*/plugins/lazy2work/skills/hamilton-harness/examples/etl/'))")* .
 ```
 
-You now have `specs/`, `src/`, `tests/` under `my-first-pipeline/`.
+You now have `specs/`, `src/`, `tests/` under `my-first-pipeline/hamilton_pipeline/`. All subsequent commands run from inside `hamilton_pipeline/`.
 
 ## Step 3 — Validate the spec
 
 ```bash
-python $CLAUDE_SKILL_DIR/scripts/validate.py specs/orders_etl.yaml
+cd ~/my-first-pipeline/hamilton_pipeline   # if not already there
+python "$CLAUDE_SKILL_DIR/scripts/validate.py" specs/orders_etl.yaml
 ```
 
 Expected output ends with `PASSED`.
@@ -49,10 +50,10 @@ Expected output ends with `PASSED`.
 ## Step 4 — Render + generate stubs
 
 ```bash
-python $CLAUDE_SKILL_DIR/scripts/viz.py specs/orders_etl.yaml --format all
+python "$CLAUDE_SKILL_DIR/scripts/viz.py" specs/orders_etl.yaml --format all
 ```
 
-This writes:
+This writes (all inside `hamilton_pipeline/`):
 
 - `build/stubs/orders_etl_stub.py`
 - `build/dags/spec/orders_etl.mmd`
@@ -65,7 +66,7 @@ Open the PNG to confirm the structure matches the Mermaid.
 
 Edit `build/stubs/orders_etl_stub.py` — replace each `raise NotImplementedError` with real logic. Copy the result into `src/pipelines/orders_etl.py` once you're happy with the first function.
 
-Run a minimal execution:
+Run a minimal execution (from inside `hamilton_pipeline/`):
 
 ```python
 from hamilton import driver

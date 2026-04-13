@@ -77,6 +77,7 @@ def _render_hamilton(spec: dict, stub_paths: list[str],
     if spec_loader is None or spec_loader.loader is None:
         return []
     mod = importlib.util.module_from_spec(spec_loader)
+    sys.modules[f"{name}_stub"] = mod
     try:
         spec_loader.loader.exec_module(mod)
     except Exception as e:

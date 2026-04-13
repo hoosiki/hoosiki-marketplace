@@ -1,11 +1,11 @@
 # Session Metrics Schema
 
-Each hamilton-harness session (a chain of F1–F4 operations on one project) writes a JSON file to `build/metrics/session-<timestamp>.json`. This lets you audit Claude's decisions later and spot drift or bypass patterns.
+Each hamilton-harness session (a chain of F1–F4 operations on one project) writes a JSON file to `hamilton_pipeline/build/metrics/session-<timestamp>.json`. This lets you audit Claude's decisions later and spot drift or bypass patterns.
 
 ## File location
 
 ```
-<project-root>/build/metrics/session-2026-04-13T14-23-05Z.json
+<project-root>/hamilton_pipeline/build/metrics/session-2026-04-13T14-23-05Z.json
 ```
 
 The timestamp is the session start, ISO 8601, with colons replaced by `-` for filename safety.
@@ -97,4 +97,4 @@ The skill scripts themselves only append events. They never overwrite or delete 
 
 ## Reading metrics
 
-Recommended follow-up: run `/sc:analyze build/metrics/` periodically to spot trends — e.g., if `total_retries` is consistently high on specific specs, that YAML likely has structural issues worth revisiting.
+Recommended follow-up: run `/sc:analyze hamilton_pipeline/build/metrics/` periodically to spot trends — e.g., if `total_retries` is consistently high on specific specs, that YAML likely has structural issues worth revisiting.

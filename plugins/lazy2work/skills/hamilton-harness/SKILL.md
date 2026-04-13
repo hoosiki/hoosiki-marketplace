@@ -10,7 +10,7 @@ description: |
   they don't explicitly say "Hamilton". Supports 4 modes: F1 prompt→YAML,
   F2 validate YAML, F3 generate stub + optional viz, F4 modify existing YAML.
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
-model: sonnet
+model: opus
 argument-hint: "[--viz] [--viz-format mermaid|graphviz|hamilton] [spec-name]"
 ---
 
@@ -159,8 +159,9 @@ Always include the expected downstream impact ("this will break 2 downstream nod
 ## Paths and conventions
 
 - `${CLAUDE_SKILL_DIR}` → this skill's directory; use it for every internal script call.
-- `${CLAUDE_PROJECT_DIR}` → the user's project root; use it to reach `specs/`, `src/`, `build/`, `runs/`.
-- Never reach into the plugin root. The skill is self-contained; all assets live under `${CLAUDE_SKILL_DIR}`.
+- `${CLAUDE_PROJECT_DIR}` → the user's project root. **All pipeline assets live under `${CLAUDE_PROJECT_DIR}/hamilton_pipeline/`** (see `LAYOUT.md`). Reach `specs/`, `src/`, `tests/`, `build/`, `runs/` through that prefix.
+- CLI commands assume the CWD is `${CLAUDE_PROJECT_DIR}/hamilton_pipeline/` so the scripts' CWD-relative `build/` output lands inside the pipeline folder, not the repo root.
+- Never reach into the plugin root. The skill is self-contained; all skill assets live under `${CLAUDE_SKILL_DIR}`.
 
 ## Supporting documents (read on demand)
 

@@ -2,6 +2,42 @@
 
 This changelog tracks the skill's own version independently from the `lazy2work` plugin that bundles it. Follow SemVer.
 
+## [1.1.0] — 2026-04-13
+
+### Changed
+
+- **Top-level `hamilton_pipeline/` folder wrapper.** All pipeline assets (`specs/`, `src/`, `tests/`, `build/`, `runs/`) now live under a single `hamilton_pipeline/` directory at the project root, keeping them isolated from other parts of the repo (Django apps, notebooks, web UI).
+- **`LAYOUT.md`** — tree re-rooted under `hamilton_pipeline/`; added "Why a dedicated folder" rationale, "Working directory convention" (`cd hamilton_pipeline/` before running CLI), and a concrete bootstrap command.
+- **`SKILL.md` Paths and conventions** — `${CLAUDE_PROJECT_DIR}` now points to the repo root; pipeline assets resolved through the `${CLAUDE_PROJECT_DIR}/hamilton_pipeline/` prefix.
+- **`QUICKSTART.md`** — all `cd` and relative-path examples updated to run inside `hamilton_pipeline/`.
+- **`DEBUG.md`** — validation and `display_upstream_of` commands now instruct `cd hamilton_pipeline/` first.
+- **`METRICS.md`** — session metrics path changed from `build/metrics/` to `hamilton_pipeline/build/metrics/`.
+- **`templates/project-layout/CLAUDE.md.tpl`** — rules reference `hamilton_pipeline/specs/*.yaml`, `hamilton_pipeline/build/`, `hamilton_pipeline/runs/`.
+- **`templates/project-layout/README.md.tpl`** — `cd hamilton_pipeline` pattern used consistently; key directories listed with prefix.
+- **`templates/project-layout/.gitignore.tpl`** — `build/` entry replaced with `hamilton_pipeline/build/`.
+- **`templates/pre-commit-config.yaml`** — `files:` regex now `^hamilton_pipeline/specs/.*\.yaml$`.
+- **`templates/github-workflow-dag-gate.yml`** — trigger paths, CI steps, and `upload-artifact` paths all prefixed with `hamilton_pipeline/`; `defaults.run.working-directory: hamilton_pipeline` so subsequent `specs/*.yaml` globs resolve correctly.
+- **`examples/*/README.md`** — show `cp -r "$CLAUDE_SKILL_DIR/examples/<domain>/"* hamilton_pipeline/` + `cd hamilton_pipeline` as the recommended path; in-place experimentation (`cd $CLAUDE_SKILL_DIR/examples/<domain>`) still documented for sandbox use.
+
+### Unchanged
+
+- **Scripts** (`viz.py`, `validate.py`, `yaml_to_*.py`, `dump_impl_meta.py`, `row_validator.py`) — unchanged. They still use CWD-relative paths for reads (`specs/`) and writes (`build/`). The new convention is that the user's CWD is `hamilton_pipeline/` when invoking them.
+- **Spec schema** (`SPEC.md`, `templates/spec-schema.json`) — unchanged.
+- **Example YAMLs** (`examples/*/specs/*.yaml`) — unchanged.
+
+### Migration
+
+For projects already using the 1.0.0 flat layout:
+
+```bash
+mkdir -p hamilton_pipeline
+git mv specs src tests build runs hamilton_pipeline/
+# Update .gitignore: build/ → hamilton_pipeline/build/
+# Update CI: paths in .pre-commit-config.yaml and .github/workflows/dag-gate.yml
+```
+
+No code changes are required — Hamilton modules still import from `src.pipelines.<name>` when invoked with `hamilton_pipeline/` as the CWD.
+
 ## [1.0.0] — 2026-04-13
 
 ### Added

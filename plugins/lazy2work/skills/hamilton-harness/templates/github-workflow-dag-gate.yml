@@ -1,21 +1,24 @@
 # hamilton-harness DAG Gate
 #
 # Copy this to your project's .github/workflows/dag-gate.yml
-# Runs validate.py on every PR that touches specs/ or src/pipelines/
-# and compares the spec DAG against the impl DAG.
+# Runs validate.py on every PR that touches hamilton_pipeline/specs/ or
+# hamilton_pipeline/src/pipelines/ and compares the spec DAG against the impl DAG.
 
 name: DAG Gate (hamilton-harness)
 
 on:
   pull_request:
     paths:
-      - "specs/**/*.yaml"
-      - "src/pipelines/**/*.py"
-      - "tests/test_dag_matches_spec.py"
+      - "hamilton_pipeline/specs/**/*.yaml"
+      - "hamilton_pipeline/src/pipelines/**/*.py"
+      - "hamilton_pipeline/tests/test_dag_matches_spec.py"
 
 jobs:
   dag-gate:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: hamilton_pipeline
     steps:
       - uses: actions/checkout@v4
 
@@ -64,7 +67,7 @@ jobs:
         with:
           name: dag-diagrams
           path: |
-            build/dags/**/*.png
-            build/dags/**/*.meta.json
-            build/stubs/*.py
+            hamilton_pipeline/build/dags/**/*.png
+            hamilton_pipeline/build/dags/**/*.meta.json
+            hamilton_pipeline/build/stubs/*.py
           retention-days: 14
