@@ -68,7 +68,7 @@ Running from the repo root requires the `hamilton_pipeline/` prefix on every pat
 Typical bootstrap:
 
 ```bash
-mkdir -p hamilton_pipeline/{specs,src/pipelines,tests/test_properties,runs}
+mkdir -p hamilton_pipeline/{dag_specs,src/pipelines,tests/test_properties,runs}
 touch hamilton_pipeline/src/__init__.py hamilton_pipeline/src/pipelines/__init__.py
 
 cp "$CLAUDE_SKILL_DIR/templates/project-layout/CLAUDE.md.tpl"   CLAUDE.md

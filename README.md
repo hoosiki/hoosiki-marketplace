@@ -524,6 +524,50 @@ Verify: `python -c "import hamilton, pydantic, hypothesis; print('ok')"` and `do
 
 ---
 
+**Target project layout** (full reference: skill's [`LAYOUT.md`](plugins/lazy2work/skills/hamilton-harness/LAYOUT.md)):
+
+```
+your-project/
+├── CLAUDE.md                          # Project rules; mentions hamilton-harness
+└── hamilton_pipeline/                 # All pipeline assets live here
+    ├── dag_specs/*.yaml               # Single source of truth (human-edited)
+    ├── src/
+    │   ├── pipelines/*.py             # Hamilton modules (one per pipeline)
+    │   └── schemas.py                 # Generated Pydantic models
+    ├── tests/
+    │   ├── test_dag_matches_spec.py   # L1 structural equivalence (auto-gen)
+    │   └── test_properties/test_*.py  # L3 Hypothesis property tests
+    ├── build/                         # gitignored; regenerable
+    │   ├── stubs/                     # YAML → Python stubs (F3 output)
+    │   ├── dags/{spec,impl,diff}/     # rendered diagrams
+    │   ├── reports/                   # pytest + hypothesis reports
+    │   └── metrics/                   # session-*.json
+    └── runs/{YYYYMMDD}/{feature}/     # Committed; execution artifacts
+        ├── input_snapshot.parquet
+        ├── output.parquet
+        └── hamilton_tracker.json
+```
+
+**Guardrails:**
+
+- **`dag_specs/` is human-only** — Claude proposes changes via F4 but writes only after user confirms the diff.
+- **`build/` is throwaway** — must regenerate from `dag_specs/` + `src/`; never commit it.
+- **`runs/` is the audit trail** — execution artifacts are reproducibility anchors; commit them.
+- **`src/schemas.py` is generated** — regenerate through F3 rather than hand-editing.
+
+**Bootstrap a fresh project:**
+
+```bash
+mkdir -p hamilton_pipeline/{dag_specs,src/pipelines,tests/test_properties,runs}
+touch hamilton_pipeline/src/__init__.py hamilton_pipeline/src/pipelines/__init__.py
+
+cp "$CLAUDE_SKILL_DIR/templates/project-layout/CLAUDE.md.tpl"   CLAUDE.md
+cp "$CLAUDE_SKILL_DIR/templates/project-layout/.gitignore.tpl"  .gitignore
+cp "$CLAUDE_SKILL_DIR/templates/project-layout/README.md.tpl"   README.md
+```
+
+---
+
 > **Working directory convention**: All CLI commands assume `cd hamilton_pipeline/` first — the scripts' CWD-relative `build/` output lands inside the pipeline folder, not the repo root. All pipeline assets live under `<project-root>/hamilton_pipeline/` (see the skill's `LAYOUT.md`).
 
 **F1 — Natural-language → YAML spec:**
@@ -631,7 +675,7 @@ The complexity score is logged to `build/metrics/session-<timestamp>.json` for a
 | `QUICKSTART.md` | 10-minute onboarding tutorial |
 | `DEBUG.md` | Decision tree for three common failure modes |
 | `METRICS.md` | Session metrics logging schema |
-| `CHANGELOG.md` | Skill-independent SemVer history (currently 1.0.0) |
+| `CHANGELOG.md` | Skill-independent SemVer history (currently 1.2.0) |
 
 **Trigger phrases (Korean + English)** — the skill auto-activates on: `파이프라인 만들어`, `DAG 설계`, `DAG 시각화`, `시각화해줘`, `YAML 스펙 검증`, `Hamilton으로`, `ETL 구현`, `feature engineering`, `RAG 인덱싱`, `ML 학습 파이프라인`, `data pipeline`.
 
@@ -929,7 +973,7 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 - **hamilton-harness: top-level `hamilton_pipeline/` folder wrapper** — all pipeline assets (`dag_specs/`, `src/`, `tests/`, `build/`, `runs/`) live under a single `hamilton_pipeline/` directory at the user's project root, keeping them isolated from Django apps, notebooks, web UI, and other repo contents. Scripts use CWD-relative paths; the working-directory convention is `cd hamilton_pipeline/` before invoking `validate.py`/`viz.py`
 - **hamilton-harness: docs reflect the `hamilton_pipeline/` layout** — `LAYOUT.md` (tree rooted under `hamilton_pipeline/` + "Why a dedicated folder" rationale + bootstrap command + working-directory convention), `SKILL.md` Paths and conventions, `QUICKSTART.md` (all `cd` and relative-path examples), `DEBUG.md` (`cd hamilton_pipeline/` in validation and upstream-display examples), `METRICS.md` (`hamilton_pipeline/build/metrics/` path)
 - **hamilton-harness: templates scoped to `hamilton_pipeline/`** — `CLAUDE.md.tpl` rules reference `hamilton_pipeline/*` paths; `README.md.tpl` uses `cd hamilton_pipeline` consistently; `.gitignore.tpl` excludes `hamilton_pipeline/build/`; `pre-commit-config.yaml` regex `^hamilton_pipeline/dag_specs/.*\.yaml$`; `github-workflow-dag-gate.yml` uses `defaults.run.working-directory: hamilton_pipeline` with all trigger paths and `upload-artifact` paths prefixed
-- **hamilton-harness: skill CHANGELOG** — internal skill-independent SemVer at 1.1.0 (1.0.0 initial release + 1.1.0 layout wrapper with full `git mv` migration guide)
+- **hamilton-harness: skill CHANGELOG** — internal skill-independent SemVer at 1.2.0 (1.0.0 initial release + 1.1.0 `hamilton_pipeline/` layout wrapper + 1.2.0 `specs/` → `dag_specs/` rename, each with a dedicated `git mv` migration guide)
 - **README: hamilton-harness usage examples** — added a dedicated `<details>` section covering one-time deps setup, F1 (prompt→YAML), F2 (validate), F3 (stub+viz with `--format mermaid|graphviz|hamilton|all`), F4 (diff-first modify), quickstart walkthrough, the 7-stage workflow with complexity scoring, and the list of trigger phrases (Korean + English). All F1/F2/F3/F4 blocks show the `cd hamilton_pipeline` working-directory convention and `hamilton_pipeline/dag_specs/*.yaml` paths
 - **README: Repository Structure** — added `hamilton-harness/` tree with `SPEC.md`, `LAYOUT.md`, `QUICKSTART.md`, `DEBUG.md`, `METRICS.md`, `CHANGELOG.md`, `scripts/`, `templates/`, `examples/`, and `tests/` (annotated to note the skill scaffolds `hamilton_pipeline/` in user projects)
 - **marketplace.json sync** — caught up from 1.10.0 → 1.19.0 (metadata + plugins[0]) and updated its description/tags/keywords to reflect the Hamilton and Mermaid additions
