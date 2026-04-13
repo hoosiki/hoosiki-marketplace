@@ -73,6 +73,9 @@ def _render_hamilton(spec: dict, stub_paths: list[str],
         return []
 
     name = spec.get("name") or spec_path.stem
+    stub_dir = str(Path(stub_py).parent)
+    if stub_dir not in sys.path:
+        sys.path.insert(0, stub_dir)
     spec_loader = importlib.util.spec_from_file_location(f"{name}_stub", stub_py)
     if spec_loader is None or spec_loader.loader is None:
         return []

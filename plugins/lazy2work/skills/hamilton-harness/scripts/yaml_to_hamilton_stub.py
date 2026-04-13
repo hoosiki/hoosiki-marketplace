@@ -19,10 +19,11 @@ _TYPE_MAP = {
     "int": "int", "float": "float", "str": "str", "bool": "bool",
     "bytes": "bytes", "list": "list", "dict": "dict", "tuple": "tuple",
     "set": "set", "object": "object", "None": "None",
-    "datetime": "datetime.datetime", "date": "datetime.date",
-    "time": "datetime.time", "timedelta": "datetime.timedelta",
+    "datetime": "datetime", "date": "date",
+    "time": "time", "timedelta": "timedelta",
     "pd.DataFrame": "pd.DataFrame", "pd.Series": "pd.Series",
     "np.ndarray": "np.ndarray",
+    "Path": "Path", "PurePath": "PurePath",
 }
 
 
@@ -58,6 +59,7 @@ def emit_pydantic_schemas(schemas: list[dict]) -> str:
         return ""
     lines = ["from typing import Literal, Optional",
              "from datetime import datetime, date, time, timedelta",
+             "from pathlib import Path, PurePath",
              "import numpy as np",
              "import pandas as pd",
              "from pydantic import BaseModel, Field",
@@ -88,15 +90,25 @@ def _node_type(node: dict, schemas: set[str]) -> str:
     return _TYPE_MAP.get(t, t)
 
 
-def _build_decorators(node: dict) -> str:
+def _build_decorators(node: dict, ret_type: str) -> str:
     lines: list[str] = []
+    # Hamilton's built-in @check_output(range=, allow_nans=) doesn't support
+    # DataFrame returns — emit those invariants as TODO comments so the Driver
+    # can still build (@check_output_custom with a RowModelValidator is the
+    # supported path for DataFrames).
+    df_return = ret_type == "pd.DataFrame"
     for inv in node.get("invariants") or []:
         if "range" in inv:
             lo, hi = inv["range"]
-            lines.append(f'@check_output(range=({lo}, {hi}), importance="fail")')
+            if df_return:
+                lines.append(f'# TODO: @check_output_custom(range=({lo}, {hi}))  # DataFrame')
+            else:
+                lines.append(f'@check_output(range=({lo}, {hi}), importance="fail")')
         elif inv.get("no_nulls"):
-            lines.append('@check_output(allow_nans=False, importance="fail")')
-        # values and regex rely on custom validators; emit as TODO
+            if df_return:
+                lines.append('# TODO: @check_output_custom(allow_nans=False)  # DataFrame')
+            else:
+                lines.append('@check_output(allow_nans=False, importance="fail")')
         elif "values" in inv or "regex" in inv:
             kind = "values" if "values" in inv else "regex"
             lines.append(f'# TODO: @check_output_custom({kind}={inv[kind]!r})')
@@ -121,7 +133,7 @@ def emit_hamilton_stub(spec: dict) -> str:
 
     pipeline_name = spec.get("name", "pipeline")
     schema_import = (
-        "from .schemas import " + ", ".join(sorted(schemas))
+        "from schemas import " + ", ".join(sorted(schemas))
         if schemas else ""
     )
 
@@ -134,6 +146,7 @@ def emit_hamilton_stub(spec: dict) -> str:
         Fill in the function bodies; the DAG structure is already correct.
         """
         import datetime
+        from pathlib import Path, PurePath
         import numpy as np
         import pandas as pd
         from hamilton.function_modifiers import check_output, tag
@@ -146,9 +159,9 @@ def emit_hamilton_stub(spec: dict) -> str:
         if node.get("source") == "input":
             continue  # external inputs come via Driver.execute(inputs=...)
 
-        decorators = _build_decorators(node)
         params = _params(node, node_types)
         ret = _node_type(node, schemas)
+        decorators = _build_decorators(node, ret)
         desc = (node.get("description") or "").replace('"', "'").replace("\n", " ")
 
         body_parts.append("\n")

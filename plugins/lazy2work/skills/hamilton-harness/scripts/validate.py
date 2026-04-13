@@ -53,6 +53,7 @@ NUMPY_TYPES = {"np.ndarray"} | {f"np.{t}" for t in ("int8", "int16", "int32", "i
                                                     "uint8", "uint16", "uint32", "uint64",
                                                     "float16", "float32", "float64", "bool_")}
 DATETIME_TYPES = {"datetime", "date", "time", "timedelta"}
+PATHLIB_TYPES = {"Path", "PurePath"}
 
 
 # ----- data classes -----------------------------------------------------------
@@ -220,7 +221,8 @@ def layer_6_types(spec: dict, report: Report, strict: bool) -> bool:
     or a declared schema.
     """
     declared_schemas = {s["name"] for s in spec.get("schemas", []) or []}
-    known = BUILTIN_TYPES | PANDAS_TYPES | NUMPY_TYPES | DATETIME_TYPES | declared_schemas
+    known = (BUILTIN_TYPES | PANDAS_TYPES | NUMPY_TYPES | DATETIME_TYPES
+             | PATHLIB_TYPES | declared_schemas)
 
     unresolved = []
     for node in spec.get("nodes", []):
