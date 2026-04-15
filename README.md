@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.21.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.22.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.21.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, and Hamilton spec-driven pipelines |
+| [**lazy2work**](plugins/lazy2work/) | 1.22.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, and Hamilton spec-driven pipelines |
 
 ---
 
@@ -989,6 +989,13 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.22.0 (2026-04-16)
+
+- **apply-all-sc-save: fix Claude pane detection after Claude Code upgrade** — Recent Claude Code builds (v2.1.107+) report `pane_current_command` as a semver string (e.g. `2.1.107`, `2.1.108`) instead of the literal `claude`. The old strict equality check (`command != "claude"`) silently matched zero panes, so the broadcast became a no-op for anyone on a current Claude build. Replaced with a regex that accepts both legacy (`claude`) and modern (`\d+\.\d+\.\d+`) forms, restoring detection
+- **apply-all-sc-save: `scripts/save_all_claude.py`** — new public helper `_is_claude_command(command)` encapsulates the classification rule; `find_claude_panes()` delegates to it. Future Claude Code process-name changes only require updating the pattern in one place
+- **tests: `tests/test_save_all_claude.py`** — 23 pytest cases covering `_is_claude_command` (parametrized across 15 command strings including legacy/version/version-with-suffix/common-non-claude), `find_claude_panes` (mocked `_run_tmux` outputs for legacy commands, version commands, self-exclusion, non-Claude filtering, empty output, malformed lines), and `send_command` (dry-run, send with Enter). Full suite: 119 tests pass (96 + 23)
+- **Version bump**: 1.21.0 → 1.22.0
 
 ### v1.21.0 (2026-04-15)
 

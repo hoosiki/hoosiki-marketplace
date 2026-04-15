@@ -11,11 +11,38 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 
 _TMUX_CMD: str = "tmux"
 _DEFAULT_COMMAND: str = "/sc:save"
+
+# Claude Code reports `pane_current_command` as either the literal string
+# "claude" (older builds) or its semantic version string "X.Y.Z" (modern
+# builds, e.g. "2.1.107"). Match both so detection survives Claude updates.
+_CLAUDE_CMD_PATTERN: re.Pattern[str] = re.compile(r"^(claude|\d+\.\d+\.\d+)")
+
+
+def _is_claude_command(command: str) -> bool:
+    """Return True if a tmux pane_current_command identifies a Claude Code pane.
+
+    Args:
+        command: Raw value of the `pane_current_command` format variable.
+
+    Returns:
+        True when the command is either literal "claude" or a semver-like
+        version string such as "2.1.107".
+
+    Examples:
+        >>> _is_claude_command("claude")
+        True
+        >>> _is_claude_command("2.1.107")
+        True
+        >>> _is_claude_command("nvim")
+        False
+    """
+    return bool(_CLAUDE_CMD_PATTERN.match(command))
 
 
 def _run_tmux(*args: str) -> str:
@@ -72,7 +99,7 @@ def find_claude_panes(
         if len(parts) != 3:
             continue
         target, pane_id, command = parts
-        if command != "claude":
+        if not _is_claude_command(command):
             continue
         if exclude_pane and pane_id == exclude_pane:
             continue
