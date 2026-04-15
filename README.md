@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.20.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.21.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.20.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, and Hamilton spec-driven pipelines |
+| [**lazy2work**](plugins/lazy2work/) | 1.21.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, and Hamilton spec-driven pipelines |
 
 ---
 
@@ -54,7 +54,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 | **generate-optimized-spec-kit-prompt** | `/lazy2work:generate-optimized-spec-kit-prompt` | Generate complete Spec Kit prompts (specify/clarify/plan/tasks/implement/commit) for all features — splits project into 1-5 day features, generates 6-stage prompts per feature with Mermaid diagrams and auto-clarify/auto-commit steps |
 | **pyright-setup** | `/lazy2work:pyright-setup` | Auto-configure Pyright for Python projects — detects Python version from venv, adds `[tool.pyright]` to pyproject.toml, resolves "Import could not be resolved" LSP errors in Neovim/VS Code |
 | **apply-all-sc-save** | `/lazy2work:apply-all-sc-save` | Broadcast `/sc:save` to all Claude Code panes in the current tmux session — auto-detects Claude panes, excludes self, supports `--dry-run`, `--all-sessions`, and custom commands |
-| **fix-mermaid** | `/lazy2work:fix-mermaid` | Fix Mermaid diagram syntax errors in Markdown files — detects reserved word conflicts, Unicode/Langium parser issues, message escaping problems. Bundled Python script for automated lint and auto-fix (`--fix`) |
+| **fix-mermaid** | `/lazy2work:fix-mermaid` | Fix Markdown rendering issues that break Mermaid diagrams or pandoc PDF conversion — Mermaid v11 syntax (reserved words, Unicode/Langium issues, message escaping) **and** pandoc PDF pitfalls (blank-line compliance before lists/tables/fences as auto-fixed errors, long-mixed-cell overflow as warnings). Two bundled Python scripts (`fix_mermaid.py`, `fix_pandoc_blanks.py`) with lint / `--fix` / `--json` modes |
 | **hamilton-harness** | `/lazy2work:hamilton-harness` | Build Hamilton data pipelines through a spec-driven workflow — 4 modes (prompt→YAML, validate, stub+viz, modify), Pydantic schemas, Mermaid/Graphviz/Hamilton rendering, 3 domain examples (ETL/ML/RAG). Self-contained — no plugin-level hooks or rules needed |
 
 <details>
@@ -448,6 +448,13 @@ Notes:
 <details>
 <summary><strong>fix-mermaid — Usage Examples</strong></summary>
 
+The skill bundles **two scripts** covering different Markdown rendering pitfalls:
+
+- `fix_mermaid.py` — Mermaid diagram syntax (reserved words, Unicode, message escaping)
+- `fix_pandoc_blanks.py` — Pandoc PDF rendering pitfalls (blank-line compliance + long-mixed-cell warnings)
+
+### Workflow A — Mermaid Syntax
+
 **Lint a file (report issues without changing):**
 
 ```bash
@@ -460,27 +467,14 @@ python3 plugins/lazy2work/skills/fix-mermaid/scripts/fix_mermaid.py docs/PROJECT
 python3 plugins/lazy2work/skills/fix-mermaid/scripts/fix_mermaid.py docs/PROJECT_ANALYSIS.md --fix
 ```
 
-**Scan an entire directory:**
+**Scan a directory / emit JSON:**
 
 ```bash
 python3 plugins/lazy2work/skills/fix-mermaid/scripts/fix_mermaid.py docs/ --fix
-```
-
-**JSON output (for CI/scripts):**
-
-```bash
 python3 plugins/lazy2work/skills/fix-mermaid/scripts/fix_mermaid.py docs/ --json
 ```
 
-**Or invoke as a skill in Claude Code:**
-
-```
-/lazy2work:fix-mermaid
-```
-
-> Just mention "mermaid 오류", "mermaid fix", "diagram broken", or "Syntax error in text mermaid version" in your prompt and the skill will trigger automatically.
-
-What the script detects and fixes:
+What it detects and fixes:
 
 | Category | Examples |
 |----------|---------|
@@ -489,23 +483,58 @@ What the script detects and fixes:
 | **Unicode issues** | Smart quotes `""` → `""`, fullwidth CJK `（）` → `()`, invisible chars removed |
 | **Typographic dashes** | Em dash `—` → `--`, en dash `–` → `-` |
 
+### Workflow B — Pandoc PDF Rendering
+
+**Lint (reports errors + warnings):**
+
+```bash
+python3 plugins/lazy2work/skills/fix-mermaid/scripts/fix_pandoc_blanks.py report.md
+```
+
+**Auto-fix blank-line errors (warnings are never modified):**
+
+```bash
+python3 plugins/lazy2work/skills/fix-mermaid/scripts/fix_pandoc_blanks.py report.md --fix
+```
+
+What it detects:
+
+| Rule | Severity | Auto-fix | Trigger |
+|------|---------|---------|---------|
+| `missing-blank-before-list` | error | ✅ | Bullet/numbered list without preceding blank line |
+| `missing-blank-before-table` | error | ✅ | Pipe table row without preceding blank line |
+| `missing-blank-before-fence` | error | ✅ | ` ``` ` or `~~~` fence without preceding blank line |
+| `long-mixed-cell` | warning | ❌ (manual) | Table cell ≥ 25 chars mixing `**bold**` with risky symbols (`·`, `—`, `+`, parens) that trigger LaTeX overfull hbox |
+
 Example output:
 
 ```
-Found 5 issue(s):
+Found 3 error(s), 2 warning(s):
 
-Block | Line | Rule                 | Before
---------------------------------------------------------------------------------
-    1 |    7 | reserved-word        | participant OPT as Optuna
-    1 |    9 | message-escape       | CEL->>OPTA: create_study(direction="minimize")
-    2 |   19 | message-escape       | C->>V: POST /api/users/{id}/ {name: "test"}
-    2 |   20 | message-escape       | V-->>C: 200 OK {status: "ok", data: [1, 2]}
-    3 |   27 | fullwidth-cjk        | A["데이터（원본）"] --> B
+Sev      |  Line | Rule                             | Context
+------------------------------------------------------------------------
+error    |    77 | missing-blank-before-list        | - React 프론트엔드...
+error    |   192 | missing-blank-before-table       | | 모델 | Google-BLEU | ...
+error    |   775 | missing-blank-before-fence       | ```
+warning  |   197 | long-mixed-cell                  | **Fine-tuned GPT-4o**
+warning  |   198 | long-mixed-cell                  | Up to **+40%** (7B·8B)
 
-Run with --fix to apply corrections.
+Warnings require manual review (not auto-fixable).
+Run with --fix to apply blank-line corrections.
 ```
 
-Reference documentation: `references/mermaid-v11-syntax.md` covers 18 sections including all diagram types, arrow syntax, Unicode replacement tables, reserved word list, and entity escaping guide.
+### Invoke as a Skill
+
+```
+/lazy2work:fix-mermaid
+```
+
+> Trigger phrases: "mermaid 오류", "mermaid fix", "diagram broken", "Syntax error in text mermaid version", "pandoc 테이블 깨짐", "md pdf 변환 문제", "테이블이 렌더링 안됨", "overfull hbox".
+
+Reference documentation:
+
+- `references/mermaid-v11-syntax.md` — 18 sections covering all diagram types, arrow syntax, Unicode replacement tables, reserved words, entity escaping
+- `references/pandoc-pdf-pitfalls.md` — 5 sections covering blank-line compliance, long-mixed-cell overflow, font fallback, and a pre-conversion checklist
 
 </details>
 
@@ -960,6 +989,16 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.21.0 (2026-04-15)
+
+- **fix-mermaid: pandoc PDF rendering coverage** — skill expanded beyond Mermaid syntax to include pandoc Markdown pitfalls that silently corrupt `pandoc -d pdf-korean` (lualatex/xelatex) PDF output. New script `scripts/fix_pandoc_blanks.py` (Google-style docstrings, Python 3.10+ type hints, 120-char lines) detects:
+  - **`missing-blank-before-list|table|fence`** (severity=error, **auto-fixable**) — block elements without a preceding blank line that pandoc silently merges into the previous paragraph, producing garbled lists/tables/code in the PDF. Korean writers frequently hit this because the `**라벨**:` → list pattern omits the blank line. Script inserts a single blank line before every offending block and never touches content inside fenced code
+  - **`long-mixed-cell`** (severity=warning, **manual review**) — pipe-table cells ≥ 25 chars combining `**bold**` markup with risky symbols (`·`, `—`, `–`, `+`, `(`, `)`) that defeat `\sloppy` + `\emergencystretch` + `\seqsplit` and trigger LaTeX overfull hbox. Not auto-fixed because remediation (remove bold / shorten cell / restructure table) requires human judgment
+- **fix-mermaid: 3-workflow SKILL.md** — decision tree now routes users by symptom: Workflow A (Mermaid syntax) → `fix_mermaid.py`, Workflow B (blank-line compliance) → `fix_pandoc_blanks.py --fix`, Workflow C (cell overflow) → `fix_pandoc_blanks.py` warnings + manual edits. Trigger keywords extended to cover pandoc PDF symptoms ("pandoc 테이블 깨짐", "md pdf 변환 문제", "테이블이 렌더링 안됨", "overfull hbox")
+- **fix-mermaid: `references/pandoc-pdf-pitfalls.md`** — new English reference document in the style of `mermaid-v11-syntax.md` (Table of Contents + numbered sections + `%% WRONG` / `%% CORRECT` examples). Five sections: (1) Missing Blank Line Before Block Elements, (2) Long Table Cells Mixing Bold and Special Symbols, (3) Font Fallback for Korean and Emoji, (4) Pre-conversion Checklist, (5) External References
+- **tests: `tests/test_fix_pandoc_blanks.py`** — 31 pytest cases (TDD Red-Green-Refactor) covering `check_lines`, `fix_lines`, `check_table_cells`, `process_file`, and `Issue` dataclass. Parametrized across 6 block patterns (bullet-no-blank, bullet-with-blank, numbered-no-blank, table-no-blank, fence-no-blank, list-after-heading). Full suite: 96 tests pass
+- **Version bump**: 1.20.0 → 1.21.0
 
 ### v1.20.0 (2026-04-13)
 
