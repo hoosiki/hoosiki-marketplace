@@ -20,10 +20,21 @@ Examples:
 from __future__ import annotations
 
 import json
+import logging
 import re
 import sys
 import unicodedata
+from dataclasses import dataclass, field
 from pathlib import Path
+
+from validate_mermaid import (
+    MmdcError,
+    ValidationError,
+    find_mmdc_executable,
+    validate_file,
+)
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Reserved words (sequence diagram)
@@ -440,6 +451,207 @@ def process_file(filepath: Path, apply_fix: bool = False) -> list[Issue]:
     return all_issues
 
 
+# ---------------------------------------------------------------------------
+# mmdc feedback loop
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class FixSuggestion:
+    """A suggested fix in response to a specific mmdc error.
+
+    Attributes:
+        rule: Name of the fix rule that applies (e.g. "reserved-word", "unquoted-label").
+        hint: Human-readable hint shown to the user / logged.
+
+    Examples:
+        >>> s = FixSuggestion(rule="reserved-word", hint="rename 'end' → 'ENDP'")
+        >>> s.rule
+        "reserved-word"
+    """
+
+    rule: str
+    hint: str
+
+
+@dataclass
+class FeedbackReport:
+    """Aggregate outcome of the static-fix + mmdc-validate feedback loop.
+
+    Attributes:
+        iterations: Number of fix/validate cycles performed (>= 1).
+        static_issues: Issues detected and fixed by the static linter passes.
+        final_errors: Remaining mmdc errors after all iterations (empty == success).
+        suggestions: Per-iteration list of suggestions derived from mmdc errors.
+
+    Examples:
+        >>> r = FeedbackReport(iterations=1, static_issues=[], final_errors=[], suggestions=[])
+        >>> r.iterations
+        1
+    """
+
+    iterations: int
+    static_issues: list[Issue] = field(default_factory=list)
+    final_errors: list[ValidationError] = field(default_factory=list)
+    suggestions: list[list[FixSuggestion]] = field(default_factory=list)
+
+
+# Tokens that mmdc reports as `got '...'` when a sequence-diagram reserved word
+# was used as a participant identifier. Matches RESERVED_WORDS above.
+_RESERVED_WORD_TOKENS: frozenset[str] = frozenset(RESERVED_WORDS.keys())
+
+# Flowchart / graph tokens that appear in the `Expecting 'X', ..., got 'Y'`
+# list when a bracket / paren / brace inside a label was not quoted.
+_FLOWCHART_SHAPE_TOKENS: frozenset[str] = frozenset({
+    "SQE",   # ]
+    "PE",    # )
+    "DOUBLECIRCLEEND",
+    "STADIUMEND",
+    "SUBROUTINEEND",
+    "CYLINDEREND",
+    "DIAMOND_STOP",
+})
+
+
+def suggest_fix_for_mmdc_error(error: MmdcError) -> FixSuggestion | None:
+    """Map a parsed mmdc error to a concrete fix suggestion.
+
+    Args:
+        error: The structured error emitted by parse_mmdc_stderr.
+
+    Returns:
+        A FixSuggestion if a known pattern matches, None otherwise.
+
+    Examples:
+        >>> err = MmdcError(line=3, got="end", expected=["participant"], context="")
+        >>> suggest_fix_for_mmdc_error(err).rule
+        "reserved-word"
+    """
+    got_lower = error.got.lower()
+    if got_lower in _RESERVED_WORD_TOKENS and "participant" in error.expected:
+        safe = SAFE_RENAMES.get(got_lower, got_lower.upper() + "X")
+        return FixSuggestion(
+            rule="reserved-word",
+            hint=f"rename participant ID '{error.got}' → '{safe}' (reserved keyword)",
+        )
+
+    if error.got in {"PS", "SQS", "DOUBLECIRCLESTART"} or any(
+        t in _FLOWCHART_SHAPE_TOKENS for t in error.expected
+    ):
+        return FixSuggestion(
+            rule="unquoted-label",
+            hint="wrap the node label in double quotes — it contains "
+            "unescaped (, ), [, ], {, or }",
+        )
+
+    return None
+
+
+def fix_with_mmdc_feedback(
+    filepath: Path,
+    max_iterations: int = 3,
+) -> FeedbackReport:
+    """Iteratively apply static fixes and validate with mmdc until clean or stuck.
+
+    Strategy (per iteration):
+        1. Run ``process_file(apply_fix=True)`` to apply static rules.
+        2. Run ``validate_file`` (mmdc) to surface remaining parse errors.
+        3. Derive fix suggestions from the errors via ``suggest_fix_for_mmdc_error``.
+        4. If the second iteration produces the same errors as the first,
+           terminate early — we have nothing more to try automatically.
+
+    Args:
+        filepath: Markdown file to repair and validate.
+        max_iterations: Maximum number of fix/validate cycles. Defaults to 3.
+
+    Returns:
+        FeedbackReport summarizing what happened.
+
+    Raises:
+        FileNotFoundError: If filepath does not exist.
+
+    Examples:
+        >>> fix_with_mmdc_feedback(Path("diagram.md"))  # doctest: +SKIP
+        FeedbackReport(iterations=1, ...)
+    """
+    if not filepath.is_file():
+        raise FileNotFoundError(filepath)
+
+    all_static_issues: list[Issue] = []
+    all_suggestions: list[list[FixSuggestion]] = []
+    previous_error_keys: set[tuple[int, int, str]] = set()
+    iterations = 0
+    final_errors: list[ValidationError] = []
+
+    for iteration in range(1, max_iterations + 1):
+        iterations = iteration
+
+        issues = process_file(filepath, apply_fix=True)
+        all_static_issues.extend(issues)
+
+        final_errors = validate_file(filepath)
+        if not final_errors:
+            all_suggestions.append([])
+            logger.info("mmdc validation clean after iteration %d", iteration)
+            break
+
+        suggestions: list[FixSuggestion] = []
+        current_error_keys: set[tuple[int, int, str]] = set()
+        for err in final_errors:
+            if err.mmdc_error is not None:
+                suggestion = suggest_fix_for_mmdc_error(err.mmdc_error)
+                if suggestion is not None:
+                    suggestions.append(suggestion)
+                current_error_keys.add(
+                    (err.block_index, err.file_line, err.mmdc_error.got),
+                )
+        all_suggestions.append(suggestions)
+
+        if iteration > 1 and current_error_keys == previous_error_keys:
+            logger.info("mmdc errors did not change — giving up after iteration %d", iteration)
+            break
+        previous_error_keys = current_error_keys
+
+    return FeedbackReport(
+        iterations=iterations,
+        static_issues=all_static_issues,
+        final_errors=final_errors,
+        suggestions=all_suggestions,
+    )
+
+
+def _print_feedback_summary(filepath: Path, report: FeedbackReport) -> None:
+    """Print a human-readable summary of a feedback-loop run.
+
+    Args:
+        filepath: File that was processed.
+        report: The FeedbackReport returned by fix_with_mmdc_feedback.
+
+    Examples:
+        >>> _print_feedback_summary(Path("x.md"), FeedbackReport(iterations=1))  # doctest: +SKIP
+    """
+    print(f"\n=== {filepath} ===")
+    print(f"  iterations: {report.iterations}")
+    print(f"  static fixes applied: {len(report.static_issues)}")
+    if report.final_errors:
+        print(f"  mmdc errors remaining: {len(report.final_errors)}")
+        for err in report.final_errors:
+            got = err.mmdc_error.got if err.mmdc_error is not None else "?"
+            print(f"    - block #{err.block_index} line {err.file_line}: got '{got}'")
+        flat = [s for batch in report.suggestions for s in batch]
+        if flat:
+            print("  suggestions:")
+            for s in flat[:5]:
+                print(f"    * {s.rule}: {s.hint}")
+    else:
+        print("  mmdc: all blocks render successfully.")
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+
 def main() -> int:
     """CLI entry point.
 
@@ -452,7 +664,16 @@ def main() -> int:
 
     apply_fix = "--fix" in sys.argv
     output_json = "--json" in sys.argv
+    with_mmdc = "--with-mmdc" in sys.argv
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
+
+    if with_mmdc and find_mmdc_executable() is None:
+        print(
+            "ERROR: --with-mmdc requires mmdc on PATH. "
+            "Install via `npm i -g @mermaid-js/mermaid-cli`.",
+            file=sys.stderr,
+        )
+        return 2
 
     targets: list[Path] = []
     for arg in args:
@@ -465,7 +686,22 @@ def main() -> int:
             print(f"Warning: {arg} not found, skipping", file=sys.stderr)
 
     all_issues: list[dict[str, str | int]] = []
+    all_mmdc_errors: list[dict[str, object]] = []
     for filepath in targets:
+        if with_mmdc:
+            report = fix_with_mmdc_feedback(filepath)
+            for issue in report.static_issues:
+                d = issue.to_dict()
+                d["file"] = str(filepath)
+                all_issues.append(d)
+            for err in report.final_errors:
+                d = err.to_dict()
+                d["file"] = str(filepath)
+                all_mmdc_errors.append(d)
+            if not output_json:
+                _print_feedback_summary(filepath, report)
+            continue
+
         issues = process_file(filepath, apply_fix=apply_fix)
         for issue in issues:
             d = issue.to_dict()
@@ -473,7 +709,14 @@ def main() -> int:
             all_issues.append(d)
 
     if output_json:
-        print(json.dumps({"issues": all_issues, "total": len(all_issues)}, indent=2))
+        payload: dict[str, object] = {"issues": all_issues, "total": len(all_issues)}
+        if with_mmdc:
+            payload["mmdc_errors"] = all_mmdc_errors
+            payload["mmdc_total"] = len(all_mmdc_errors)
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+    elif with_mmdc:
+        # Feedback summary is already printed per file; nothing more to say here.
+        pass
     elif not all_issues:
         print("OK: No Mermaid issues found.")
     else:
@@ -488,8 +731,11 @@ def main() -> int:
             print(f"{d['block']:>5} | {d['line']:>4} | {d['rule']:<20} | {before}")
 
         if not apply_fix:
-            print(f"\nRun with --fix to apply corrections.")
+            print("\nRun with --fix to apply corrections.")
 
+    if with_mmdc:
+        # Exit status mirrors the ground truth: only unresolved mmdc errors fail.
+        return 1 if all_mmdc_errors else 0
     return 1 if all_issues else 0
 
 

@@ -10,7 +10,8 @@ for `fix_pandoc_blanks.py`; also usable as a human pre-flight checklist.
 2. [Long Table Cells Mixing Bold and Special Symbols](#2-long-table-cells-mixing-bold-and-special-symbols)
 3. [Font Fallback for Korean and Emoji](#3-font-fallback-for-korean-and-emoji)
 4. [Pre-conversion Checklist](#4-pre-conversion-checklist)
-5. [External References](#5-external-references)
+5. [Unicode Glyph Missing in CJK Fonts](#5-unicode-glyph-missing-in-cjk-fonts)
+6. [External References](#6-external-references)
 
 ---
 
@@ -280,8 +281,9 @@ Confirm each of the following renders correctly:
 
 Run each check before `pandoc -d pdf-korean ...`:
 
-- [ ] `fix_pandoc_blanks.py file.md` reports 0 errors
+- [ ] `fix_pandoc_blanks.py file.md` reports 0 errors (blank-line + unicode glyph)
 - [ ] Any remaining warnings have been reviewed by a human
+- [ ] No `Missing character` warnings in pandoc output
 - [ ] `fix_mermaid.py file.md` reports 0 issues
 - [ ] `~/.pandoc/defaults/pdf-korean.yaml` exists and its referenced filter paths resolve
 - [ ] `mmdc --version` succeeds (required if the document contains Mermaid)
@@ -295,7 +297,74 @@ Optional quality checks:
 
 ---
 
-## 5. External References
+## 5. Unicode Glyph Missing in CJK Fonts
+
+Severity: **error** (auto-fixable by `fix_pandoc_blanks.py --fix`).
+
+### 5.1 Symptoms
+
+- pandoc emits: `[WARNING] Missing character: There is no − (U+2212) in font ...`
+- Characters silently disappear in the PDF (e.g., `1−r/c` becomes `1r/c`)
+- Check/ballot marks (`✗`, `✓`) render as blank spaces in tables
+
+### 5.2 Root Cause
+
+LLM-generated text (Claude, GPT, etc.) and web copy-paste frequently
+introduce Unicode look-alike characters. These are visually identical to
+ASCII equivalents but use different code points that CJK fonts lack:
+
+| Appears as | ASCII (safe) | Unicode (dangerous) | Origin |
+|---|---|---|---|
+| `-` (minus) | U+002D HYPHEN-MINUS | **U+2212 MINUS SIGN** | LLM math output |
+| `X` (ballot) | X or `--` | **U+2717 BALLOT X** | Web copy-paste |
+| `X` (heavy ballot) | X or `--` | **U+2718 HEAVY BALLOT X** | Web copy-paste |
+
+The font fallback chain (`luaotfload.add_fallback`) covers emoji but not
+these mathematical/typographic symbols. When lualatex encounters a character
+not in the font, it emits a warning and **omits the character entirely**.
+
+### 5.3 Why Math Mode Is Safe
+
+Content inside `$...$` or `$$...$$` is rendered by LaTeX math fonts (e.g.,
+Latin Modern Math), which include full Unicode mathematical symbol coverage.
+The same U+2212 that fails in text mode works perfectly in math mode.
+
+### 5.4 Detection
+
+```bash
+python3 scripts/fix_pandoc_blanks.py report.md
+```
+
+Rule: `unicode-glyph-missing` (severity=error, auto-fixable).
+
+Scans all lines outside fenced code blocks and math spans for characters
+in the dangerous glyph map. Reports each affected line with the specific
+Unicode code points found.
+
+### 5.5 Auto-fix
+
+```bash
+python3 scripts/fix_pandoc_blanks.py report.md --fix
+```
+
+Replaces each dangerous character with its ASCII equivalent. Preserves:
+
+- Content inside `$...$` and `$$...$$` (math mode)
+- Content inside fenced code blocks
+
+### 5.6 Prevention
+
+When writing Markdown for PDF conversion:
+
+1. Use `$...$` math mode for mathematical expressions instead of backtick
+   inline code — LaTeX math fonts handle Unicode correctly
+2. Avoid copy-pasting from web/PDF sources without checking for Unicode
+   look-alikes
+3. Run the linter before `pandoc -d pdf-korean` as a pre-flight check
+
+---
+
+## 6. External References
 
 - Pandoc Markdown: https://pandoc.org/MANUAL.html#pandocs-markdown
 - Pandoc pipe_tables extension: https://pandoc.org/MANUAL.html#extension-pipe_tables

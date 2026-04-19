@@ -9,11 +9,17 @@ description: >
   (B) Pandoc Markdown pitfalls — missing blank lines before lists/tables/fenced
       code blocks (auto-fix) and long table cells mixing bold with special
       symbols that cause LaTeX overfull hbox (warning-only).
+  (C) Pandoc table cell overflow — long cells with bold + symbols.
+  (D) Unicode glyph missing — characters like U+2212 (MINUS SIGN), U+2717
+      (BALLOT X) that CJK fonts lack, causing silent disappearance in PDF
+      (auto-fix).
   Triggers on: "mermaid error", "mermaid fix", "mermaid 수정", "mermaid 오류",
   "다이어그램 깨짐", "mermaid syntax", "mermaid 렌더링", "diagram broken",
   "mermaid validation", "pandoc 테이블 깨짐", "pandoc 리스트 렌더링",
   "md pdf 변환 문제", "테이블이 렌더링 안됨", "markdown lint",
-  "pandoc blank line", "overfull hbox", "테이블 오버플로".
+  "pandoc blank line", "overfull hbox", "테이블 오버플로",
+  "Missing character", "unicode glyph", "글리프 누락", "문자 누락",
+  "U+2212", "마이너스 사라짐", "PDF 문자 깨짐".
 ---
 
 # Fix Mermaid & Pandoc — Markdown Rendering Fixer
@@ -23,8 +29,9 @@ Repairs two classes of Markdown problems that break downstream rendering:
 1. **Mermaid diagram syntax** — v11.x Langium parser compatibility (reserved
    words, Unicode, message escaping).
 2. **Pandoc PDF pitfalls** — blank-line violations before block elements,
-   plus long table cells mixing bold and special symbols that trigger LaTeX
-   overfull hbox.
+   long table cells mixing bold and special symbols that trigger LaTeX
+   overfull hbox, and Unicode glyphs missing from CJK fonts that silently
+   disappear in PDF output.
 
 Pick the sub-workflow by the user's symptom.
 
@@ -35,7 +42,8 @@ Pick the sub-workflow by the user's symptom.
 | "Mermaid 렌더링 안 됨" / "Syntax error in text" / 다이어그램 깨짐 | **Workflow A — Mermaid** |
 | "테이블/리스트가 PDF에서 깨짐" / "섹션이 깨져 보임" / "한 줄로 흐름" | **Workflow B — Pandoc Blanks** |
 | "테이블이 페이지 폭 넘음" / "Overfull hbox" / 특정 셀만 밀림 | **Workflow C — Pandoc Cell Overflow** |
-| 여러 증상 / md 파일 전반 정리 | **A + B + C 순차** |
+| "Missing character" / 문자 누락 / "마이너스 사라짐" / PDF에서 글자 빠짐 | **Workflow D — Unicode Glyph Missing** |
+| 여러 증상 / md 파일 전반 정리 | **A + B + C + D 순차** |
 
 ---
 
@@ -110,7 +118,80 @@ python3 scripts/fix_mermaid.py path/to/file.md --fix
 python3 scripts/fix_mermaid.py docs/ --json
 ```
 
-Optional validation: mermaid.live or `npx @mermaid-js/mermaid-cli mmdc -i file.md`.
+### Step A4 — mmdc Validation Loop (`--with-mmdc`)
+
+Static rules catch the common cases, but the Mermaid CLI (`mmdc`) is the
+ground truth: if it renders, it renders. This step closes the loop by
+**running mmdc on every block, parsing its error output, and feeding the
+findings back into the static fixer until the file is clean or no more
+automatic fixes can be applied**.
+
+**Prerequisites.** `mmdc` must be on `PATH`:
+
+```bash
+npm install -g @mermaid-js/mermaid-cli
+mmdc --version   # 11.x or newer
+```
+
+**Run.**
+
+```bash
+python3 scripts/fix_mermaid.py path/to/file.md --with-mmdc
+# or, for machine-readable output:
+python3 scripts/fix_mermaid.py path/to/file.md --with-mmdc --json
+```
+
+**What happens per iteration (max 3):**
+
+1. `process_file(apply_fix=True)` — runs the static linter (reserved words,
+   Unicode, entity escaping). Any edits are written to disk.
+2. `validate_file` — extracts every ```` ```mermaid ```` block, writes each
+   to a temp file, invokes `mmdc -i tmp.mmd -o tmp.svg -q`, captures stderr.
+3. `parse_mmdc_stderr` — matches `Parse error on line N:` and the
+   `Expecting ..., got 'X'` line into a structured `MmdcError`.
+4. `suggest_fix_for_mmdc_error` — maps the error to a named rule
+   (`reserved-word`, `unquoted-label`, …) that the next iteration can act on.
+5. If the set of errors is unchanged between iterations, the loop exits
+   early — there is nothing left that the fixer knows how to repair, and
+   human review is needed.
+
+**Example output.**
+
+```
+=== docs/architecture.md ===
+  iterations: 2
+  static fixes applied: 3
+  mmdc errors remaining: 0
+  mmdc: all blocks render successfully.
+```
+
+Or, when automatic fixes are exhausted:
+
+```
+=== docs/broken.md ===
+  iterations: 3
+  static fixes applied: 1
+  mmdc errors remaining: 1
+    - block #0 line 14: got 'PS'
+  suggestions:
+    * unquoted-label: wrap the node label in double quotes — it contains
+      unescaped (, ), [, ], {, or }
+```
+
+**Error → fix mapping (currently recognised):**
+
+| mmdc signal | Detected rule | Auto-fix path |
+|---|---|---|
+| `got 'end' / 'opt' / 'alt' / …` expecting `participant` | `reserved-word` | Renames the participant ID via `SAFE_RENAMES` in `fix_mermaid.py` |
+| `got 'PS' / 'SQS'` or `Expecting 'SQE', 'PE', …` | `unquoted-label` | Flags the label for manual quoting (the linter does not silently rewrite labels) |
+| Any other `Parse error …` | *unknown* | Reported verbatim in the summary; user decides |
+
+New error patterns go in `references/mermaid-v11-syntax.md` § "mmdc Error
+Catalog" and in `_FLOWCHART_SHAPE_TOKENS` / `_RESERVED_WORD_TOKENS` in
+`fix_mermaid.py`.
+
+Optional shortcut: validation alone, no fixing — `python3
+scripts/validate_mermaid.py path/to/file.md`.
 
 ---
 
@@ -252,6 +333,69 @@ python3 scripts/fix_pandoc_blanks.py path/to/file.md
 
 ---
 
+## Workflow D — Unicode Glyph Missing (Auto-fix)
+
+### When to Run
+
+The user reports any of:
+
+- pandoc warning: `Missing character: There is no − (U+2212)` or similar
+- Characters (minus, check mark, ballot X) disappear in the PDF
+- "마이너스가 사라졌어" / "문자가 빠졌어" / "PDF에서 글자가 깨져"
+
+### Root Cause
+
+LLM-generated text and web copy-paste often introduce Unicode look-alike
+characters that are visually identical to ASCII but use different code points.
+CJK fonts like Apple SD Gothic Neo lack glyphs for these characters, so
+lualatex silently drops them from the PDF.
+
+| Appears as | ASCII (safe) | Unicode (dangerous) |
+|---|---|---|
+| `-` (minus) | U+002D HYPHEN-MINUS | **U+2212 MINUS SIGN** |
+| `X` (ballot) | X | **U+2717 BALLOT X** |
+| `X` (heavy ballot) | X | **U+2718 HEAVY BALLOT X** |
+
+Content inside `$...$` math mode is **skipped** — LaTeX math fonts handle
+these characters correctly.
+
+See `references/pandoc-pdf-pitfalls.md` § 5 "Unicode Glyph Missing in
+CJK Fonts" for the full explanation.
+
+### Step D1 — Lint
+
+```bash
+python3 scripts/fix_pandoc_blanks.py path/to/file.md
+```
+
+Detection rule (auto-fixable, severity=error):
+
+| Rule | Trigger |
+|---|---|
+| `unicode-glyph-missing` | Unicode character from the dangerous glyph map found in text (outside math mode and fenced code) |
+
+### Step D2 — Fix
+
+```bash
+python3 scripts/fix_pandoc_blanks.py path/to/file.md --fix
+```
+
+The script replaces each dangerous Unicode character with its ASCII
+equivalent. Math mode (`$...$`, `$$...$$`) and fenced code blocks are
+preserved.
+
+### Step D3 — Verify
+
+```bash
+python3 scripts/fix_pandoc_blanks.py path/to/file.md
+# → OK: No issues found.
+
+pandoc -d pdf-korean path/to/file.md -o output.pdf
+# → No "Missing character" warnings
+```
+
+---
+
 ## Key Principles
 
 - **Fix conservatively**: Only change what's broken.
@@ -284,9 +428,20 @@ python3 scripts/fix_pandoc_blanks.py path/to/file.md
 - **Long plain cells** without bold/symbols: Not flagged — wrap naturally.
 - **Non-pipe-table lines** with stray `|`: Ignored.
 
+### Pandoc Unicode Glyphs
+
+- **Math mode** (`$...$`, `$$...$$`): Always skipped — LaTeX math fonts
+  handle Unicode math symbols correctly.
+- **Fenced code blocks**: Always skipped — code is not rendered by the
+  text font engine.
+- **Backtick inline code**: Replaced — pandoc converts these to `\texttt`
+  which uses the monospace text font (same glyph-missing issue).
+
 ## References
 
-- `references/mermaid-v11-syntax.md` — Mermaid v11 syntax rules and replacement tables.
+- `references/mermaid-v11-syntax.md` — Mermaid v11 syntax rules, replacement
+  tables, and the mmdc error catalog used by the feedback loop.
 - `references/pandoc-pdf-pitfalls.md` — Pandoc PDF rendering pitfalls
   (blank-line compliance, long-mixed-cell overflow, font fallback
   configuration, pre-conversion checklist).
+- `scripts/validate_mermaid.py` — mmdc wrapper used by Workflow A4.

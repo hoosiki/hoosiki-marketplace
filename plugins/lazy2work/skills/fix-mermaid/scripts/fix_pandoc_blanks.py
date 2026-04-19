@@ -44,6 +44,17 @@ _FENCE_RE = re.compile(r"^\s{0,3}(```|~~~)")
 _LONG_CELL_THRESHOLD = 25
 _RISKY_SYMBOLS = ("·", "—", "–", "+", "(", ")")
 
+# Unicode characters that cause "Missing character" warnings in lualatex
+# when the main text font (e.g. Apple SD Gothic Neo) lacks the glyph.
+# Each value is (replacement, description).
+_UNICODE_GLYPH_MAP: dict[str, tuple[str, str]] = {
+    "\u2212": ("-", "MINUS SIGN"),
+    "\u2717": ("--", "BALLOT X"),
+    "\u2718": ("--", "HEAVY BALLOT X"),
+}
+
+_MATH_SPAN_RE = re.compile(r"\$\$[^$]+\$\$|\$[^$]+\$")
+
 
 class Issue:
     """A single linting violation or warning.
@@ -330,6 +341,164 @@ def check_table_cells(lines: list[str]) -> list[Issue]:
     return issues
 
 
+def _mask_math_spans(line: str) -> str:
+    """Replace math spans ($...$, $$...$$) with placeholder characters.
+
+    This allows character-level checks on the non-math portions of a line
+    without accidentally flagging content inside LaTeX math mode.
+
+    Args:
+        line: A single line of Markdown text.
+
+    Returns:
+        The line with math spans replaced by spaces of equal length.
+
+    Examples:
+        >>> _mask_math_spans("text $x-y$ more")
+        'text       more'
+        >>> _mask_math_spans("no math here")
+        'no math here'
+    """
+    return _MATH_SPAN_RE.sub(lambda m: " " * len(m.group()), line)
+
+
+def _has_dangerous_glyph(text: str) -> bool:
+    """Return True if the text contains any Unicode glyph from the map.
+
+    Args:
+        text: Text to scan.
+
+    Returns:
+        True if at least one dangerous glyph is present.
+
+    Examples:
+        >>> _has_dangerous_glyph("1\u2212r")
+        True
+        >>> _has_dangerous_glyph("1-r")
+        False
+    """
+    return any(ch in text for ch in _UNICODE_GLYPH_MAP)
+
+
+def _replace_glyphs(line: str) -> str:
+    """Replace dangerous Unicode glyphs with ASCII equivalents.
+
+    Only replaces characters outside of math spans ($...$, $$...$$).
+
+    Args:
+        line: A single line of Markdown text.
+
+    Returns:
+        The line with dangerous glyphs replaced in text regions only.
+
+    Examples:
+        >>> _replace_glyphs("1\u2212r")
+        '1-r'
+        >>> _replace_glyphs("$\u2212$ and \u2212")
+        '$\u2212$ and -'
+    """
+    if not _has_dangerous_glyph(line):
+        return line
+
+    math_spans = list(_MATH_SPAN_RE.finditer(line))
+    if not math_spans:
+        for ch, (repl, _desc) in _UNICODE_GLYPH_MAP.items():
+            line = line.replace(ch, repl)
+        return line
+
+    # Build result preserving math spans
+    result: list[str] = []
+    pos = 0
+    for m in math_spans:
+        # Process text before this math span
+        segment = line[pos:m.start()]
+        for ch, (repl, _desc) in _UNICODE_GLYPH_MAP.items():
+            segment = segment.replace(ch, repl)
+        result.append(segment)
+        result.append(m.group())  # preserve math span as-is
+        pos = m.end()
+    # Process text after last math span
+    segment = line[pos:]
+    for ch, (repl, _desc) in _UNICODE_GLYPH_MAP.items():
+        segment = segment.replace(ch, repl)
+    result.append(segment)
+    return "".join(result)
+
+
+def check_unicode_glyphs(lines: list[str]) -> list[Issue]:
+    """Detect Unicode characters that cause Missing character warnings in lualatex.
+
+    Scans all lines outside fenced code blocks and math mode for Unicode
+    characters that common CJK fonts (e.g. Apple SD Gothic Neo) lack,
+    causing them to silently disappear in PDF output.
+
+    Args:
+        lines: File lines (each including trailing newline).
+
+    Returns:
+        List of Issue instances with severity="error" (auto-fixable).
+
+    Examples:
+        >>> check_unicode_glyphs(["1\u2212r\\n"])[0].rule
+        'unicode-glyph-missing'
+        >>> check_unicode_glyphs(["$\u2212$\\n"])
+        []
+    """
+    issues: list[Issue] = []
+    in_fence = False
+    for i, line in enumerate(lines):
+        if _FENCE_RE.match(line):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        masked = _mask_math_spans(line)
+        if _has_dangerous_glyph(masked):
+            found = [
+                f"U+{ord(ch):04X} {desc}"
+                for ch, (_repl, desc) in _UNICODE_GLYPH_MAP.items()
+                if ch in masked
+            ]
+            issues.append(Issue(
+                line=i + 1,
+                rule="unicode-glyph-missing",
+                context=", ".join(found),
+                severity="error",
+            ))
+    return issues
+
+
+def fix_unicode_glyphs(lines: list[str]) -> list[str]:
+    """Replace dangerous Unicode glyphs with ASCII equivalents.
+
+    Preserves content inside fenced code blocks and math spans.
+
+    Args:
+        lines: Original file lines.
+
+    Returns:
+        New list of lines with dangerous glyphs replaced.
+
+    Examples:
+        >>> fix_unicode_glyphs(["1\u2212r\\n"])
+        ['1-r\\n']
+        >>> fix_unicode_glyphs(["$\u2212$\\n"])
+        ['$\u2212$\\n']
+    """
+    out: list[str] = []
+    in_fence = False
+    for line in lines:
+        if _FENCE_RE.match(line):
+            in_fence = not in_fence
+            out.append(line)
+            continue
+        if in_fence:
+            out.append(line)
+            continue
+        out.append(_replace_glyphs(line))
+    return out
+
+
 def fix_lines(lines: list[str]) -> list[str]:
     """Return a new list with blank lines inserted before offending blocks.
 
@@ -398,9 +567,14 @@ def process_file(filepath: Path, apply_fix: bool = False) -> list[Issue]:
     lines = text.splitlines(keepends=True)
     blank_issues = check_lines(lines)
     cell_issues = check_table_cells(lines)
-    all_issues = blank_issues + cell_issues
-    if apply_fix and blank_issues:
-        fixed = fix_lines(lines)
+    glyph_issues = check_unicode_glyphs(lines)
+    all_issues = blank_issues + cell_issues + glyph_issues
+    if apply_fix and (blank_issues or glyph_issues):
+        fixed = lines
+        if blank_issues:
+            fixed = fix_lines(fixed)
+        if glyph_issues:
+            fixed = fix_unicode_glyphs(fixed)
         filepath.write_text("".join(fixed), encoding="utf-8")
     return all_issues
 

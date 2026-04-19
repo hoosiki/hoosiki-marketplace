@@ -964,3 +964,71 @@ Or detect manually with grep:
 # Find participant lines with potential reserved words
 grep -nE '^\s*participant\s+(opt|alt|par|loop|rect|note|end|and|else|break|critical|activate|deactivate)\s' docs/*.md
 ```
+
+---
+
+## 19. mmdc Error Catalog (for the `--with-mmdc` feedback loop)
+
+The Mermaid CLI emits stderr in a predictable shape. `validate_mermaid.py`
+parses it with these regexes:
+
+| Field | Regex | Example capture |
+|---|---|---|
+| line | `Parse error on line (\d+):` | `3` |
+| context | `Parse error on line \d+:\s*\n(.+?)\n[-^]+\^` | `...ant end as User` |
+| expected + got | `Expecting\s+(.+?),\s+got '([^']+)'` | `(['NEWLINE', 'participant', …], 'end')` |
+
+### 19.1 Canonical error shapes and their fixes
+
+**Reserved sequence-diagram keyword as participant ID.**
+
+```
+Error: Parse error on line 3:
+...ant end as User    end->>A: hello
+----------------------^
+Expecting 'SPACE', 'NEWLINE', 'create', 'participant', …, got 'end'
+```
+
+- `got` is one of: `end`, `opt`, `alt`, `par`, `loop`, `rect`, `note`,
+  `and`, `else`, `break`, `critical`, `activate`, `deactivate`.
+- `expected` contains `'participant'`.
+- **Rule triggered:** `reserved-word` → `SAFE_RENAMES[got]` (e.g. `end → ENDP`).
+
+**Unquoted special character inside a flowchart node label.**
+
+```
+Error: Parse error on line 2:
+...A[start] --> B(do (nested) stuff)
+-----------------------^
+Expecting 'SQE', 'PE', 'PIPE', 'UNICODE_TEXT', 'TEXT', got 'PS'
+```
+
+- `got` is a shape opener: `PS` (`(`), `SQS` (`[`), `DOUBLECIRCLESTART`.
+- `expected` contains one of: `SQE`, `PE`, `DOUBLECIRCLEEND`,
+  `STADIUMEND`, `SUBROUTINEEND`, `CYLINDEREND`, `DIAMOND_STOP`.
+- **Rule triggered:** `unquoted-label` → flagged for manual quoting. The
+  linter does **not** auto-rewrite labels because the intended quoting
+  style (single vs. double quotes, `&quot;` escapes) is author-dependent.
+
+**Unclosed subgraph / stray block keyword.**
+
+```
+Error: Parse error on line 3:
+... --> B    unclosed subgraph test
+----------------------^
+Expecting 'SEMI', 'NEWLINE', 'SPACE', 'EOF', …, got 'subgraph'
+```
+
+- Usually caused by a `subgraph` declaration on the same logical line as
+  an arrow, or a missing `end`.
+- **Rule triggered:** *unknown* — reported verbatim, user decides.
+
+### 19.2 Adding a new pattern
+
+1. Reproduce the error with a minimal fixture and capture stderr.
+2. Add a branch to `suggest_fix_for_mmdc_error` in `scripts/fix_mermaid.py`
+   with a named rule and a hint string.
+3. If the fix is safe to automate, extend `process_file` or add a new
+   `apply_*` helper and thread it through `fix_with_mmdc_feedback`.
+4. Add a test in `tests/test_fix_mermaid.py` asserting the rule name.
+5. Append the error shape here so future maintainers know it is covered.

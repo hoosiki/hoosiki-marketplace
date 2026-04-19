@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.22.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.23.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.22.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, and Hamilton spec-driven pipelines |
+| [**lazy2work**](plugins/lazy2work/) | 1.23.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, and Hamilton spec-driven pipelines |
 
 ---
 
@@ -54,7 +54,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 | **generate-optimized-spec-kit-prompt** | `/lazy2work:generate-optimized-spec-kit-prompt` | Generate complete Spec Kit prompts (specify/clarify/plan/tasks/implement/commit) for all features — splits project into 1-5 day features, generates 6-stage prompts per feature with Mermaid diagrams and auto-clarify/auto-commit steps |
 | **pyright-setup** | `/lazy2work:pyright-setup` | Auto-configure Pyright for Python projects — detects Python version from venv, adds `[tool.pyright]` to pyproject.toml, resolves "Import could not be resolved" LSP errors in Neovim/VS Code |
 | **apply-all-sc-save** | `/lazy2work:apply-all-sc-save` | Broadcast `/sc:save` to all Claude Code panes in the current tmux session — auto-detects Claude panes, excludes self, supports `--dry-run`, `--all-sessions`, and custom commands |
-| **fix-mermaid** | `/lazy2work:fix-mermaid` | Fix Markdown rendering issues that break Mermaid diagrams or pandoc PDF conversion — Mermaid v11 syntax (reserved words, Unicode/Langium issues, message escaping) **and** pandoc PDF pitfalls (blank-line compliance before lists/tables/fences as auto-fixed errors, long-mixed-cell overflow as warnings). Two bundled Python scripts (`fix_mermaid.py`, `fix_pandoc_blanks.py`) with lint / `--fix` / `--json` modes |
+| **fix-mermaid** | `/lazy2work:fix-mermaid` | Fix Markdown rendering issues that break Mermaid diagrams or pandoc PDF conversion — Mermaid v11 syntax (reserved words, Unicode/Langium issues, message escaping) **and** pandoc PDF pitfalls (blank-line compliance before lists/tables/fences as auto-fixed errors, long-mixed-cell overflow as warnings). Three bundled Python scripts (`fix_mermaid.py`, `fix_pandoc_blanks.py`, `validate_mermaid.py`) with lint / `--fix` / `--json` modes, plus optional **`--with-mmdc` feedback loop** that renders each diagram with Mermaid CLI and iterates targeted fixes until clean |
 | **hamilton-harness** | `/lazy2work:hamilton-harness` | Build Hamilton data pipelines through a spec-driven workflow — 4 modes (prompt→YAML, validate, stub+viz, modify), Pydantic schemas, Mermaid/Graphviz/Hamilton rendering, 3 domain examples (ETL/ML/RAG). Self-contained — no plugin-level hooks or rules needed |
 
 <details>
@@ -448,10 +448,11 @@ Notes:
 <details>
 <summary><strong>fix-mermaid — Usage Examples</strong></summary>
 
-The skill bundles **two scripts** covering different Markdown rendering pitfalls:
+The skill bundles **three scripts** covering different Markdown rendering pitfalls:
 
-- `fix_mermaid.py` — Mermaid diagram syntax (reserved words, Unicode, message escaping)
+- `fix_mermaid.py` — Mermaid diagram syntax (reserved words, Unicode, message escaping) with optional mmdc feedback loop
 - `fix_pandoc_blanks.py` — Pandoc PDF rendering pitfalls (blank-line compliance + long-mixed-cell warnings)
+- `validate_mermaid.py` — Mermaid CLI wrapper that extracts blocks, renders each via `mmdc`, and surfaces parse errors as structured data (consumed by `fix_mermaid.py --with-mmdc`)
 
 ### Workflow A — Mermaid Syntax
 
@@ -482,6 +483,52 @@ What it detects and fixes:
 | **Message escaping** | `V-->>C: 200 OK {id}` → `V-->>C: 200 OK #123;id#125;` |
 | **Unicode issues** | Smart quotes `""` → `""`, fullwidth CJK `（）` → `()`, invisible chars removed |
 | **Typographic dashes** | Em dash `—` → `--`, en dash `–` → `-` |
+
+**With mmdc feedback loop** — runs the Mermaid CLI after static fixes, parses every `Parse error on line N`, and iterates targeted fixes until clean (max 3 iterations, early-exit when errors stop changing):
+
+```bash
+# Prerequisite: npm i -g @mermaid-js/mermaid-cli
+
+python3 plugins/lazy2work/skills/fix-mermaid/scripts/fix_mermaid.py docs/architecture.md --with-mmdc
+python3 plugins/lazy2work/skills/fix-mermaid/scripts/fix_mermaid.py docs/ --with-mmdc --json
+```
+
+Example output:
+
+```
+=== docs/architecture.md ===
+  iterations: 1
+  static fixes applied: 3
+  mmdc: all blocks render successfully.
+```
+
+Or, when automatic fixes are exhausted:
+
+```
+=== docs/broken.md ===
+  iterations: 2
+  static fixes applied: 0
+  mmdc errors remaining: 1
+    - block #0 line 5: got 'PS'
+  suggestions:
+    * unquoted-label: wrap the node label in double quotes — it contains
+      unescaped (, ), [, ], {, or }
+```
+
+Recognised mmdc error patterns:
+
+| mmdc signal | Rule | Auto-fix |
+|---|---|---|
+| `got 'end' / 'opt' / 'alt' / …` expecting `participant` | `reserved-word` | ✅ renames via `SAFE_RENAMES` |
+| `got 'PS' / 'SQS'` expecting `'SQE', 'PE', …` | `unquoted-label` | ❌ flagged for manual quoting |
+| Other | *unknown* | ❌ reported verbatim |
+
+Standalone validator (no fixing):
+
+```bash
+python3 plugins/lazy2work/skills/fix-mermaid/scripts/validate_mermaid.py docs/architecture.md
+python3 plugins/lazy2work/skills/fix-mermaid/scripts/validate_mermaid.py docs/api.md --json
+```
 
 ### Workflow B — Pandoc PDF Rendering
 
@@ -989,6 +1036,17 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.23.0 (2026-04-19)
+
+- **fix-mermaid: mmdc feedback loop (Workflow A4)** — the Mermaid CLI is now ground truth. When invoked with `--with-mmdc`, `fix_mermaid.py` applies static rules, renders every ```` ```mermaid ```` block via `mmdc`, parses the `Parse error on line N:` / `Expecting …, got 'X'` output, and iterates targeted fixes until the file renders clean or no more automatic repairs are possible (max 3 iterations, early-exit when error set is unchanged between iterations). Exit code mirrors mmdc: static-only fixes no longer fail the run if the diagrams render
+- **fix-mermaid: `scripts/validate_mermaid.py`** — new mmdc wrapper (Python 3.10+, Google-style docstrings, `logging` module, full type hints). Public surface: `extract_mermaid_blocks`, `run_mmdc`, `parse_mmdc_stderr`, `validate_file`, `find_mmdc_executable`. Dataclasses (`MermaidBlock`, `MmdcError`, `MmdcResult`, `ValidationError`) map mmdc's 1-based block-internal line numbers back to the host Markdown file line. Temp files cleaned up in a `finally` block; subprocess calls carry a 60 s timeout
+- **fix-mermaid: mmdc error → fix rule mapping** — `suggest_fix_for_mmdc_error(err)` classifies parse errors into `reserved-word` (auto-fixed via existing `SAFE_RENAMES`), `unquoted-label` (flagged for manual quoting; the linter refuses to silently rewrite labels), or *unknown* (reported verbatim). The feedback loop exposes the suggestions in the summary so the user knows exactly what to do next
+- **fix-mermaid: SKILL.md Workflow A4 + references update** — `SKILL.md` gained a step-by-step "mmdc Validation Loop" section with prerequisites, decision tree, and example output (success + stuck cases). `references/mermaid-v11-syntax.md` gained `§ 19 mmdc Error Catalog` documenting the stderr regex, three canonical error shapes (reserved-word / unquoted-label / unclosed-subgraph), and the 5-step procedure for adding a new pattern
+- **tests: `tests/test_validate_mermaid.py`** — 18 pytest cases covering `extract_mermaid_blocks` (single block, multiple blocks, no-mermaid, non-mermaid fence), `parse_mmdc_stderr` (line / got / expected / context / clean stderr / flowchart variant), `run_mmdc` (success, parse-error, argv assertion, timeout), `find_mmdc_executable` (found / missing), and end-to-end `validate_file` (clean + broken). Subprocess fully mocked
+- **tests: `tests/test_fix_mermaid.py`** — 7 pytest cases covering `suggest_fix_for_mmdc_error` (reserved-word, unquoted-label, unknown), `fix_with_mmdc_feedback` (clean single-pass exit, max-iterations cap, report shape), and a regression test confirming the existing static fixer still renames reserved participant IDs. Full suite: **160 tests pass** (previous 135 + new 25)
+- **README: fix-mermaid usage** — Skills table description mentions the third script and `--with-mmdc`; fix-mermaid details block gained a "with mmdc feedback loop" subsection (prerequisite, example output for success and stuck paths, recognised error table, standalone `validate_mermaid.py` invocation)
+- **Version bump**: 1.22.0 → 1.23.0
 
 ### v1.22.0 (2026-04-16)
 

@@ -20,3 +20,4 @@ skills-lock.json
 rag_agent/
 tests/
 requirements-rag.txt
+claudedocs/
