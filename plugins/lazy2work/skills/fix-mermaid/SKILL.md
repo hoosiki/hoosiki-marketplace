@@ -394,6 +394,34 @@ pandoc -d pdf-korean path/to/file.md -o output.pdf
 # → No "Missing character" warnings
 ```
 
+### Step D4 — (Opt-in) Latin-1 Supplement romanization
+
+Apple SD Gothic Neo and similar CJK-oriented mainfonts may silently drop
+Latin-1 Supplement diacritics (`á`, `é`, `í`, `ó`, `ú`, `ñ`, `ü`, `ß`,
+etc.). Symptom: `Román Orús` renders as `Rom□n Or□s` or `Rom Or` in the PDF.
+
+**Opt-in only** — auto-romanization is lossy for proper nouns
+(`Román → Roman`). Use only when the trade-off is acceptable or when the
+document has no non-ASCII content you want to preserve.
+
+Detection rule (severity=error, only reported when flag is present):
+
+| Rule | Trigger |
+|---|---|
+| `latin1-supplement-glyph` | Any Latin-1 Supplement diacritic (U+00C0–U+00FF subset) found outside math mode and fenced code |
+
+```bash
+# Detect without fixing
+python3 scripts/fix_pandoc_blanks.py path/to/file.md --latin1-normalize
+
+# Apply romanization (combine with --fix)
+python3 scripts/fix_pandoc_blanks.py path/to/file.md --fix --latin1-normalize
+```
+
+Preferred alternative when originals matter: replace the offending
+token(s) manually with Korean transliteration plus ASCII romanization,
+e.g. `로만 오루스(Roman Orus)`.
+
 ---
 
 ## Key Principles

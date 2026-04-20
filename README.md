@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.23.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.24.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.23.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, and Hamilton spec-driven pipelines |
+| [**lazy2work**](plugins/lazy2work/) | 1.24.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, and Hamilton spec-driven pipelines |
 
 ---
 
@@ -54,7 +54,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 | **generate-optimized-spec-kit-prompt** | `/lazy2work:generate-optimized-spec-kit-prompt` | Generate complete Spec Kit prompts (specify/clarify/plan/tasks/implement/commit) for all features — splits project into 1-5 day features, generates 6-stage prompts per feature with Mermaid diagrams and auto-clarify/auto-commit steps |
 | **pyright-setup** | `/lazy2work:pyright-setup` | Auto-configure Pyright for Python projects — detects Python version from venv, adds `[tool.pyright]` to pyproject.toml, resolves "Import could not be resolved" LSP errors in Neovim/VS Code |
 | **apply-all-sc-save** | `/lazy2work:apply-all-sc-save` | Broadcast `/sc:save` to all Claude Code panes in the current tmux session — auto-detects Claude panes, excludes self, supports `--dry-run`, `--all-sessions`, and custom commands |
-| **fix-mermaid** | `/lazy2work:fix-mermaid` | Fix Markdown rendering issues that break Mermaid diagrams or pandoc PDF conversion — Mermaid v11 syntax (reserved words, Unicode/Langium issues, message escaping) **and** pandoc PDF pitfalls (blank-line compliance before lists/tables/fences as auto-fixed errors, long-mixed-cell overflow as warnings). Three bundled Python scripts (`fix_mermaid.py`, `fix_pandoc_blanks.py`, `validate_mermaid.py`) with lint / `--fix` / `--json` modes, plus optional **`--with-mmdc` feedback loop** that renders each diagram with Mermaid CLI and iterates targeted fixes until clean |
+| **fix-mermaid** | `/lazy2work:fix-mermaid` | Fix Markdown rendering issues that break Mermaid diagrams or pandoc PDF conversion — Mermaid v11 syntax (reserved words, Unicode/Langium issues, message escaping) **and** pandoc PDF pitfalls (blank-line compliance before lists/tables/fences as auto-fixed errors, long-mixed-cell overflow as warnings, always-on Unicode glyph map covering U+2212/U+2717/U+2718, plus opt-in **`--latin1-normalize`** for Latin-1 Supplement diacritics like `á é ñ ü ß`). Three bundled Python scripts (`fix_mermaid.py`, `fix_pandoc_blanks.py`, `validate_mermaid.py`) with lint / `--fix` / `--json` modes, plus optional **`--with-mmdc` feedback loop** that renders each diagram with Mermaid CLI and iterates targeted fixes until clean |
 | **hamilton-harness** | `/lazy2work:hamilton-harness` | Build Hamilton data pipelines through a spec-driven workflow — 4 modes (prompt→YAML, validate, stub+viz, modify), Pydantic schemas, Mermaid/Graphviz/Hamilton rendering, 3 domain examples (ETL/ML/RAG). Self-contained — no plugin-level hooks or rules needed |
 
 <details>
@@ -538,10 +538,22 @@ python3 plugins/lazy2work/skills/fix-mermaid/scripts/validate_mermaid.py docs/ap
 python3 plugins/lazy2work/skills/fix-mermaid/scripts/fix_pandoc_blanks.py report.md
 ```
 
-**Auto-fix blank-line errors (warnings are never modified):**
+**Auto-fix blank-line + unicode-glyph errors (warnings are never modified):**
 
 ```bash
 python3 plugins/lazy2work/skills/fix-mermaid/scripts/fix_pandoc_blanks.py report.md --fix
+```
+
+**Opt-in: romanize Latin-1 Supplement diacritics (`Román → Roman`):**
+
+Apple SD Gothic Neo and similar CJK-oriented mainfonts silently drop accented Latin letters. Enable only when the trade-off (lossy romanization on proper nouns) is acceptable.
+
+```bash
+# Detect only
+python3 plugins/lazy2work/skills/fix-mermaid/scripts/fix_pandoc_blanks.py report.md --latin1-normalize
+
+# Apply romanization
+python3 plugins/lazy2work/skills/fix-mermaid/scripts/fix_pandoc_blanks.py report.md --fix --latin1-normalize
 ```
 
 What it detects:
@@ -551,6 +563,8 @@ What it detects:
 | `missing-blank-before-list` | error | ✅ | Bullet/numbered list without preceding blank line |
 | `missing-blank-before-table` | error | ✅ | Pipe table row without preceding blank line |
 | `missing-blank-before-fence` | error | ✅ | ` ``` ` or `~~~` fence without preceding blank line |
+| `unicode-glyph-missing` | error | ✅ | Always-on map: U+2212 MINUS SIGN, U+2717/U+2718 BALLOT X that CJK fonts silently drop |
+| `latin1-supplement-glyph` | error | ✅ (opt-in) | Latin-1 Supplement diacritics (á, é, í, ó, ú, ñ, ü, ß, …) — only reported with `--latin1-normalize` |
 | `long-mixed-cell` | warning | ❌ (manual) | Table cell ≥ 25 chars mixing `**bold**` with risky symbols (`·`, `—`, `+`, parens) that trigger LaTeX overfull hbox |
 
 Example output:
@@ -1036,6 +1050,15 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.24.0 (2026-04-20)
+
+- **fix-mermaid: opt-in Latin-1 Supplement romanization** — `fix_pandoc_blanks.py` gained a `--latin1-normalize` flag to handle diacritics (U+00C0–U+00FF subset: `á é í ó ú ñ ü ß Æ Ø …`, 62 entries) that CJK-only mainfonts like Apple SD Gothic Neo silently drop in lualatex PDF output. Symptom: `Román Orús` renders as `Rom□n Or□s` or `Rom Or`. The flag is **off by default** because romanization is lossy on proper nouns (`Román → Roman`); callers opt in when the trade-off is acceptable
+- **fix-mermaid: `check_latin1_supplement` / `fix_latin1_supplement`** — new public functions mirroring the existing unicode-glyph API. Both skip fenced code blocks and math spans (`$…$`, `$$…$$`). Detection surfaces an `Issue(rule="latin1-supplement-glyph", severity="error")` listing every found codepoint (e.g. `U+00E1 á a-acute, U+00FA ú u-acute`). `process_file` takes a new `normalize_latin1: bool = False` parameter — passing False preserves 100% of pre-existing behavior
+- **fix-mermaid: SKILL.md Step D4** — documents the opt-in workflow, symptom (CJK font glyph drop), trade-off rationale (lossy vs. preserving original), and the preferred manual alternative (Korean transliteration + ASCII romanization, e.g. `로만 오루스(Roman Orus)`)
+- **tests: `tests/test_fix_pandoc_blanks.py`** — 23 new pytest cases across `TestCheckLatin1Supplement`, `TestFixLatin1Supplement`, and `TestProcessFileLatin1Supplement` (TDD Red → Green). Covers acute/tilde/diaeresis detection, uppercase/lowercase variants, `ß → ss`, `Æ → AE` ligature, math/fence preservation, and the off-by-default guarantee. Full suite: **183 tests pass** (previous 160 + new 23)
+- **README: fix-mermaid usage** — Skills table description mentions `--latin1-normalize`; Workflow B block gained an "opt-in" subsection (symptom + CLI examples) and the rule table now lists `unicode-glyph-missing` (always-on) and `latin1-supplement-glyph` (opt-in) alongside the existing blank-line rules
+- **Version bump**: 1.23.0 → 1.24.0
 
 ### v1.23.0 (2026-04-19)
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Pandoc Markdown linter/fixer for PDF rendering pitfalls.
 
-Detects and (where safe) fixes two classes of issues that break
+Detects and (where safe) fixes three classes of issues that break
 `pandoc -d pdf-korean` (lualatex/xelatex) PDF output:
 
 1. Missing blank line before a block element (list / pipe table / fenced
@@ -14,20 +14,33 @@ Detects and (where safe) fixes two classes of issues that break
    options are removing bold, shortening the cell, or restructuring the
    table).
 
+3. Unicode glyphs that CJK fonts (e.g. Apple SD Gothic Neo) silently drop
+   in lualatex. Two sub-classes:
+     - Always-on: symbols like U+2212 (MINUS SIGN) and U+2717 (BALLOT X)
+       that have ASCII equivalents. **Auto-fixed.**
+     - Opt-in (`--latin1-normalize`): Latin-1 Supplement diacritics
+       (á, é, ñ, ü, ß, ...) that the CJK font may not cover. Off by
+       default because auto-romanization is lossy on proper nouns
+       (Román → Roman). Enable explicitly when you accept the trade-off.
+
 Companion to fix_mermaid.py — both cover common pandoc PDF rendering
 pitfalls. See ../references/pandoc-pdf-pitfalls.md for background.
 
 Usage:
-    python fix_pandoc_blanks.py <file_or_dir> [--fix] [--json]
+    python fix_pandoc_blanks.py <file_or_dir> [--fix] [--json] [--latin1-normalize]
 
-    --fix   Apply safe fixes in place (blank-line issues only).
-            Warnings are always reported but never auto-fixed.
-    --json  Output results as JSON.
+    --fix                Apply safe fixes in place (blank-line + unicode-glyph
+                         issues). Long-mixed-cell warnings are always reported
+                         but never auto-fixed.
+    --json               Output results as JSON.
+    --latin1-normalize   Detect (and, with --fix, romanize) Latin-1 Supplement
+                         diacritics. Opt-in because romanization is lossy.
 
 Examples:
     python fix_pandoc_blanks.py report.md
     python fix_pandoc_blanks.py docs/ --fix
     python fix_pandoc_blanks.py report.md --json
+    python fix_pandoc_blanks.py report.md --fix --latin1-normalize
 """
 from __future__ import annotations
 
@@ -54,6 +67,75 @@ _UNICODE_GLYPH_MAP: dict[str, tuple[str, str]] = {
 }
 
 _MATH_SPAN_RE = re.compile(r"\$\$[^$]+\$\$|\$[^$]+\$")
+
+# Latin-1 Supplement diacritics (U+00C0..U+00FF) that CJK-only mainfonts
+# may silently drop when rendering PDF via lualatex. Opt-in only —
+# romanization is lossy for proper nouns. Each value is
+# (ASCII replacement, short description for issue context).
+_LATIN1_SUPPLEMENT_MAP: dict[str, tuple[str, str]] = {
+    "\u00c0": ("A", "À A-GRAVE"),
+    "\u00c1": ("A", "Á A-ACUTE"),
+    "\u00c2": ("A", "Â A-CIRCUMFLEX"),
+    "\u00c3": ("A", "Ã A-TILDE"),
+    "\u00c4": ("A", "Ä A-DIAERESIS"),
+    "\u00c5": ("A", "Å A-RING"),
+    "\u00c6": ("AE", "Æ AE-LIGATURE"),
+    "\u00c7": ("C", "Ç C-CEDILLA"),
+    "\u00c8": ("E", "È E-GRAVE"),
+    "\u00c9": ("E", "É E-ACUTE"),
+    "\u00ca": ("E", "Ê E-CIRCUMFLEX"),
+    "\u00cb": ("E", "Ë E-DIAERESIS"),
+    "\u00cc": ("I", "Ì I-GRAVE"),
+    "\u00cd": ("I", "Í I-ACUTE"),
+    "\u00ce": ("I", "Î I-CIRCUMFLEX"),
+    "\u00cf": ("I", "Ï I-DIAERESIS"),
+    "\u00d0": ("D", "Ð ETH"),
+    "\u00d1": ("N", "Ñ N-TILDE"),
+    "\u00d2": ("O", "Ò O-GRAVE"),
+    "\u00d3": ("O", "Ó O-ACUTE"),
+    "\u00d4": ("O", "Ô O-CIRCUMFLEX"),
+    "\u00d5": ("O", "Õ O-TILDE"),
+    "\u00d6": ("O", "Ö O-DIAERESIS"),
+    "\u00d8": ("O", "Ø O-STROKE"),
+    "\u00d9": ("U", "Ù U-GRAVE"),
+    "\u00da": ("U", "Ú U-ACUTE"),
+    "\u00db": ("U", "Û U-CIRCUMFLEX"),
+    "\u00dc": ("U", "Ü U-DIAERESIS"),
+    "\u00dd": ("Y", "Ý Y-ACUTE"),
+    "\u00de": ("Th", "Þ THORN"),
+    "\u00df": ("ss", "ß SHARP-S"),
+    "\u00e0": ("a", "à a-grave"),
+    "\u00e1": ("a", "á a-acute"),
+    "\u00e2": ("a", "â a-circumflex"),
+    "\u00e3": ("a", "ã a-tilde"),
+    "\u00e4": ("a", "ä a-diaeresis"),
+    "\u00e5": ("a", "å a-ring"),
+    "\u00e6": ("ae", "æ ae-ligature"),
+    "\u00e7": ("c", "ç c-cedilla"),
+    "\u00e8": ("e", "è e-grave"),
+    "\u00e9": ("e", "é e-acute"),
+    "\u00ea": ("e", "ê e-circumflex"),
+    "\u00eb": ("e", "ë e-diaeresis"),
+    "\u00ec": ("i", "ì i-grave"),
+    "\u00ed": ("i", "í i-acute"),
+    "\u00ee": ("i", "î i-circumflex"),
+    "\u00ef": ("i", "ï i-diaeresis"),
+    "\u00f0": ("d", "ð eth"),
+    "\u00f1": ("n", "ñ n-tilde"),
+    "\u00f2": ("o", "ò o-grave"),
+    "\u00f3": ("o", "ó o-acute"),
+    "\u00f4": ("o", "ô o-circumflex"),
+    "\u00f5": ("o", "õ o-tilde"),
+    "\u00f6": ("o", "ö o-diaeresis"),
+    "\u00f8": ("o", "ø o-stroke"),
+    "\u00f9": ("u", "ù u-grave"),
+    "\u00fa": ("u", "ú u-acute"),
+    "\u00fb": ("u", "û u-circumflex"),
+    "\u00fc": ("u", "ü u-diaeresis"),
+    "\u00fd": ("y", "ý y-acute"),
+    "\u00fe": ("th", "þ thorn"),
+    "\u00ff": ("y", "ÿ y-diaeresis"),
+}
 
 
 class Issue:
@@ -499,6 +581,150 @@ def fix_unicode_glyphs(lines: list[str]) -> list[str]:
     return out
 
 
+def _has_latin1_glyph(text: str) -> bool:
+    """Return True if the text contains any Latin-1 Supplement diacritic.
+
+    Args:
+        text: Text to scan.
+
+    Returns:
+        True if at least one mapped Latin-1 Supplement character is present.
+
+    Examples:
+        >>> _has_latin1_glyph("Rom\u00e1n")
+        True
+        >>> _has_latin1_glyph("Roman")
+        False
+    """
+    return any(ch in text for ch in _LATIN1_SUPPLEMENT_MAP)
+
+
+def _replace_latin1(line: str) -> str:
+    """Replace Latin-1 Supplement diacritics with ASCII equivalents.
+
+    Only replaces characters outside of math spans ($...$, $$...$$).
+
+    Args:
+        line: A single line of Markdown text.
+
+    Returns:
+        The line with Latin-1 diacritics romanized in text regions only.
+
+    Examples:
+        >>> _replace_latin1("Rom\u00e1n")
+        'Roman'
+        >>> _replace_latin1("$Rom\u00e1n$ and Rom\u00e1n")
+        '$Rom\u00e1n$ and Roman'
+    """
+    if not _has_latin1_glyph(line):
+        return line
+
+    math_spans = list(_MATH_SPAN_RE.finditer(line))
+    if not math_spans:
+        for ch, (repl, _desc) in _LATIN1_SUPPLEMENT_MAP.items():
+            line = line.replace(ch, repl)
+        return line
+
+    result: list[str] = []
+    pos = 0
+    for m in math_spans:
+        segment = line[pos:m.start()]
+        for ch, (repl, _desc) in _LATIN1_SUPPLEMENT_MAP.items():
+            segment = segment.replace(ch, repl)
+        result.append(segment)
+        result.append(m.group())
+        pos = m.end()
+    segment = line[pos:]
+    for ch, (repl, _desc) in _LATIN1_SUPPLEMENT_MAP.items():
+        segment = segment.replace(ch, repl)
+    result.append(segment)
+    return "".join(result)
+
+
+def check_latin1_supplement(lines: list[str]) -> list[Issue]:
+    """Detect Latin-1 Supplement diacritics outside code/math regions.
+
+    Opt-in companion to :func:`check_unicode_glyphs`. Apple SD Gothic Neo
+    and several other CJK-oriented mainfonts do not reliably cover the
+    Latin-1 Supplement block (U+00A0-U+00FF), so accented letters in
+    proper nouns (``Román``, ``Orús``) render as tofu or disappear.
+
+    This check is only invoked when the caller explicitly opts in via
+    ``--latin1-normalize`` because automatic romanization is lossy:
+    ``Román → Roman`` discards the Spanish diacritic. Callers should
+    weigh that trade-off.
+
+    Args:
+        lines: File lines (each including trailing newline).
+
+    Returns:
+        List of Issue instances with rule="latin1-supplement-glyph" and
+        severity="error" (auto-fixable once opted in).
+
+    Examples:
+        >>> check_latin1_supplement(["Rom\u00e1n\\n"])[0].rule
+        'latin1-supplement-glyph'
+        >>> check_latin1_supplement(["Roman\\n"])
+        []
+    """
+    issues: list[Issue] = []
+    in_fence = False
+    for i, line in enumerate(lines):
+        if _FENCE_RE.match(line):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        masked = _mask_math_spans(line)
+        if not _has_latin1_glyph(masked):
+            continue
+        found = [
+            f"U+{ord(ch):04X} {desc}"
+            for ch, (_repl, desc) in _LATIN1_SUPPLEMENT_MAP.items()
+            if ch in masked
+        ]
+        issues.append(Issue(
+            line=i + 1,
+            rule="latin1-supplement-glyph",
+            context=", ".join(found),
+            severity="error",
+        ))
+    return issues
+
+
+def fix_latin1_supplement(lines: list[str]) -> list[str]:
+    """Romanize Latin-1 Supplement diacritics outside code/math regions.
+
+    Companion to :func:`check_latin1_supplement`. Preserves content
+    inside fenced code blocks and inline/display math spans.
+
+    Args:
+        lines: Original file lines.
+
+    Returns:
+        New list of lines with diacritics replaced by their ASCII
+        equivalents per :data:`_LATIN1_SUPPLEMENT_MAP`.
+
+    Examples:
+        >>> fix_latin1_supplement(["Rom\u00e1n Or\u00fas\\n"])
+        ['Roman Orus\\n']
+        >>> fix_latin1_supplement(["```\\n", "Rom\u00e1n\\n", "```\\n"])
+        ['```\\n', 'Rom\u00e1n\\n', '```\\n']
+    """
+    out: list[str] = []
+    in_fence = False
+    for line in lines:
+        if _FENCE_RE.match(line):
+            in_fence = not in_fence
+            out.append(line)
+            continue
+        if in_fence:
+            out.append(line)
+            continue
+        out.append(_replace_latin1(line))
+    return out
+
+
 def fix_lines(lines: list[str]) -> list[str]:
     """Return a new list with blank lines inserted before offending blocks.
 
@@ -543,13 +769,21 @@ def fix_lines(lines: list[str]) -> list[str]:
     return out
 
 
-def process_file(filepath: Path, apply_fix: bool = False) -> list[Issue]:
+def process_file(
+    filepath: Path,
+    apply_fix: bool = False,
+    normalize_latin1: bool = False,
+) -> list[Issue]:
     """Scan a single Markdown file, optionally applying safe fixes.
 
     Args:
         filepath: Path to the Markdown file to process.
-        apply_fix: If True, write blank-line fixes back. Warnings are
-            always reported but never modify the file.
+        apply_fix: If True, write blank-line and unicode-glyph fixes back.
+            Long-mixed-cell warnings are always reported but never modify
+            the file.
+        normalize_latin1: If True, additionally detect and (when combined
+            with ``apply_fix``) romanize Latin-1 Supplement diacritics.
+            Off by default because romanization is lossy for proper nouns.
 
     Returns:
         Combined list of detected issues (errors + warnings).
@@ -568,13 +802,16 @@ def process_file(filepath: Path, apply_fix: bool = False) -> list[Issue]:
     blank_issues = check_lines(lines)
     cell_issues = check_table_cells(lines)
     glyph_issues = check_unicode_glyphs(lines)
-    all_issues = blank_issues + cell_issues + glyph_issues
-    if apply_fix and (blank_issues or glyph_issues):
+    latin1_issues = check_latin1_supplement(lines) if normalize_latin1 else []
+    all_issues = blank_issues + cell_issues + glyph_issues + latin1_issues
+    if apply_fix and (blank_issues or glyph_issues or latin1_issues):
         fixed = lines
         if blank_issues:
             fixed = fix_lines(fixed)
         if glyph_issues:
             fixed = fix_unicode_glyphs(fixed)
+        if latin1_issues:
+            fixed = fix_latin1_supplement(fixed)
         filepath.write_text("".join(fixed), encoding="utf-8")
     return all_issues
 
@@ -648,11 +885,17 @@ def main() -> int:
         return 0
     apply_fix = "--fix" in sys.argv
     output_json = "--json" in sys.argv
+    normalize_latin1 = "--latin1-normalize" in sys.argv
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     targets = _collect_targets(args)
     all_issues: list[dict[str, str | int]] = []
     for filepath in targets:
-        for issue in process_file(filepath, apply_fix=apply_fix):
+        issues = process_file(
+            filepath,
+            apply_fix=apply_fix,
+            normalize_latin1=normalize_latin1,
+        )
+        for issue in issues:
             d = issue.to_dict()
             d["file"] = str(filepath)
             all_issues.append(d)
