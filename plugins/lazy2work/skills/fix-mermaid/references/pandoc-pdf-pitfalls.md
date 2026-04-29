@@ -11,7 +11,9 @@ for `fix_pandoc_blanks.py`; also usable as a human pre-flight checklist.
 3. [Font Fallback for Korean and Emoji](#3-font-fallback-for-korean-and-emoji)
 4. [Pre-conversion Checklist](#4-pre-conversion-checklist)
 5. [Unicode Glyph Missing in CJK Fonts](#5-unicode-glyph-missing-in-cjk-fonts)
-6. [External References](#6-external-references)
+6. [Unescaped Currency Dollar Sign](#6-unescaped-currency-dollar-sign)
+7. [Unsafe LaTeX Characters in Inline Code](#7-unsafe-latex-characters-in-inline-code)
+8. [External References](#8-external-references)
 
 ---
 
@@ -281,9 +283,11 @@ Confirm each of the following renders correctly:
 
 Run each check before `pandoc -d pdf-korean ...`:
 
-- [ ] `fix_pandoc_blanks.py file.md` reports 0 errors (blank-line + unicode glyph)
-- [ ] Any remaining warnings have been reviewed by a human
+- [ ] `fix_pandoc_blanks.py file.md` reports 0 errors (blank-line + unicode glyph + currency-dollar)
+- [ ] Any remaining warnings have been reviewed by a human (long-mixed-cell, unsafe-inline-code-escape)
 - [ ] No `Missing character` warnings in pandoc output
+- [ ] No `Bad math environment delimiter` errors in lualatex output
+- [ ] No `Missing number, treated as zero` errors in lualatex output
 - [ ] `fix_mermaid.py file.md` reports 0 issues
 - [ ] `~/.pandoc/defaults/pdf-korean.yaml` exists and its referenced filter paths resolve
 - [ ] `mmdc --version` succeeds (required if the document contains Mermaid)
@@ -364,7 +368,220 @@ When writing Markdown for PDF conversion:
 
 ---
 
-## 6. External References
+## 6. Unescaped Currency Dollar Sign
+
+Severity: **error** (auto-fixable by `fix_pandoc_blanks.py --fix`).
+
+### 6.1 Symptoms
+
+- lualatex emits: `! LaTeX Error: Bad math environment delimiter.`
+- The error line points at table-cell separators and `\)` (math close)
+  appearing where they don't belong (e.g., `l.1724 | Derwent Innovation | \)`)
+- The PDF build fails — no output is produced
+
+### 6.2 Root Cause
+
+Pandoc's `tex_math_dollars` extension is on by default. It treats `$...$`
+as inline math. The opening rule is permissive:
+
+- Opening `$` is followed by a non-whitespace character
+- Closing `$` is preceded by a non-whitespace character
+- Closing `$` is **not** followed by a digit
+
+A bare currency `$100` therefore opens math mode, since `$` is followed
+by a non-whitespace digit. With Korean text the heuristic that disables
+math (closing `$` followed by a digit) often fails — `$76.4억` looks
+like math because `억` is not a digit.
+
+When the document contains an **odd** number of unescaped currency `$`,
+the last one opens a math mode that never closes. The math state leaks
+through paragraphs and finally collides with a downstream pipe-table
+row, where LaTeX sees `|` (math `|...|`) and `\)` (inline-math close)
+in unexpected positions and aborts.
+
+See `claudedocs/debug_md_to_pdfs_20260429.md` for a full incident report.
+
+### 6.3 WRONG vs CORRECT
+
+```
+%% WRONG — pandoc parses these `$` as math delimiters
+평균 budget $100K~$1M 사이.
+**$76.4억** 매출, 시총 $1B 이상 → 현재 ~$200M
+
+%% CORRECT — every currency `$` escaped with `\`
+평균 budget \$100K~\$1M 사이.
+**\$76.4억** 매출, 시총 \$1B 이상 → 현재 ~\$200M
+```
+
+Real math is unaffected — `$x_1$`, `$\alpha + \beta$`, `$\hat{V}_j$`
+all have non-digits after the opening `$` and remain valid.
+
+### 6.4 Detection Rule
+
+| Rule | Trigger |
+|---|---|
+| `unescaped-currency-dollar` | `$` immediately followed by a digit (0–9) and not preceded by `\`. Detected outside fenced code blocks and inline backtick spans. |
+
+The detection is conservative: only a digit after `$` triggers the rule.
+That covers all observed currency cases (`$100`, `$76.4억`, `$1B`,
+`$2.58억`) without false-positives on real math.
+
+### 6.5 Why the Fix Is Safe
+
+Pandoc's own rule says a closing `$` followed by a digit invalidates the
+math span. So `$x = 1$2` is not valid math anyway — both `$` are text.
+Auto-escaping any `$<digit>` therefore can never break a valid math
+expression: real math will never have a closing `$` followed by a digit.
+
+### 6.6 Auto-fix
+
+```bash
+python3 scripts/fix_pandoc_blanks.py report.md --fix
+```
+
+Replaces every `$<digit>` outside fenced code and inline backticks with
+`\$<digit>`. Inline backtick code (`` `$1` ``, `` `$PATH` ``) is preserved
+because the `$` there is a literal shell variable, not pandoc math.
+
+### 6.7 Diagnostic Commands
+
+```bash
+# Locate every `$` occurrence
+grep -n '\$' file.md
+
+# Count `$` (odd count = leak risk)
+grep -o '\$' file.md | wc -l
+
+# List currency `$` (digit follows)
+grep -nE '\$[0-9]' file.md
+```
+
+### 6.8 Prevention
+
+- Always write currency as `\$` in Markdown destined for pandoc.
+- For globally distributed documents, prefer `USD 76.4억` or `76.4억 달러`
+  to sidestep the issue entirely.
+- Disabling `tex_math_dollars` is **not** recommended if the document
+  contains any real math (`$x$`, `$\alpha$`, etc.) — it will break those.
+
+---
+
+## 7. Unsafe LaTeX Characters in Inline Code
+
+Severity: **warning** (never auto-fixed — the fix requires human choice
+between three valid remediations).
+
+### 7.1 Symptoms
+
+- lualatex emits: `! Missing number, treated as zero.`
+- The trace shows `\futurelet` and a line such as `\texttt{pass\^{}k}`
+- The PDF build fails
+
+### 7.2 Root Cause — Three-Layer Collision
+
+This error appears only when **three** factors combine; remove any one
+and the error disappears.
+
+1. **Markdown source** — Inline backtick code containing a LaTeX-risky
+   character: `` `pass^k` ``, `` `a~b` ``, `` `x&y` ``, etc.
+2. **Pandoc escape** — Pandoc converts the inline code to
+   `\texttt{pass\^{}k}`, escaping `^` as `\^{}` (LaTeX circumflex
+   accent with empty argument).
+3. **`pdf-korean.yaml` `\seqsplit` wrapper** — The line
+   `\protected\def\texttt#1{\oldtexttt{\seqsplit{#1}}}` wraps every
+   `\texttt` call in `\seqsplit`, which performs per-character splitting
+   to allow long URLs / code tokens to break across page width.
+
+`\seqsplit` walks the argument character by character and inserts
+zero-width breakpoints. When it encounters `\^`, the splitter separates
+the accent command from its `{}` argument. LaTeX, looking ahead with
+`\futurelet`, then expects a numeric argument and emits
+`Missing number, treated as zero`.
+
+See `claudedocs/debug_md_to_pdfs_20260429_2.md` for the full incident
+report and a step-by-step trace.
+
+### 7.3 Risky Characters
+
+| Markdown inline | Pandoc escape | `\seqsplit` outcome |
+|---|---|---|
+| `` `x^y` `` | `\^{}` | **breaks** — observed |
+| `` `x~y` `` | `\~{}` | **breaks** — same mechanism |
+| `` `x&y` `` | `\&` | breaks in some contexts |
+| `` `x$y` `` | `\$` | breaks in some contexts |
+| `` `x%y` `` | `\%` | breaks in some contexts |
+| `` `x_y` `` | `\_` | usually OK |
+| `` `x#y` `` | `\#` | usually OK |
+
+Pandoc converts fenced code blocks to `\verb`/`lstlisting` (not
+`\texttt`), so the `\seqsplit` wrapper does not apply there. **Only
+inline backtick spans are at risk.**
+
+### 7.4 Detection Rule
+
+| Rule | Trigger |
+|---|---|
+| `unsafe-inline-code-escape` | An inline backtick span containing any of `^`, `~`, `&`, `$`, `%`. Detected outside fenced code blocks. |
+
+Severity is `warning` because the linter cannot pick the right fix — the
+choice depends on the meaning of the content.
+
+### 7.5 Remediation Options (Manual)
+
+In priority order:
+
+1. **Math mode** (semantically best when the content is mathematical):
+
+   ```
+   Before: `pass^k`
+   After:  $\text{pass}^k$
+   ```
+
+2. **Drop the backticks** (when the formatting is decorative):
+
+   ```
+   Before: `pass^k`
+   After:  pass^k
+   ```
+
+3. **Change `pdf-korean.yaml`** (project-wide fix; needs regression
+   testing on long URLs / paths):
+
+   ```latex
+   %% old
+   \protected\def\texttt#1{\oldtexttt{\seqsplit{#1}}}
+
+   %% candidate replacement
+   \protected\def\texttt#1{\oldtexttt{\detokenize{#1}}}
+   ```
+
+4. **Pandoc option** (rarely worth it — has its own side effects):
+
+   ```bash
+   pandoc input.md --listings -o out.pdf
+   ```
+
+### 7.6 Diagnostic Commands
+
+```bash
+# Inline code containing ^ or ~
+grep -nE '`[^`]*[\^~][^`]*`' file.md
+
+# All five risky chars
+grep -nE '`[^`]*[\^~&$%][^`]*`' file.md
+```
+
+### 7.7 Why This Differs from §6
+
+§6 (currency `$`) is a Markdown authoring mistake — every pandoc
+environment behaves the same. §7 is a project-specific configuration
+limitation: standard pandoc renders `\texttt{pass\^{}k}` correctly; only
+the `\seqsplit` wrapper added in `pdf-korean.yaml` breaks it. Fixes can
+therefore go in either the Markdown or the YAML defaults.
+
+---
+
+## 8. External References
 
 - Pandoc Markdown: https://pandoc.org/MANUAL.html#pandocs-markdown
 - Pandoc pipe_tables extension: https://pandoc.org/MANUAL.html#extension-pipe_tables

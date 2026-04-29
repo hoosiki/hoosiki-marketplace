@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.24.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.25.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.24.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, and Hamilton spec-driven pipelines |
+| [**lazy2work**](plugins/lazy2work/) | 1.25.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, and Hamilton spec-driven pipelines |
 
 ---
 
@@ -54,7 +54,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 | **generate-optimized-spec-kit-prompt** | `/lazy2work:generate-optimized-spec-kit-prompt` | Generate complete Spec Kit prompts (specify/clarify/plan/tasks/implement/commit) for all features — splits project into 1-5 day features, generates 6-stage prompts per feature with Mermaid diagrams and auto-clarify/auto-commit steps |
 | **pyright-setup** | `/lazy2work:pyright-setup` | Auto-configure Pyright for Python projects — detects Python version from venv, adds `[tool.pyright]` to pyproject.toml, resolves "Import could not be resolved" LSP errors in Neovim/VS Code |
 | **apply-all-sc-save** | `/lazy2work:apply-all-sc-save` | Broadcast `/sc:save` to all Claude Code panes in the current tmux session — auto-detects Claude panes, excludes self, supports `--dry-run`, `--all-sessions`, and custom commands |
-| **fix-mermaid** | `/lazy2work:fix-mermaid` | Fix Markdown rendering issues that break Mermaid diagrams or pandoc PDF conversion — Mermaid v11 syntax (reserved words, Unicode/Langium issues, message escaping) **and** pandoc PDF pitfalls (blank-line compliance before lists/tables/fences as auto-fixed errors, long-mixed-cell overflow as warnings, always-on Unicode glyph map covering U+2212/U+2717/U+2718, plus opt-in **`--latin1-normalize`** for Latin-1 Supplement diacritics like `á é ñ ü ß`). Three bundled Python scripts (`fix_mermaid.py`, `fix_pandoc_blanks.py`, `validate_mermaid.py`) with lint / `--fix` / `--json` modes, plus optional **`--with-mmdc` feedback loop** that renders each diagram with Mermaid CLI and iterates targeted fixes until clean |
+| **fix-mermaid** | `/lazy2work:fix-mermaid` | Fix Markdown rendering issues that break Mermaid diagrams or pandoc PDF conversion — Mermaid v11 syntax (reserved words, Unicode/Langium issues, message escaping) **and** pandoc PDF pitfalls (blank-line compliance before lists/tables/fences as auto-fixed errors, long-mixed-cell overflow as warnings, always-on Unicode glyph map covering U+2212/U+2717/U+2718, **currency-dollar auto-escape** for `$100`/`$76.4억` that prevents `Bad math environment delimiter` errors, **unsafe-inline-code warnings** for `` `pass^k` ``-style content that collides with the `\seqsplit` wrapper and causes `Missing number, treated as zero`, plus opt-in **`--latin1-normalize`** for Latin-1 Supplement diacritics like `á é ñ ü ß`). Three bundled Python scripts (`fix_mermaid.py`, `fix_pandoc_blanks.py`, `validate_mermaid.py`) with lint / `--fix` / `--json` modes, plus optional **`--with-mmdc` feedback loop** that renders each diagram with Mermaid CLI and iterates targeted fixes until clean |
 | **hamilton-harness** | `/lazy2work:hamilton-harness` | Build Hamilton data pipelines through a spec-driven workflow — 4 modes (prompt→YAML, validate, stub+viz, modify), Pydantic schemas, Mermaid/Graphviz/Hamilton rendering, 3 domain examples (ETL/ML/RAG). Self-contained — no plugin-level hooks or rules needed |
 
 <details>
@@ -451,7 +451,7 @@ Notes:
 The skill bundles **three scripts** covering different Markdown rendering pitfalls:
 
 - `fix_mermaid.py` — Mermaid diagram syntax (reserved words, Unicode, message escaping) with optional mmdc feedback loop
-- `fix_pandoc_blanks.py` — Pandoc PDF rendering pitfalls (blank-line compliance + long-mixed-cell warnings)
+- `fix_pandoc_blanks.py` — Pandoc PDF rendering pitfalls (blank-line compliance, long-mixed-cell warnings, Unicode glyph map, currency-dollar auto-escape, unsafe-inline-code warnings)
 - `validate_mermaid.py` — Mermaid CLI wrapper that extracts blocks, renders each via `mmdc`, and surfaces parse errors as structured data (consumed by `fix_mermaid.py --with-mmdc`)
 
 ### Workflow A — Mermaid Syntax
@@ -538,7 +538,7 @@ python3 plugins/lazy2work/skills/fix-mermaid/scripts/validate_mermaid.py docs/ap
 python3 plugins/lazy2work/skills/fix-mermaid/scripts/fix_pandoc_blanks.py report.md
 ```
 
-**Auto-fix blank-line + unicode-glyph errors (warnings are never modified):**
+**Auto-fix blank-line + unicode-glyph + currency-dollar errors (warnings are never modified):**
 
 ```bash
 python3 plugins/lazy2work/skills/fix-mermaid/scripts/fix_pandoc_blanks.py report.md --fix
@@ -564,21 +564,26 @@ What it detects:
 | `missing-blank-before-table` | error | ✅ | Pipe table row without preceding blank line |
 | `missing-blank-before-fence` | error | ✅ | ` ``` ` or `~~~` fence without preceding blank line |
 | `unicode-glyph-missing` | error | ✅ | Always-on map: U+2212 MINUS SIGN, U+2717/U+2718 BALLOT X that CJK fonts silently drop |
+| `unescaped-currency-dollar` | error | ✅ | `$<digit>` (e.g., `$100`, `$76.4억`) parsed by pandoc as math; odd counts leak math mode and produce `Bad math environment delimiter`. Skips fenced code, inline backticks, and already-escaped `\$` |
 | `latin1-supplement-glyph` | error | ✅ (opt-in) | Latin-1 Supplement diacritics (á, é, í, ó, ú, ñ, ü, ß, …) — only reported with `--latin1-normalize` |
 | `long-mixed-cell` | warning | ❌ (manual) | Table cell ≥ 25 chars mixing `**bold**` with risky symbols (`·`, `—`, `+`, parens) that trigger LaTeX overfull hbox |
+| `unsafe-inline-code-escape` | warning | ❌ (manual) | Inline backtick code containing `^`, `~`, `&`, `$`, `%` — pandoc escapes are split per-character by the pdf-korean.yaml `\seqsplit` wrapper, causing `Missing number, treated as zero`. Three valid fixes (math mode, drop backticks, swap `\seqsplit` for `\detokenize`) need human choice |
 
 Example output:
 
 ```
-Found 3 error(s), 2 warning(s):
+Found 5 error(s), 3 warning(s):
 
 Sev      |  Line | Rule                             | Context
 ------------------------------------------------------------------------
 error    |    77 | missing-blank-before-list        | - React 프론트엔드...
 error    |   192 | missing-blank-before-table       | | 모델 | Google-BLEU | ...
 error    |   775 | missing-blank-before-fence       | ```
+error    |   209 | unescaped-currency-dollar        | budget $100K~$1M 사
+error    |   299 | unescaped-currency-dollar        | 시총 $1B 이상 → 현재
 warning  |   197 | long-mixed-cell                  | **Fine-tuned GPT-4o**
 warning  |   198 | long-mixed-cell                  | Up to **+40%** (7B·8B)
+warning  |   398 | unsafe-inline-code-escape        | `pass^k`
 
 Warnings require manual review (not auto-fixable).
 Run with --fix to apply blank-line corrections.
@@ -590,12 +595,12 @@ Run with --fix to apply blank-line corrections.
 /lazy2work:fix-mermaid
 ```
 
-> Trigger phrases: "mermaid 오류", "mermaid fix", "diagram broken", "Syntax error in text mermaid version", "pandoc 테이블 깨짐", "md pdf 변환 문제", "테이블이 렌더링 안됨", "overfull hbox".
+> Trigger phrases: "mermaid 오류", "mermaid fix", "diagram broken", "Syntax error in text mermaid version", "pandoc 테이블 깨짐", "md pdf 변환 문제", "테이블이 렌더링 안됨", "overfull hbox", "Bad math environment delimiter", "통화 달러 이스케이프", "Missing number treated as zero", "seqsplit 충돌", "pass^k 에러".
 
 Reference documentation:
 
 - `references/mermaid-v11-syntax.md` — 18 sections covering all diagram types, arrow syntax, Unicode replacement tables, reserved words, entity escaping
-- `references/pandoc-pdf-pitfalls.md` — 5 sections covering blank-line compliance, long-mixed-cell overflow, font fallback, and a pre-conversion checklist
+- `references/pandoc-pdf-pitfalls.md` — 7 sections covering blank-line compliance, long-mixed-cell overflow, font fallback, Unicode glyph missing in CJK fonts, unescaped currency dollar sign, unsafe LaTeX characters in inline code, and a pre-conversion checklist
 
 </details>
 
@@ -1050,6 +1055,16 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.25.0 (2026-04-29)
+
+- **fix-mermaid: currency-dollar auto-escape (Workflow E)** — new `unescaped-currency-dollar` rule in `fix_pandoc_blanks.py` detects every `$<digit>` that pandoc's `tex_math_dollars` extension would parse as math (e.g., `$100K`, `$76.4억`, `$1B`, `$2.58억`) and rewrites it to `\$<digit>`. Eliminates the `! LaTeX Error: Bad math environment delimiter` failure caused by odd-count currency markers leaking math mode into downstream pipe tables. Skips fenced code blocks, inline backtick spans, and already-escaped `\$`. Real math (`$x_1$`, `$\alpha$`) is provably untouched because pandoc's own rule invalidates math whose closing `$` is followed by a digit
+- **fix-mermaid: unsafe-inline-code warning (Workflow F)** — new `unsafe-inline-code-escape` rule flags inline backtick code containing LaTeX-risky characters (`^`, `~`, `&`, `$`, `%`). Documents the three-layer collision behind `! Missing number, treated as zero`: pandoc escapes `^` as `\^{}`, the `pdf-korean.yaml` `\seqsplit` wrapper splits the escape per-character, and LaTeX's `\futurelet` then expects a numeric argument. Warning-only because the right fix depends on intent — three valid remediations (math mode `$\text{pass}^k$`, drop backticks, or replace `\seqsplit` with `\detokenize` in pdf-korean.yaml)
+- **fix-mermaid: SKILL.md workflows E & F** — decision tree expanded; full step-by-step workflow sections added with WRONG/CORRECT examples, root-cause traces, diagnostic commands, and remediation priority order. Trigger keywords expanded to include `Bad math environment delimiter`, `Missing number, treated as zero`, `seqsplit`, `pass^k 에러`, `통화 달러`, etc.
+- **fix-mermaid: references/pandoc-pdf-pitfalls.md §6 & §7** — new sections "Unescaped Currency Dollar Sign" and "Unsafe LaTeX Characters in Inline Code" with risky-character table, safety proof for the auto-fix, three-layer collision diagram, and incident links to `claudedocs/debug_md_to_pdfs_20260429.md` (1) and (2)
+- **README: fix-mermaid usage** — Skills table description gained mentions of currency-dollar auto-escape and unsafe-inline-code warnings; Workflow B rule table now lists `unescaped-currency-dollar` (error, ✅) and `unsafe-inline-code-escape` (warning, manual) alongside the existing rules; example output expanded; trigger phrases include `Bad math environment delimiter`, `통화 달러 이스케이프`, `Missing number treated as zero`, `seqsplit 충돌`, `pass^k 에러`; references count updated from 5 to 7 sections
+- **tests: `tests/test_fix_pandoc_blanks.py`** — 22 new pytest cases across `TestCheckCurrencyDollar`, `TestFixCurrencyDollar`, `TestCheckUnsafeInlineCode`, `TestProcessFileCurrencyDollar` (TDD Red → Green). Covers digit-after-dollar detection, escape preservation, real-math preservation, fence/inline-code masking, multi-dollar lines, and the warning-not-modified guarantee. Full suite: **207 tests pass** (previous 185 + new 22)
+- **Version bump**: 1.24.0 → 1.25.0
 
 ### v1.24.0 (2026-04-20)
 

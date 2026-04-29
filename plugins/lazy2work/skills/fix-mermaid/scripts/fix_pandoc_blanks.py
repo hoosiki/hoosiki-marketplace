@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Pandoc Markdown linter/fixer for PDF rendering pitfalls.
 
-Detects and (where safe) fixes three classes of issues that break
+Detects and (where safe) fixes five classes of issues that break
 `pandoc -d pdf-korean` (lualatex/xelatex) PDF output:
 
 1. Missing blank line before a block element (list / pipe table / fenced
@@ -23,15 +23,28 @@ Detects and (where safe) fixes three classes of issues that break
        default because auto-romanization is lossy on proper nouns
        (Román → Roman). Enable explicitly when you accept the trade-off.
 
+4. Unescaped currency `$` immediately followed by a digit (e.g., `$100`,
+   `$76.4억`). Pandoc's `tex_math_dollars` extension parses these as
+   inline math delimiters; an odd count leaks math mode into downstream
+   tables, producing `Bad math environment delimiter` errors.
+   **Auto-fixed** (replaced with `\\$`).
+
+5. Inline backtick code containing LaTeX-risky characters (`^`, `~`,
+   `&`, `$`, `%`). Pandoc escapes these as `\\^{}`, `\\~{}`, etc.; the
+   `\\seqsplit` wrapper in pdf-korean.yaml then breaks the escape into
+   per-glyph tokens, causing `Missing number, treated as zero`.
+   **Warning only** — fix requires human judgment (math mode, backtick
+   removal, or settings change).
+
 Companion to fix_mermaid.py — both cover common pandoc PDF rendering
 pitfalls. See ../references/pandoc-pdf-pitfalls.md for background.
 
 Usage:
     python fix_pandoc_blanks.py <file_or_dir> [--fix] [--json] [--latin1-normalize]
 
-    --fix                Apply safe fixes in place (blank-line + unicode-glyph
-                         issues). Long-mixed-cell warnings are always reported
-                         but never auto-fixed.
+    --fix                Apply safe fixes in place (blank-line, unicode-glyph,
+                         currency-dollar). Long-mixed-cell and unsafe-inline-
+                         code warnings are reported but never auto-fixed.
     --json               Output results as JSON.
     --latin1-normalize   Detect (and, with --fix, romanize) Latin-1 Supplement
                          diacritics. Opt-in because romanization is lossy.
@@ -67,6 +80,25 @@ _UNICODE_GLYPH_MAP: dict[str, tuple[str, str]] = {
 }
 
 _MATH_SPAN_RE = re.compile(r"\$\$[^$]+\$\$|\$[^$]+\$")
+
+# Inline backtick code spans (single-backtick form). Used to mask code
+# regions when scanning for currency `$` and to extract code content
+# when scanning for LaTeX-risky escape characters.
+_INLINE_CODE_RE = re.compile(r"`[^`\n]+`")
+
+# A `$` immediately followed by a digit, NOT already escaped with a
+# backslash. Pandoc's `tex_math_dollars` extension parses such `$` as
+# an inline math delimiter; pairing odd-numbered currency markers leaks
+# math mode and produces `Bad math environment delimiter` errors. The
+# safe fix is to escape every `$<digit>` to `\$<digit>`.
+_CURRENCY_DOLLAR_RE = re.compile(r"(?<!\\)\$(?=\d)")
+
+# Characters that, when placed inside inline backtick code, are escaped
+# by pandoc as `\^{}`, `\~{}`, `\&`, `\$`, `\%`. The pdf-korean.yaml
+# `\seqsplit` wrapper on `\texttt` then attempts per-character splitting,
+# breaking the escape sequence. Warning-only — see references for
+# remediation options (math mode, backtick removal, settings change).
+_RISKY_INLINE_CHARS: tuple[str, ...] = ("^", "~", "&", "$", "%")
 
 # Latin-1 Supplement diacritics (U+00C0..U+00FF) that CJK-only mainfonts
 # may silently drop when rendering PDF via lualatex. Opt-in only —
@@ -725,6 +757,171 @@ def fix_latin1_supplement(lines: list[str]) -> list[str]:
     return out
 
 
+def _mask_inline_code(line: str) -> str:
+    """Replace inline backtick code spans with spaces of equal length.
+
+    Allows position-preserving scans on the surrounding text without
+    matching content inside ``\\texttt`` regions.
+
+    Args:
+        line: A single line of Markdown text.
+
+    Returns:
+        The line with each ``\\`...\\``` span replaced by a same-length
+        run of ASCII spaces.
+
+    Examples:
+        >>> _mask_inline_code("see `$1` and $100")
+        'see      and $100'
+        >>> _mask_inline_code("no code")
+        'no code'
+    """
+    return _INLINE_CODE_RE.sub(lambda m: " " * len(m.group()), line)
+
+
+def check_currency_dollar(lines: list[str]) -> list[Issue]:
+    r"""Detect unescaped ``$`` immediately followed by a digit.
+
+    Pandoc's ``tex_math_dollars`` extension treats ``$<non-space>...<non-space>$``
+    as an inline math span. A solitary ``$<digit>`` (currency such as
+    ``$100``) is parsed as math-mode opener; an odd number of such
+    markers leaks math mode into a later table cell, causing
+    ``Bad math environment delimiter`` errors.
+
+    The check is auto-fixable: replace every match with ``\\$``.
+
+    Args:
+        lines: File lines (each including trailing newline).
+
+    Returns:
+        List of Issue instances with rule ``unescaped-currency-dollar``
+        and severity ``error``.
+
+    Examples:
+        >>> check_currency_dollar(["가격 $100\n"])[0].rule
+        'unescaped-currency-dollar'
+        >>> check_currency_dollar(["수식 $x_1$\n"])
+        []
+        >>> check_currency_dollar(["\\$100\n"])
+        []
+    """
+    issues: list[Issue] = []
+    in_fence = False
+    for i, line in enumerate(lines):
+        if _FENCE_RE.match(line):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        masked = _mask_inline_code(line)
+        for m in _CURRENCY_DOLLAR_RE.finditer(masked):
+            start = max(0, m.start() - 5)
+            end = min(len(line), m.end() + 10)
+            snippet = line[start:end].rstrip()
+            issues.append(Issue(
+                line=i + 1,
+                rule="unescaped-currency-dollar",
+                context=snippet[:80],
+                severity="error",
+            ))
+    return issues
+
+
+def fix_currency_dollar(lines: list[str]) -> list[str]:
+    r"""Escape unescaped ``$<digit>`` to ``\\$<digit>`` outside code regions.
+
+    Preserves content inside fenced code blocks and inline backtick
+    code spans (where ``$`` is a literal shell variable or similar).
+
+    Args:
+        lines: Original file lines.
+
+    Returns:
+        New list of lines with currency markers escaped.
+
+    Examples:
+        >>> fix_currency_dollar(["$100\n"])
+        ['\\$100\n']
+        >>> fix_currency_dollar(["use `$1` here\n"])
+        ['use `$1` here\n']
+        >>> fix_currency_dollar(["$100K~$1M\n"])
+        ['\\$100K~\\$1M\n']
+    """
+    out: list[str] = []
+    in_fence = False
+    for line in lines:
+        if _FENCE_RE.match(line):
+            in_fence = not in_fence
+            out.append(line)
+            continue
+        if in_fence:
+            out.append(line)
+            continue
+        if "`" not in line:
+            out.append(_CURRENCY_DOLLAR_RE.sub(r"\\$", line))
+            continue
+        result: list[str] = []
+        pos = 0
+        for m in _INLINE_CODE_RE.finditer(line):
+            segment = line[pos:m.start()]
+            result.append(_CURRENCY_DOLLAR_RE.sub(r"\\$", segment))
+            result.append(m.group())
+            pos = m.end()
+        segment = line[pos:]
+        result.append(_CURRENCY_DOLLAR_RE.sub(r"\\$", segment))
+        out.append("".join(result))
+    return out
+
+
+def check_unsafe_inline_code(lines: list[str]) -> list[Issue]:
+    r"""Detect inline backtick code containing LaTeX-risky characters.
+
+    Inline code with ``^``, ``~``, ``&``, ``$``, or ``%`` is escaped by
+    pandoc as ``\\^{}``, ``\\~{}``, ``\\&``, ``\\$``, ``\\%``. The
+    ``\\seqsplit`` wrapper applied to ``\\texttt`` in pdf-korean.yaml
+    then attempts per-character splitting, which separates the escape
+    command from its argument and triggers
+    ``! Missing number, treated as zero`` in lualatex.
+
+    Warning-only — three valid remediations need human choice:
+
+    - rewrite as math mode: `` `pass^k` `` → ``$\\text{pass}^k$``
+    - drop backticks: `` `pass^k` `` → plain ``pass^k``
+    - switch to ``\\detokenize`` in pdf-korean.yaml
+
+    Args:
+        lines: File lines (each including trailing newline).
+
+    Returns:
+        List of Issue instances with rule ``unsafe-inline-code-escape``
+        and severity ``warning``.
+
+    Examples:
+        >>> check_unsafe_inline_code(["use `pass^k` here\n"])[0].rule
+        'unsafe-inline-code-escape'
+        >>> check_unsafe_inline_code(["call `pass@k` here\n"])
+        []
+    """
+    issues: list[Issue] = []
+    in_fence = False
+    for i, line in enumerate(lines):
+        if _FENCE_RE.match(line):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        for m in _INLINE_CODE_RE.finditer(line):
+            content = m.group()
+            if any(ch in content for ch in _RISKY_INLINE_CHARS):
+                issues.append(Issue(
+                    line=i + 1,
+                    rule="unsafe-inline-code-escape",
+                    context=content[:80],
+                    severity="warning",
+                ))
+    return issues
+
+
 def fix_lines(lines: list[str]) -> list[str]:
     """Return a new list with blank lines inserted before offending blocks.
 
@@ -802,14 +999,26 @@ def process_file(
     blank_issues = check_lines(lines)
     cell_issues = check_table_cells(lines)
     glyph_issues = check_unicode_glyphs(lines)
+    currency_issues = check_currency_dollar(lines)
+    inline_code_issues = check_unsafe_inline_code(lines)
     latin1_issues = check_latin1_supplement(lines) if normalize_latin1 else []
-    all_issues = blank_issues + cell_issues + glyph_issues + latin1_issues
-    if apply_fix and (blank_issues or glyph_issues or latin1_issues):
+    all_issues = (
+        blank_issues
+        + cell_issues
+        + glyph_issues
+        + currency_issues
+        + inline_code_issues
+        + latin1_issues
+    )
+    needs_write = blank_issues or glyph_issues or currency_issues or latin1_issues
+    if apply_fix and needs_write:
         fixed = lines
         if blank_issues:
             fixed = fix_lines(fixed)
         if glyph_issues:
             fixed = fix_unicode_glyphs(fixed)
+        if currency_issues:
+            fixed = fix_currency_dollar(fixed)
         if latin1_issues:
             fixed = fix_latin1_supplement(fixed)
         filepath.write_text("".join(fixed), encoding="utf-8")

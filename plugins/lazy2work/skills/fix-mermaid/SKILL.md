@@ -13,13 +13,22 @@ description: >
   (D) Unicode glyph missing — characters like U+2212 (MINUS SIGN), U+2717
       (BALLOT X) that CJK fonts lack, causing silent disappearance in PDF
       (auto-fix).
+  (E) Unescaped currency `$` followed by digit (e.g., `$100`, `$76.4억`) that
+      pandoc's tex_math_dollars parses as math, leaking math mode into tables
+      and producing "Bad math environment delimiter" errors (auto-fix).
+  (F) Inline backtick code containing LaTeX-risky chars (`^`, `~`, `&`, `$`,
+      `%`) that collide with pdf-korean.yaml's `\\seqsplit` wrapper, causing
+      "Missing number, treated as zero" errors (warning-only).
   Triggers on: "mermaid error", "mermaid fix", "mermaid 수정", "mermaid 오류",
   "다이어그램 깨짐", "mermaid syntax", "mermaid 렌더링", "diagram broken",
   "mermaid validation", "pandoc 테이블 깨짐", "pandoc 리스트 렌더링",
   "md pdf 변환 문제", "테이블이 렌더링 안됨", "markdown lint",
   "pandoc blank line", "overfull hbox", "테이블 오버플로",
   "Missing character", "unicode glyph", "글리프 누락", "문자 누락",
-  "U+2212", "마이너스 사라짐", "PDF 문자 깨짐".
+  "U+2212", "마이너스 사라짐", "PDF 문자 깨짐",
+  "Bad math environment delimiter", "통화 달러", "$100 이스케이프",
+  "Missing number treated as zero", "seqsplit", "인라인 코드 깨짐",
+  "pass^k 에러", "PDF 변환 실패".
 ---
 
 # Fix Mermaid & Pandoc — Markdown Rendering Fixer
@@ -30,8 +39,9 @@ Repairs two classes of Markdown problems that break downstream rendering:
    words, Unicode, message escaping).
 2. **Pandoc PDF pitfalls** — blank-line violations before block elements,
    long table cells mixing bold and special symbols that trigger LaTeX
-   overfull hbox, and Unicode glyphs missing from CJK fonts that silently
-   disappear in PDF output.
+   overfull hbox, Unicode glyphs missing from CJK fonts that silently
+   disappear in PDF output, unescaped currency `$` that leaks math mode,
+   and inline-code LaTeX escapes that collide with the `\seqsplit` wrapper.
 
 Pick the sub-workflow by the user's symptom.
 
@@ -43,7 +53,9 @@ Pick the sub-workflow by the user's symptom.
 | "테이블/리스트가 PDF에서 깨짐" / "섹션이 깨져 보임" / "한 줄로 흐름" | **Workflow B — Pandoc Blanks** |
 | "테이블이 페이지 폭 넘음" / "Overfull hbox" / 특정 셀만 밀림 | **Workflow C — Pandoc Cell Overflow** |
 | "Missing character" / 문자 누락 / "마이너스 사라짐" / PDF에서 글자 빠짐 | **Workflow D — Unicode Glyph Missing** |
-| 여러 증상 / md 파일 전반 정리 | **A + B + C + D 순차** |
+| `Bad math environment delimiter` / `$100` 등 통화 표기 / 표 셀에서 math 누설 | **Workflow E — Currency Dollar Escape** |
+| `Missing number, treated as zero` / `pass^k` 등 인라인 코드 / `\seqsplit` 충돌 | **Workflow F — Unsafe Inline Code** |
+| 여러 증상 / md 파일 전반 정리 | **A + B + C + D + E + F 순차** |
 
 ---
 
@@ -424,14 +436,171 @@ e.g. `로만 오루스(Roman Orus)`.
 
 ---
 
+## Workflow E — Pandoc Currency Dollar Escape (Auto-fix)
+
+### When to Run
+
+The user reports any of:
+
+- lualatex error: `! LaTeX Error: Bad math environment delimiter.`
+- The error trace mentions a table-cell separator and `\)` (math close)
+- "통화 달러", "`$100` 이스케이프", "PDF 변환 실패"
+- The Markdown contains currency notations like `$100K`, `$76.4억`,
+  `$1B`, `$2.58억`
+
+### Root Cause
+
+Pandoc's `tex_math_dollars` extension is on by default and parses
+`$<non-space>...<non-space>$` as inline math. A bare currency `$100`
+opens a math span; an odd count of unescaped currency `$` leaks math
+mode through paragraphs until it crashes against a downstream pipe table,
+where LaTeX sees `|` and `\)` in math context and aborts.
+
+See `references/pandoc-pdf-pitfalls.md` § 6 "Unescaped Currency Dollar Sign"
+for the full mechanism and incident report.
+
+### Step E1 — Lint
+
+```bash
+python3 scripts/fix_pandoc_blanks.py path/to/file.md
+```
+
+Detection rule (auto-fixable, severity=error):
+
+| Rule | Trigger |
+|---|---|
+| `unescaped-currency-dollar` | `$` immediately followed by a digit (0–9), not already preceded by `\`, outside fenced code blocks and inline backtick spans. |
+
+### Step E2 — Fix
+
+```bash
+python3 scripts/fix_pandoc_blanks.py path/to/file.md --fix
+```
+
+Replaces every `$<digit>` with `\$<digit>`. Real math (`$x_1$`,
+`$\alpha$`, `$\hat{V}_j$`) is preserved because the opening `$` there
+is followed by a non-digit. Inline backtick code (`` `$1` ``,
+`` `$PATH` ``) is preserved because the `$` is a literal shell variable.
+
+### Step E3 — Verify
+
+```bash
+# Linter clean
+python3 scripts/fix_pandoc_blanks.py path/to/file.md
+# → OK: No issues found.
+
+# Diagnostic: count must be even (paired) — though `\$` no longer counts
+grep -nE '(?<!\\\\)\$[0-9]' path/to/file.md   # → no matches expected
+
+# PDF build
+pandoc -d pdf-korean path/to/file.md -o path/to/file.pdf
+```
+
+### Why the Auto-fix Cannot Break Real Math
+
+Pandoc's own rule is "closing `$` followed by a digit invalidates the
+math span". So `$x = 1$2` is not valid math anyway. Auto-escaping any
+`$<digit>` therefore can never break a valid math expression.
+
+---
+
+## Workflow F — Pandoc Unsafe Inline Code (Warning)
+
+### When to Run
+
+The user reports any of:
+
+- lualatex error: `! Missing number, treated as zero.`
+- The trace shows `\futurelet` and a line like `\texttt{pass\^{}k}`
+- The Markdown has inline code containing `^`, `~`, `&`, `$`, or `%`
+  (e.g., `` `pass^k` ``, `` `a~b` ``, `` `x&y` ``)
+- "seqsplit", "인라인 코드 깨짐", "pass^k 에러"
+
+### Root Cause
+
+Three layers must combine for this error:
+
+1. The Markdown has inline code with a LaTeX-risky character
+2. Pandoc escapes `^` as `\^{}` (an accent command with `{}` argument)
+3. `~/.pandoc/defaults/pdf-korean.yaml` wraps every `\texttt` call in
+   `\seqsplit` for URL/path word-wrap. `\seqsplit` walks the argument
+   character by character and **separates `\^` from its `{}` argument**,
+   which leaves LaTeX expecting a numeric argument that never arrives
+
+This combination is project-specific. Standard pandoc renders
+`\texttt{pass\^{}k}` correctly; only the `\seqsplit` override breaks it.
+
+See `references/pandoc-pdf-pitfalls.md` § 7 "Unsafe LaTeX Characters
+in Inline Code" for the full trace.
+
+### Step F1 — Lint
+
+```bash
+python3 scripts/fix_pandoc_blanks.py path/to/file.md
+```
+
+Detection rule (warning-only — cannot auto-fix):
+
+| Rule | Trigger |
+|---|---|
+| `unsafe-inline-code-escape` | An inline backtick span containing any of `^`, `~`, `&`, `$`, `%`. Detected outside fenced code blocks. |
+
+### Step F2 — Remediate (Manual)
+
+The linter cannot pick the right fix because it depends on intent.
+Apply in priority order:
+
+1. **Math mode** (semantically best when content is mathematical):
+   ```
+   `pass^k`  →  $\text{pass}^k$
+   ```
+2. **Drop the backticks** (when formatting is decorative):
+   ```
+   `pass^k`  →  pass^k
+   ```
+3. **Project-wide settings change** (needs regression testing on long
+   URLs / paths):
+   ```latex
+   %% in pdf-korean.yaml header-includes
+   %% old
+   \protected\def\texttt#1{\oldtexttt{\seqsplit{#1}}}
+   %% candidate replacement
+   \protected\def\texttt#1{\oldtexttt{\detokenize{#1}}}
+   ```
+
+Fenced code blocks (` ```...``` `) are unaffected — pandoc converts those
+to `\verb`/`lstlisting`, which the `\seqsplit` wrapper does not touch.
+
+### Step F3 — Verify
+
+```bash
+python3 scripts/fix_pandoc_blanks.py path/to/file.md
+# → OK: No issues found (or warnings explicitly accepted)
+
+pandoc -d pdf-korean path/to/file.md -o path/to/file.pdf
+# → no `Missing number, treated as zero` error
+```
+
+### Why This Differs from E
+
+E (currency `$`) is a Markdown authoring mistake — every pandoc
+environment behaves the same. F is a project-specific configuration
+limitation: standard pandoc renders the same input correctly. Both
+the Markdown and the YAML defaults are valid fix locations.
+
+---
+
 ## Key Principles
 
 - **Fix conservatively**: Only change what's broken.
 - **Preserve intent**: Meaning and structure must not change.
 - **Quote liberally (Mermaid)**: When in doubt, wrap labels in quotes.
 - **Blank-line generously (Pandoc)**: One blank before every block is always safe.
-- **Warnings are not errors**: Cell overflow needs human judgment — do not
-  auto-strip bold or rewrite cells without confirmation.
+- **Escape currency `$` always**: `$<digit>` outside math/code is always a
+  bug for pandoc — the auto-fix is provably safe.
+- **Warnings are not errors**: Cell overflow and unsafe inline code need
+  human judgment — do not auto-strip bold, rewrite cells, or rewrite
+  inline code without confirmation.
 - **Report clearly**: The user should understand exactly what changed and why.
 
 ## Edge Cases
@@ -464,6 +633,24 @@ e.g. `로만 오루스(Roman Orus)`.
   text font engine.
 - **Backtick inline code**: Replaced — pandoc converts these to `\texttt`
   which uses the monospace text font (same glyph-missing issue).
+
+### Pandoc Currency Dollar
+
+- **Real math** (`$x_1$`, `$\alpha$`): Never touched — opening `$` is
+  followed by a non-digit, which never matches `(?<!\\)\$(?=\d)`.
+- **Fenced code blocks**: Always preserved.
+- **Inline backticks**: Always preserved — `$` inside `` `code` ``
+  is a literal shell variable, not pandoc math.
+- **Already-escaped `\$`**: Lookbehind ensures `\$100` is not re-escaped.
+
+### Pandoc Unsafe Inline Code
+
+- **Fenced code blocks**: Skipped — pandoc routes them to `\verb`/`lstlisting`
+  which are unaffected by `\seqsplit`.
+- **Inline math `$...$`**: Skipped — math is rendered by LaTeX math fonts,
+  not `\texttt`.
+- **Multiple risky chars per line**: Each inline code span is reported
+  separately, even on the same line.
 
 ## References
 
