@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Pandoc Markdown linter/fixer for PDF rendering pitfalls.
 
-Detects and (where safe) fixes five classes of issues that break
+Detects and (where safe) fixes six classes of issues that break
 `pandoc -d pdf-korean` (lualatex/xelatex) PDF output:
 
 1. Missing blank line before a block element (list / pipe table / fenced
@@ -35,6 +35,15 @@ Detects and (where safe) fixes five classes of issues that break
    per-glyph tokens, causing `Missing number, treated as zero`.
    **Warning only** — fix requires human judgment (math mode, backtick
    removal, or settings change).
+
+6. Inline math with a trailing space before the closing `$` (e.g.,
+   ``$\\mathcal{H}_1 = $ rest``). Pandoc's ``tex_math_dollars`` rule
+   requires the closing ``$`` to NOT be preceded by whitespace; when
+   violated, both ``$`` are emitted as literal ``\\$``, leaving any
+   math-mode commands inside (``\\mathcal``, ``\\frac``, ...) in text
+   mode and triggering ``\\symcal allowed only in math mode`` (or
+   similar) errors. **Auto-fixed** by stripping the trailing whitespace
+   before the closing ``$``.
 
 Companion to fix_mermaid.py — both cover common pandoc PDF rendering
 pitfalls. See ../references/pandoc-pdf-pitfalls.md for background.
@@ -99,6 +108,90 @@ _CURRENCY_DOLLAR_RE = re.compile(r"(?<!\\)\$(?=\d)")
 # breaking the escape sequence. Warning-only — see references for
 # remediation options (math mode, backtick removal, settings change).
 _RISKY_INLINE_CHARS: tuple[str, ...] = ("^", "~", "&", "$", "%")
+
+# Inline math span where the closing `$` is preceded by whitespace,
+# violating pandoc's `tex_math_dollars` rule (the closing `$` must NOT
+# be preceded by whitespace). Pattern breakdown:
+#   (?<!\\)\$    — opening `$`, not already escaped
+#   (?=\S)       — opening must be immediately followed by non-whitespace
+#   ([^$\n]*?)   — content (non-greedy, no nested `$`, single line)
+#   (\s+)        — one or more whitespace chars (the bug)
+#   \$           — closing `$`
+#   (?!\d)       — closing must not be followed by a digit (otherwise
+#                  it is a currency-dollar concern handled elsewhere)
+_CLOSING_DOLLAR_TRAILING_SPACE_RE = re.compile(
+    r"(?<!\\)\$(?=\S)([^$\n]*?)(\s+)\$(?!\d)"
+)
+
+# Pre-compiled pattern for un-escaped dollar positions on a line.
+_UNESCAPED_DOLLAR_RE = re.compile(r"(?<!\\)\$")
+
+
+def _parse_dollar_pairs(line: str) -> list[dict[str, int | bool | None]]:
+    """Pair up unescaped ``$`` characters and validate each pair.
+
+    Pandoc's ``tex_math_dollars`` rule treats a sequential pair of ``$``
+    characters as inline math iff:
+
+    - the opening ``$`` is immediately followed by non-whitespace
+    - the closing ``$`` is immediately preceded by non-whitespace
+    - the closing ``$`` is not immediately followed by a digit
+
+    This helper does exactly that: it scans the line for unescaped
+    ``$``, pairs them sequentially, and reports the validity of each
+    constraint per pair. Both rules in this module use this helper to
+    avoid false-positives on math-heavy text.
+
+    Args:
+        line: A single line of Markdown text (with or without newline).
+
+    Returns:
+        List of dicts. Each dict has keys ``open`` (int position of
+        opening ``$``), ``close`` (int position of closing ``$``, or
+        ``None`` if the opening is unpaired), ``open_valid`` (bool),
+        ``close_prev_valid`` (bool), ``close_next_valid`` (bool), and
+        ``is_math`` (bool — True iff all three checks pass).
+
+    Examples:
+        >>> pairs = _parse_dollar_pairs("$x = y$")
+        >>> pairs[0]["is_math"]
+        True
+        >>> pairs = _parse_dollar_pairs("$x = $ rest")
+        >>> pairs[0]["close_prev_valid"]
+        False
+        >>> pairs = _parse_dollar_pairs("lone $100")
+        >>> pairs[0]["close"] is None
+        True
+    """
+    positions = [m.start() for m in _UNESCAPED_DOLLAR_RE.finditer(line)]
+    pairs: list[dict[str, int | bool | None]] = []
+    i = 0
+    while i + 1 < len(positions):
+        op = positions[i]
+        cl = positions[i + 1]
+        op_valid = (op + 1 < len(line)) and not line[op + 1].isspace()
+        cl_prev_valid = (cl > 0) and not line[cl - 1].isspace()
+        cl_next_valid = (cl + 1 >= len(line)) or not line[cl + 1].isdigit()
+        pairs.append({
+            "open": op,
+            "close": cl,
+            "open_valid": op_valid,
+            "close_prev_valid": cl_prev_valid,
+            "close_next_valid": cl_next_valid,
+            "is_math": op_valid and cl_prev_valid and cl_next_valid,
+        })
+        i += 2
+    if i < len(positions):
+        op = positions[i]
+        pairs.append({
+            "open": op,
+            "close": None,
+            "open_valid": (op + 1 < len(line)) and not line[op + 1].isspace(),
+            "close_prev_valid": False,
+            "close_next_valid": False,
+            "is_math": False,
+        })
+    return pairs
 
 # Latin-1 Supplement diacritics (U+00C0..U+00FF) that CJK-only mainfonts
 # may silently drop when rendering PDF via lualatex. Opt-in only —
@@ -779,16 +872,56 @@ def _mask_inline_code(line: str) -> str:
     return _INLINE_CODE_RE.sub(lambda m: " " * len(m.group()), line)
 
 
+def _currency_dollar_positions(line: str) -> list[int]:
+    """Return positions of ``$`` chars that are currency (not valid math).
+
+    A ``$`` immediately followed by a digit is "currency-style". This
+    helper returns only those that are NOT inside a valid pandoc math
+    span — preventing false positives on ``$1$``, ``$0, 1, 2$`` etc.
+
+    Args:
+        line: Single line of text.
+
+    Returns:
+        List of character positions where ``$`` is unescaped, followed
+        by a digit, and not part of a valid math pair.
+
+    Examples:
+        >>> _currency_dollar_positions("가격 $100")
+        [3]
+        >>> _currency_dollar_positions("$1$ valid math")
+        []
+        >>> _currency_dollar_positions("$100K~$1M leak")
+        [0, 6]
+    """
+    pairs = _parse_dollar_pairs(line)
+    bad: list[int] = []
+    for pair in pairs:
+        if pair["is_math"]:
+            continue
+        op = pair["open"]
+        assert isinstance(op, int)
+        if op + 1 < len(line) and line[op + 1].isdigit():
+            bad.append(op)
+        cl = pair["close"]
+        if isinstance(cl, int) and cl + 1 < len(line) and line[cl + 1].isdigit():
+            bad.append(cl)
+    return sorted(set(bad))
+
+
 def check_currency_dollar(lines: list[str]) -> list[Issue]:
-    r"""Detect unescaped ``$`` immediately followed by a digit.
+    r"""Detect unescaped currency ``$`` outside valid math spans.
 
-    Pandoc's ``tex_math_dollars`` extension treats ``$<non-space>...<non-space>$``
-    as an inline math span. A solitary ``$<digit>`` (currency such as
-    ``$100``) is parsed as math-mode opener; an odd number of such
-    markers leaks math mode into a later table cell, causing
-    ``Bad math environment delimiter`` errors.
+    Pandoc's ``tex_math_dollars`` extension treats a paired ``$``
+    sequence as math iff opening is followed by non-whitespace, closing
+    is preceded by non-whitespace, and closing is not followed by a
+    digit. A ``$<digit>`` outside such a valid pair (e.g., ``$100`` with
+    no closing pair, or ``$100K~$1M`` whose closing is followed by a
+    digit) leaks math state and causes ``Bad math environment delimiter``
+    errors. Real math like ``$1$`` or ``$0, 1, 2, \ldots$`` is preserved
+    because their pairs ARE valid math.
 
-    The check is auto-fixable: replace every match with ``\\$``.
+    The check is auto-fixable: replace each currency ``$`` with ``\$``.
 
     Args:
         lines: File lines (each including trailing newline).
@@ -800,7 +933,7 @@ def check_currency_dollar(lines: list[str]) -> list[Issue]:
     Examples:
         >>> check_currency_dollar(["가격 $100\n"])[0].rule
         'unescaped-currency-dollar'
-        >>> check_currency_dollar(["수식 $x_1$\n"])
+        >>> check_currency_dollar(["수식 $1$ 정상\n"])
         []
         >>> check_currency_dollar(["\\$100\n"])
         []
@@ -814,9 +947,9 @@ def check_currency_dollar(lines: list[str]) -> list[Issue]:
         if in_fence:
             continue
         masked = _mask_inline_code(line)
-        for m in _CURRENCY_DOLLAR_RE.finditer(masked):
-            start = max(0, m.start() - 5)
-            end = min(len(line), m.end() + 10)
+        for pos in _currency_dollar_positions(masked):
+            start = max(0, pos - 5)
+            end = min(len(line), pos + 10)
             snippet = line[start:end].rstrip()
             issues.append(Issue(
                 line=i + 1,
@@ -827,23 +960,55 @@ def check_currency_dollar(lines: list[str]) -> list[Issue]:
     return issues
 
 
-def fix_currency_dollar(lines: list[str]) -> list[str]:
-    r"""Escape unescaped ``$<digit>`` to ``\\$<digit>`` outside code regions.
+def _escape_currency_in_segment(segment: str) -> str:
+    """Insert ``\\`` before every currency ``$`` in a code-free segment.
 
-    Preserves content inside fenced code blocks and inline backtick
-    code spans (where ``$`` is a literal shell variable or similar).
+    Args:
+        segment: Text outside fenced code and inline backticks.
+
+    Returns:
+        Segment with currency-style ``$`` escaped (math-style ``$``
+        preserved).
+
+    Examples:
+        >>> _escape_currency_in_segment("가격 $100")
+        '가격 \\\\$100'
+        >>> _escape_currency_in_segment("수식 $1$ 정상")
+        '수식 $1$ 정상'
+    """
+    positions = _currency_dollar_positions(segment)
+    if not positions:
+        return segment
+    result: list[str] = []
+    last = 0
+    for pos in positions:
+        result.append(segment[last:pos])
+        result.append("\\$")
+        last = pos + 1
+    result.append(segment[last:])
+    return "".join(result)
+
+
+def fix_currency_dollar(lines: list[str]) -> list[str]:
+    r"""Escape currency ``$`` outside valid math spans and code regions.
+
+    Preserves: valid math (``$1$``, ``$0, 1, 2$``), fenced code blocks,
+    inline backtick code (where ``$`` is a literal shell variable), and
+    already-escaped ``\\$``.
 
     Args:
         lines: Original file lines.
 
     Returns:
-        New list of lines with currency markers escaped.
+        New list of lines with currency-style ``$`` escaped.
 
     Examples:
         >>> fix_currency_dollar(["$100\n"])
         ['\\$100\n']
         >>> fix_currency_dollar(["use `$1` here\n"])
         ['use `$1` here\n']
+        >>> fix_currency_dollar(["수식 $1$ 정상\n"])
+        ['수식 $1$ 정상\n']
         >>> fix_currency_dollar(["$100K~$1M\n"])
         ['\\$100K~\\$1M\n']
     """
@@ -858,17 +1023,17 @@ def fix_currency_dollar(lines: list[str]) -> list[str]:
             out.append(line)
             continue
         if "`" not in line:
-            out.append(_CURRENCY_DOLLAR_RE.sub(r"\\$", line))
+            out.append(_escape_currency_in_segment(line))
             continue
         result: list[str] = []
         pos = 0
         for m in _INLINE_CODE_RE.finditer(line):
             segment = line[pos:m.start()]
-            result.append(_CURRENCY_DOLLAR_RE.sub(r"\\$", segment))
+            result.append(_escape_currency_in_segment(segment))
             result.append(m.group())
             pos = m.end()
         segment = line[pos:]
-        result.append(_CURRENCY_DOLLAR_RE.sub(r"\\$", segment))
+        result.append(_escape_currency_in_segment(segment))
         out.append("".join(result))
     return out
 
@@ -920,6 +1085,137 @@ def check_unsafe_inline_code(lines: list[str]) -> list[Issue]:
                     severity="warning",
                 ))
     return issues
+
+
+def _trailing_space_close_positions(line: str) -> list[int]:
+    """Return positions of closing ``$`` chars violating the trailing-space rule.
+
+    A pair is a violation when:
+    - opening ``$`` is valid (followed by non-whitespace)
+    - closing ``$`` is preceded by whitespace
+    - closing ``$`` is not immediately followed by a digit (otherwise
+      it is a currency-dollar concern handled elsewhere)
+
+    Args:
+        line: Single line of text.
+
+    Returns:
+        List of character positions of offending closing ``$``.
+
+    Examples:
+        >>> _trailing_space_close_positions(r"$x = $ rest")
+        [5]
+        >>> _trailing_space_close_positions(r"$q$와 $p$")
+        []
+    """
+    pairs = _parse_dollar_pairs(line)
+    return [
+        pair["close"]  # type: ignore[misc]
+        for pair in pairs
+        if isinstance(pair["close"], int)
+        and pair["open_valid"]
+        and not pair["close_prev_valid"]
+        and pair["close_next_valid"]
+    ]
+
+
+def check_closing_dollar_trailing_space(lines: list[str]) -> list[Issue]:
+    r"""Detect inline math whose closing ``$`` is preceded by whitespace.
+
+    Pandoc's ``tex_math_dollars`` rule requires the closing ``$`` to be
+    IMMEDIATELY preceded by non-whitespace. Patterns like
+    ``$\mathcal{H}_1 = $ rest`` violate that rule, so pandoc emits both
+    ``$`` as literal ``\$``, leaving any math-mode command
+    (``\mathcal``, ``\frac``, ...) in text mode and producing
+    ``! LaTeX Error: \symcal allowed only in math mode``.
+
+    Detection is pair-based via :func:`_parse_dollar_pairs` so adjacent
+    valid math spans (``$q$ and $p$``) are not falsely flagged.
+
+    Args:
+        lines: File lines (each including trailing newline).
+
+    Returns:
+        List of Issue instances with rule
+        ``closing-dollar-trailing-space`` and severity ``error``.
+
+    Examples:
+        >>> check_closing_dollar_trailing_space([r"$x = $ y" + "\n"])[0].rule
+        'closing-dollar-trailing-space'
+        >>> check_closing_dollar_trailing_space([r"$x = y$" + "\n"])
+        []
+        >>> check_closing_dollar_trailing_space([r"$q$와 $p$" + "\n"])
+        []
+    """
+    issues: list[Issue] = []
+    in_fence = False
+    for i, line in enumerate(lines):
+        if _FENCE_RE.match(line):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        for pos in _trailing_space_close_positions(line):
+            start = max(0, pos - 10)
+            end = min(len(line), pos + 5)
+            snippet = line[start:end].rstrip()
+            issues.append(Issue(
+                line=i + 1,
+                rule="closing-dollar-trailing-space",
+                context=snippet[:80],
+                severity="error",
+            ))
+    return issues
+
+
+def fix_closing_dollar_trailing_space(lines: list[str]) -> list[str]:
+    r"""Strip whitespace before a closing ``$`` for offending pairs only.
+
+    Companion to :func:`check_closing_dollar_trailing_space`. Preserves
+    content inside fenced code blocks and never modifies adjacent valid
+    math spans.
+
+    Args:
+        lines: Original file lines.
+
+    Returns:
+        New list of lines with offending trailing whitespace removed.
+
+    Examples:
+        >>> fix_closing_dollar_trailing_space([r"$x = $ y" + "\n"])
+        ['$x =$ y\n']
+        >>> fix_closing_dollar_trailing_space([r"$x   $ y" + "\n"])
+        ['$x$ y\n']
+        >>> fix_closing_dollar_trailing_space([r"$q$와 $p$" + "\n"])
+        ['$q$와 $p$\n']
+    """
+    out: list[str] = []
+    in_fence = False
+    for line in lines:
+        if _FENCE_RE.match(line):
+            in_fence = not in_fence
+            out.append(line)
+            continue
+        if in_fence:
+            out.append(line)
+            continue
+        positions = _trailing_space_close_positions(line)
+        if not positions:
+            out.append(line)
+            continue
+        result: list[str] = []
+        last = 0
+        for pos in positions:
+            # Find start of whitespace run before this `$`
+            ws_start = pos
+            while ws_start > last and line[ws_start - 1].isspace():
+                ws_start -= 1
+            result.append(line[last:ws_start])
+            result.append("$")
+            last = pos + 1
+        result.append(line[last:])
+        out.append("".join(result))
+    return out
 
 
 def fix_lines(lines: list[str]) -> list[str]:
@@ -1001,6 +1297,7 @@ def process_file(
     glyph_issues = check_unicode_glyphs(lines)
     currency_issues = check_currency_dollar(lines)
     inline_code_issues = check_unsafe_inline_code(lines)
+    closing_dollar_issues = check_closing_dollar_trailing_space(lines)
     latin1_issues = check_latin1_supplement(lines) if normalize_latin1 else []
     all_issues = (
         blank_issues
@@ -1008,9 +1305,16 @@ def process_file(
         + glyph_issues
         + currency_issues
         + inline_code_issues
+        + closing_dollar_issues
         + latin1_issues
     )
-    needs_write = blank_issues or glyph_issues or currency_issues or latin1_issues
+    needs_write = (
+        blank_issues
+        or glyph_issues
+        or currency_issues
+        or closing_dollar_issues
+        or latin1_issues
+    )
     if apply_fix and needs_write:
         fixed = lines
         if blank_issues:
@@ -1019,6 +1323,8 @@ def process_file(
             fixed = fix_unicode_glyphs(fixed)
         if currency_issues:
             fixed = fix_currency_dollar(fixed)
+        if closing_dollar_issues:
+            fixed = fix_closing_dollar_trailing_space(fixed)
         if latin1_issues:
             fixed = fix_latin1_supplement(fixed)
         filepath.write_text("".join(fixed), encoding="utf-8")

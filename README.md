@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.25.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.26.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.25.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, and Hamilton spec-driven pipelines |
+| [**lazy2work**](plugins/lazy2work/) | 1.26.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, and Hamilton spec-driven pipelines |
 
 ---
 
@@ -54,7 +54,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 | **generate-optimized-spec-kit-prompt** | `/lazy2work:generate-optimized-spec-kit-prompt` | Generate complete Spec Kit prompts (specify/clarify/plan/tasks/implement/commit) for all features — splits project into 1-5 day features, generates 6-stage prompts per feature with Mermaid diagrams and auto-clarify/auto-commit steps |
 | **pyright-setup** | `/lazy2work:pyright-setup` | Auto-configure Pyright for Python projects — detects Python version from venv, adds `[tool.pyright]` to pyproject.toml, resolves "Import could not be resolved" LSP errors in Neovim/VS Code |
 | **apply-all-sc-save** | `/lazy2work:apply-all-sc-save` | Broadcast `/sc:save` to all Claude Code panes in the current tmux session — auto-detects Claude panes, excludes self, supports `--dry-run`, `--all-sessions`, and custom commands |
-| **fix-mermaid** | `/lazy2work:fix-mermaid` | Fix Markdown rendering issues that break Mermaid diagrams or pandoc PDF conversion — Mermaid v11 syntax (reserved words, Unicode/Langium issues, message escaping) **and** pandoc PDF pitfalls (blank-line compliance before lists/tables/fences as auto-fixed errors, long-mixed-cell overflow as warnings, always-on Unicode glyph map covering U+2212/U+2717/U+2718, **currency-dollar auto-escape** for `$100`/`$76.4억` that prevents `Bad math environment delimiter` errors, **unsafe-inline-code warnings** for `` `pass^k` ``-style content that collides with the `\seqsplit` wrapper and causes `Missing number, treated as zero`, plus opt-in **`--latin1-normalize`** for Latin-1 Supplement diacritics like `á é ñ ü ß`). Three bundled Python scripts (`fix_mermaid.py`, `fix_pandoc_blanks.py`, `validate_mermaid.py`) with lint / `--fix` / `--json` modes, plus optional **`--with-mmdc` feedback loop** that renders each diagram with Mermaid CLI and iterates targeted fixes until clean |
+| **fix-mermaid** | `/lazy2work:fix-mermaid` | Fix Markdown rendering issues that break Mermaid diagrams or pandoc PDF conversion — Mermaid v11 syntax (reserved words, Unicode/Langium issues, message escaping) **and** pandoc PDF pitfalls (blank-line compliance before lists/tables/fences as auto-fixed errors, long-mixed-cell overflow as warnings, always-on Unicode glyph map covering U+2212/U+2717/U+2718, **currency-dollar auto-escape** for `$100`/`$76.4억` that prevents `Bad math environment delimiter` errors, **unsafe-inline-code warnings** for `` `pass^k` ``-style content that collides with the `\seqsplit` wrapper and causes `Missing number, treated as zero`, **closing-dollar-trailing-space auto-fix** for `$\mathcal{H}_1 = $ rest` patterns that violate pandoc's `tex_math_dollars` rule and cause `\symcal allowed only in math mode`, plus opt-in **`--latin1-normalize`** for Latin-1 Supplement diacritics like `á é ñ ü ß`). Three bundled Python scripts (`fix_mermaid.py`, `fix_pandoc_blanks.py`, `validate_mermaid.py`) with lint / `--fix` / `--json` modes, plus optional **`--with-mmdc` feedback loop** that renders each diagram with Mermaid CLI and iterates targeted fixes until clean |
 | **hamilton-harness** | `/lazy2work:hamilton-harness` | Build Hamilton data pipelines through a spec-driven workflow — 4 modes (prompt→YAML, validate, stub+viz, modify), Pydantic schemas, Mermaid/Graphviz/Hamilton rendering, 3 domain examples (ETL/ML/RAG). Self-contained — no plugin-level hooks or rules needed |
 
 <details>
@@ -568,6 +568,7 @@ What it detects:
 | `latin1-supplement-glyph` | error | ✅ (opt-in) | Latin-1 Supplement diacritics (á, é, í, ó, ú, ñ, ü, ß, …) — only reported with `--latin1-normalize` |
 | `long-mixed-cell` | warning | ❌ (manual) | Table cell ≥ 25 chars mixing `**bold**` with risky symbols (`·`, `—`, `+`, parens) that trigger LaTeX overfull hbox |
 | `unsafe-inline-code-escape` | warning | ❌ (manual) | Inline backtick code containing `^`, `~`, `&`, `$`, `%` — pandoc escapes are split per-character by the pdf-korean.yaml `\seqsplit` wrapper, causing `Missing number, treated as zero`. Three valid fixes (math mode, drop backticks, swap `\seqsplit` for `\detokenize`) need human choice |
+| `closing-dollar-trailing-space` | error | ✅ | Inline math whose closing `$` has whitespace immediately before it (e.g., `$\mathcal{H}_1 = $ rest`). Pandoc treats both `$` as literal `\$`, leaving any math-mode commands (`\mathcal`, `\frac`, ...) in text mode and triggering `\symcal allowed only in math mode`. Auto-fix strips the trailing whitespace inside the math span — visually identical because LaTeX normalizes math-mode operator spacing |
 
 Example output:
 
@@ -600,7 +601,7 @@ Run with --fix to apply blank-line corrections.
 Reference documentation:
 
 - `references/mermaid-v11-syntax.md` — 18 sections covering all diagram types, arrow syntax, Unicode replacement tables, reserved words, entity escaping
-- `references/pandoc-pdf-pitfalls.md` — 7 sections covering blank-line compliance, long-mixed-cell overflow, font fallback, Unicode glyph missing in CJK fonts, unescaped currency dollar sign, unsafe LaTeX characters in inline code, and a pre-conversion checklist
+- `references/pandoc-pdf-pitfalls.md` — 8 sections covering blank-line compliance, long-mixed-cell overflow, font fallback, Unicode glyph missing in CJK fonts, unescaped currency dollar sign, unsafe LaTeX characters in inline code, closing dollar preceded by whitespace, and a pre-conversion checklist
 
 </details>
 
@@ -1055,6 +1056,17 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.26.0 (2026-05-03)
+
+- **fix-mermaid: closing-dollar-trailing-space auto-fix (Workflow G)** — new `closing-dollar-trailing-space` rule in `fix_pandoc_blanks.py` detects inline math whose closing `$` is immediately preceded by whitespace (e.g., `$\mathcal{H}_1 = $ rest`). Pandoc's `tex_math_dollars` rule rejects such patterns, treating both `$` as literal characters and leaving any math-mode commands (`\mathcal`, `\frac`, `\hat`, `\sum`, ...) in text mode — producing fatal `! LaTeX Error: \symcal allowed only in math mode` (or similar). Auto-fix strips the offending whitespace inside the math span; visually identical because LaTeX normalizes math-mode operator spacing automatically. Skips fenced code blocks and currency-dollar patterns (handled separately by `unescaped-currency-dollar`)
+- **fix-mermaid: SKILL.md Workflow G** — decision tree expanded with `\symcal allowed only in math mode` symptom; full workflow section with WRONG/CORRECT examples, root-cause table of pandoc strict-rule positions (opening `$` non-whitespace right, closing `$` non-whitespace left, closing `$` non-digit right), comparison table vs Workflows E (currency) and F (inline-code escape). Trigger keywords expanded with `symcal allowed only in math mode`, `tex_math_dollars`, `수식 닫는 달러 공백`, `닫는 $ 앞 공백`, `math mode error`
+- **fix-mermaid: references/pandoc-pdf-pitfalls.md §8** — new section "Closing Dollar Preceded by Whitespace" with rule comparison matrix (§6 vs §7 vs §8), diagnostic grep patterns, prevention guidelines, and detailed explanation of why LaTeX renders `$x =$` and `$x = $` identically (math-mode operator spacing normalization)
+- **fix-mermaid: README rule table + sections count** — Skills table description updated; Workflow B rule table now lists `closing-dollar-trailing-space` (error, ✅) alongside the existing six rules; `references/pandoc-pdf-pitfalls.md` section count updated from 7 to 8
+- **fix-mermaid: math-aware `$` pair parser** — both `unescaped-currency-dollar` and `closing-dollar-trailing-space` rules now share `_parse_dollar_pairs(line)`, which sequentially pairs unescaped `$` characters and validates each pair against pandoc's three `tex_math_dollars` constraints (opening followed by non-whitespace, closing preceded by non-whitespace, closing not followed by digit). This **fixes critical false positives** in v1.25.0's currency-dollar rule which previously broke valid math like `$1$`, `$0, 1, 2, \ldots$`, `$1/2$`, `$0$`. The closing-dollar rule similarly avoids flagging adjacent valid math spans like `$q$와 운동량 $p$`
+- **tests: `tests/test_fix_pandoc_blanks.py`** — 27 new pytest cases across `TestCheckClosingDollarTrailingSpace`, `TestFixClosingDollarTrailingSpace`, `TestCheckCurrencyDollarMathAware`, `TestCheckClosingDollarMathAware`, `TestProcessFileClosingDollarTrailingSpace` (TDD Red → Green). Covers single/multiple-space detection, currency-dollar exclusion, fenced-code skip, opening-`$`-followed-by-space exclusion, real QFT-file pattern, math-aware regression cases (`$1$`, `$0, 1, 2$`, `$1/2$`, table-row math, adjacent math spans), and the integration round-trip. Full suite: **234 tests pass** (previous 207 + new 27)
+- **incident reference**: `claudedocs/quantum-computing/20260320/research_qft_first_second_quantization_exhaustive_20260320.md` lines 193 & 202 — auto-fix successfully resolves the original `\symcal allowed only in math mode` failure
+- **Version bump**: 1.25.0 → 1.26.0
 
 ### v1.25.0 (2026-04-29)
 

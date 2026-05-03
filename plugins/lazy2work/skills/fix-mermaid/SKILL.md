@@ -19,6 +19,10 @@ description: >
   (F) Inline backtick code containing LaTeX-risky chars (`^`, `~`, `&`, `$`,
       `%`) that collide with pdf-korean.yaml's `\\seqsplit` wrapper, causing
       "Missing number, treated as zero" errors (warning-only).
+  (G) Inline math whose closing `$` is preceded by whitespace (e.g.,
+      `$\\mathcal{H}_1 = $ rest`) — pandoc treats both `$` as literal,
+      leaving `\\mathcal`/`\\frac` etc. in text mode and producing
+      "\\symcal allowed only in math mode" errors (auto-fix).
   Triggers on: "mermaid error", "mermaid fix", "mermaid 수정", "mermaid 오류",
   "다이어그램 깨짐", "mermaid syntax", "mermaid 렌더링", "diagram broken",
   "mermaid validation", "pandoc 테이블 깨짐", "pandoc 리스트 렌더링",
@@ -28,7 +32,9 @@ description: >
   "U+2212", "마이너스 사라짐", "PDF 문자 깨짐",
   "Bad math environment delimiter", "통화 달러", "$100 이스케이프",
   "Missing number treated as zero", "seqsplit", "인라인 코드 깨짐",
-  "pass^k 에러", "PDF 변환 실패".
+  "pass^k 에러", "PDF 변환 실패",
+  "symcal allowed only in math mode", "수식 닫는 달러 공백",
+  "tex_math_dollars", "닫는 $ 앞 공백", "math mode error".
 ---
 
 # Fix Mermaid & Pandoc — Markdown Rendering Fixer
@@ -55,7 +61,8 @@ Pick the sub-workflow by the user's symptom.
 | "Missing character" / 문자 누락 / "마이너스 사라짐" / PDF에서 글자 빠짐 | **Workflow D — Unicode Glyph Missing** |
 | `Bad math environment delimiter` / `$100` 등 통화 표기 / 표 셀에서 math 누설 | **Workflow E — Currency Dollar Escape** |
 | `Missing number, treated as zero` / `pass^k` 등 인라인 코드 / `\seqsplit` 충돌 | **Workflow F — Unsafe Inline Code** |
-| 여러 증상 / md 파일 전반 정리 | **A + B + C + D + E + F 순차** |
+| `\symcal allowed only in math mode` / `$\mathcal{...} = $ ...` 식 닫는 `$` 앞 공백 | **Workflow G — Closing Dollar Trailing Space** |
+| 여러 증상 / md 파일 전반 정리 | **A + B + C + D + E + F + G 순차** |
 
 ---
 
@@ -587,6 +594,85 @@ E (currency `$`) is a Markdown authoring mistake — every pandoc
 environment behaves the same. F is a project-specific configuration
 limitation: standard pandoc renders the same input correctly. Both
 the Markdown and the YAML defaults are valid fix locations.
+
+---
+
+## Workflow G — Pandoc Closing Dollar Trailing Space (Auto-fix)
+
+### When to Run
+
+The user reports any of:
+
+- lualatex error: `! LaTeX Error: \symcal allowed only in math mode.`
+  (or similar `\frac`, `\hat`, `\mathbb` allowed only in math mode)
+- The TeX trace shows `\$\mathcal{...}` — literal `\$` followed by a
+  math-mode command
+- Markdown contains patterns like `$\mathcal{H}_1 = $ 1입자` where the
+  closing `$` has a SPACE immediately before it
+
+### Root Cause
+
+Pandoc's `tex_math_dollars` rule is strict: the closing `$` must be
+**immediately preceded by a non-whitespace character**. Patterns like
+`$x = $` (note the space before the closing `$`) violate this rule, so
+pandoc treats both `$` as **literal characters** and emits `\$` in the
+LaTeX output. Any math-mode command between them (`\mathcal`, `\frac`,
+`\hat`, `\sum`, ...) is then evaluated in text mode → fatal error.
+
+See `references/pandoc-pdf-pitfalls.md` § 8 "Closing Dollar Preceded by
+Whitespace" for the full mechanism and incident report.
+
+### Step G1 — Lint
+
+```bash
+python3 scripts/fix_pandoc_blanks.py path/to/file.md
+```
+
+Detection rule (auto-fixable, severity=error):
+
+| Rule | Trigger |
+|---|---|
+| `closing-dollar-trailing-space` | A closing `$` whose immediately preceding character is whitespace, with the opening `$` properly followed by non-whitespace, outside fenced code blocks. |
+
+### Step G2 — Fix
+
+```bash
+python3 scripts/fix_pandoc_blanks.py path/to/file.md --fix
+```
+
+Strips the offending whitespace before the closing `$`. Math content
+itself is preserved; only the trailing whitespace inside the math span
+is removed.
+
+```text
+Before:  $\mathcal{H}_1 = $ 1입자
+After:   $\mathcal{H}_1 =$ 1입자
+```
+
+LaTeX renders `$\mathcal{H}_1 =$` and `$\mathcal{H}_1 = $` identically
+because LaTeX automatically normalizes spacing around binary operators
+inside math mode — so the visual result is unchanged.
+
+### Step G3 — Verify
+
+```bash
+python3 scripts/fix_pandoc_blanks.py path/to/file.md
+# → OK: No issues found.
+
+pandoc -d pdf-korean path/to/file.md -o out.pdf
+# → no `\symcal allowed only in math mode` error
+```
+
+### Why This Differs from E and F
+
+E (currency `$`) escapes `$` followed by digits. G fixes `$` preceded
+by whitespace. Both are pandoc-strict-rule violations, but they target
+opposite ends of the math span and the failure modes differ
+(`Bad math environment delimiter` vs `\symcal allowed only in math mode`).
+
+F is warning-only because three valid remediations need human choice;
+G is auto-fixable because there is exactly one safe correction
+(strip the whitespace).
 
 ---
 

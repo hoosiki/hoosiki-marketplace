@@ -1,6 +1,6 @@
 {
   "name": "lazy2work",
-  "version": "1.25.0",
+  "version": "1.26.0",
   "description": "One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills for arXiv analysis, package updates, and Hamilton spec-driven pipelines.",
   "author": {
     "name": "Junsang Park",

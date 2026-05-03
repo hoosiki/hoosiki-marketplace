@@ -13,7 +13,8 @@ for `fix_pandoc_blanks.py`; also usable as a human pre-flight checklist.
 5. [Unicode Glyph Missing in CJK Fonts](#5-unicode-glyph-missing-in-cjk-fonts)
 6. [Unescaped Currency Dollar Sign](#6-unescaped-currency-dollar-sign)
 7. [Unsafe LaTeX Characters in Inline Code](#7-unsafe-latex-characters-in-inline-code)
-8. [External References](#8-external-references)
+8. [Closing Dollar Preceded by Whitespace](#8-closing-dollar-preceded-by-whitespace)
+9. [External References](#9-external-references)
 
 ---
 
@@ -288,6 +289,7 @@ Run each check before `pandoc -d pdf-korean ...`:
 - [ ] No `Missing character` warnings in pandoc output
 - [ ] No `Bad math environment delimiter` errors in lualatex output
 - [ ] No `Missing number, treated as zero` errors in lualatex output
+- [ ] No `\symcal allowed only in math mode` (or `\frac`/`\hat`/`\mathbb`) errors in lualatex output
 - [ ] `fix_mermaid.py file.md` reports 0 issues
 - [ ] `~/.pandoc/defaults/pdf-korean.yaml` exists and its referenced filter paths resolve
 - [ ] `mmdc --version` succeeds (required if the document contains Mermaid)
@@ -581,7 +583,107 @@ therefore go in either the Markdown or the YAML defaults.
 
 ---
 
-## 8. External References
+## 8. Closing Dollar Preceded by Whitespace
+
+Severity: **error** (auto-fixable by `fix_pandoc_blanks.py --fix`).
+
+### 8.1 Symptoms
+
+- lualatex emits: `! LaTeX Error: \symcal allowed only in math mode.`
+  (or any `\frac`, `\hat`, `\mathbb`, `\sum` allowed only in math mode)
+- The TeX trace shows `\$\mathcal{...}` — a literal `\$` followed
+  immediately by a math-mode command
+- The Markdown contains patterns like `$\mathcal{H}_1 = $ rest` or
+  `$n_\alpha = $ rest` where the closing `$` has a SPACE in front
+
+### 8.2 Root Cause
+
+Pandoc's `tex_math_dollars` extension is strict about delimiter
+boundaries:
+
+| Position | Requirement |
+|---|---|
+| Opening `$` | followed by **non-whitespace** |
+| Closing `$` | preceded by **non-whitespace** |
+| Closing `$` | not followed by a digit |
+
+Patterns like `$x = $` (note the space before the closing `$`) violate
+the second rule, so pandoc treats both `$` as **literal characters**.
+The LaTeX output becomes `\$x = \$` — both dollars are escaped to
+text-mode literals. Any math-mode command between them
+(`\mathcal`, `\frac`, `\hat`, `\sum`, `\int`, ...) is then evaluated in
+text mode, where these commands are not defined → fatal error
+`\symcal allowed only in math mode`.
+
+### 8.3 WRONG vs CORRECT
+
+```
+%% WRONG — closing `$` preceded by space, math fails to parse
+- $\mathcal{H}_1 = $ 1입자 Hilbert 공간
+
+%% CORRECT — no whitespace before closing `$`
+- $\mathcal{H}_1 =$ 1입자 Hilbert 공간
+
+%% ALTERNATIVE — move `=` outside math mode
+- $\mathcal{H}_1$ = 1입자 Hilbert 공간
+```
+
+LaTeX renders `$x =$` and `$x = $` identically in math mode because the
+math typesetter normalizes binary-operator spacing automatically — so
+the visual output is unchanged.
+
+### 8.4 Detection Rule
+
+| Rule | Trigger |
+|---|---|
+| `closing-dollar-trailing-space` | A closing `$` whose immediately preceding character is whitespace, with the opening `$` properly followed by non-whitespace, outside fenced code blocks. Currency `$<digit>` patterns are explicitly excluded (handled by §6). |
+
+### 8.5 Why This Differs from §6 and §7
+
+| Issue | Where it fails | Fix style |
+|---|---|---|
+| §6 currency `$` | `$<digit>` parsed as math opener | Auto-fix: escape `$` |
+| §7 inline-code `^` | `\seqsplit` breaks LaTeX escape | Warning (3 choices) |
+| §8 trailing space | Closing `$` rejected, math leaks | **Auto-fix: strip space** |
+
+§6 and §8 are both pandoc-strict-rule violations, but at opposite ends
+of the math span. §7 is a project-specific configuration limit, not a
+pandoc rule violation.
+
+### 8.6 Auto-fix
+
+```bash
+python3 scripts/fix_pandoc_blanks.py report.md --fix
+```
+
+Strips the offending whitespace inside the math span. The fix is safe:
+LaTeX math typesetting normalizes spacing around `=`, `+`, `-`, `\cdot`
+automatically, so visual output is unchanged.
+
+### 8.7 Diagnostic Commands
+
+```bash
+# Lines with ` $ ` or `= $` patterns
+grep -nE '\\$ |= \\$|[a-zA-Z}] \\$' file.md
+
+# Test the fix on a single file
+python3 scripts/fix_pandoc_blanks.py file.md
+```
+
+### 8.8 Prevention
+
+When writing inline math in pandoc Markdown:
+
+- Never leave a space immediately before a closing `$`
+- If the `=` is "narrative" (between phrases), put it outside the math:
+  `$x$ = some value` instead of `$x = $ some value`
+- If the `=` is "mathematical" (inside the equation), keep both sides:
+  `$x = y$` instead of `$x = $`
+- Run the linter as a pre-flight check before `pandoc -d pdf-korean`
+
+---
+
+## 9. External References
 
 - Pandoc Markdown: https://pandoc.org/MANUAL.html#pandocs-markdown
 - Pandoc pipe_tables extension: https://pandoc.org/MANUAL.html#extension-pipe_tables
