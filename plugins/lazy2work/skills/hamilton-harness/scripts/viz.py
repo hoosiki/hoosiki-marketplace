@@ -108,8 +108,8 @@ def main() -> None:
     parser.add_argument("--format", default=None,
                         choices=["mermaid", "graphviz", "hamilton", "all"],
                         help="Render format. If omitted, only the stub is generated.")
-    parser.add_argument("--output-dir", type=Path, default=Path("build"),
-                        help="Base output directory (default: ./build)")
+    parser.add_argument("--output-dir", type=Path, default=Path("spec_build"),
+                        help="Base output directory (default: ./spec_build)")
     parser.add_argument("--stub-only", action="store_true",
                         help="Generate stub only, do not render")
     parser.add_argument("--no-stub", action="store_true",

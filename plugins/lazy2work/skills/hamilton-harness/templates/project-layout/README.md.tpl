@@ -38,7 +38,7 @@ See the skill's `LAYOUT.md` for the full expected structure. Key directories
 - `src/pipelines/`: Hamilton modules
 - `src/schemas.py`: generated Pydantic models
 - `tests/`: pytest + Hypothesis property tests
-- `build/`: throwaway; regenerable (gitignored)
+- `spec_build/`: throwaway; regenerable (gitignored)
 - `runs/`: committed; execution artifacts
 
 ## Development loop

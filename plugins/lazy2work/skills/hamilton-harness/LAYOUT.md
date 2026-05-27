@@ -16,7 +16,7 @@ your-project/
     │   ├── test_dag_matches_spec.py            # L1 structural equivalence (auto-generated)
     │   └── test_properties/                    # L3 Hypothesis property tests
     │       └── test_*.py
-    ├── build/                                  # gitignored; always regenerable
+    ├── spec_build/                             # gitignored; always regenerable
     │   ├── stubs/                              # YAML → Python stubs produced by F3
     │   ├── dags/
     │   │   ├── spec/                           # Images rendered from the YAML
@@ -34,14 +34,14 @@ your-project/
 ## Why a dedicated `hamilton_pipeline/` folder
 
 - **Clear ownership.** Other parts of your repo (Django apps, web UI, notebooks) never collide with pipeline assets.
-- **Single CWD for commands.** Every CLI invocation (`validate.py`, `viz.py`) runs from inside `hamilton_pipeline/`, so the scripts' CWD-relative `build/` and `dag_specs/` paths resolve predictably.
+- **Single CWD for commands.** Every CLI invocation (`validate.py`, `viz.py`) runs from inside `hamilton_pipeline/`, so the scripts' CWD-relative `spec_build/` and `dag_specs/` paths resolve predictably.
 - **CI-friendly.** `.github/workflows/dag-gate.yml` and `.pre-commit-config.yaml` filter on `hamilton_pipeline/dag_specs/**.yaml` and `hamilton_pipeline/src/pipelines/**.py` — no cross-contamination with unrelated code.
 - **Easy deletion / extraction.** The whole pipeline stack can be moved to a sibling repo by copying `hamilton_pipeline/` alone.
 
 ## Guardrails
 
 1. **`hamilton_pipeline/dag_specs/` is human-only** — Claude may propose changes through F4 but writes only after the user confirms the diff.
-2. **`hamilton_pipeline/build/` is throwaway** — add `hamilton_pipeline/build/` to `.gitignore`. A clean run must be able to regenerate everything in here.
+2. **`hamilton_pipeline/spec_build/` is throwaway** — add `hamilton_pipeline/spec_build/` to `.gitignore`. A clean run must be able to regenerate everything in here.
 3. **`hamilton_pipeline/runs/` is committed** — execution artifacts are the ground truth for audits. They're reproducibility anchors, not transient files.
 4. **`hamilton_pipeline/src/schemas.py` is generated** — prefer regenerating through F3 over hand-editing. If a hand edit is needed, delete the generated header comment so we know.
 
@@ -55,14 +55,14 @@ python "$CLAUDE_SKILL_DIR/scripts/validate.py" dag_specs/<name>.yaml
 python "$CLAUDE_SKILL_DIR/scripts/viz.py"       dag_specs/<name>.yaml --format all
 ```
 
-Running from the repo root requires the `hamilton_pipeline/` prefix on every path and still writes `build/` into the repo root — prefer the `cd` approach.
+Running from the repo root requires the `hamilton_pipeline/` prefix on every path and still writes `spec_build/` into the repo root — prefer the `cd` approach.
 
 ## Initial scaffolding
 
 `templates/project-layout/` in this skill holds seed files you can copy into a fresh project:
 
 - `CLAUDE.md.tpl` — a starter CLAUDE.md at the **repo root** that enables hamilton-harness and points to `hamilton_pipeline/`
-- `.gitignore.tpl` — covers `hamilton_pipeline/build/` and typical Python noise
+- `.gitignore.tpl` — covers `hamilton_pipeline/spec_build/` and typical Python noise
 - `README.md.tpl` — a short project README with instructions to run the stack
 
 Typical bootstrap:

@@ -22,7 +22,7 @@ python "$CLAUDE_SKILL_DIR/scripts/viz.py" dag_specs/churn_training.yaml --format
 Or experiment in-place: `cd "$CLAUDE_SKILL_DIR/examples/ml-training"` and run
 the same `viz.py` command.
 
-Open `build/dags/spec/churn_training.png` to see the DAG. Notice how
+Open `spec_build/dags/spec/churn_training.png` to see the DAG. Notice how
 `train_set` and `val_set` both depend on `labelled_features` — the tool places
 them side-by-side automatically.
 

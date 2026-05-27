@@ -13,13 +13,13 @@ plugin) for spec-driven development. **All pipeline assets live under
 - **Every pipeline follows the 7-stage flow** (SPEC → VALIDATE → STRUCTURE GATE
   → PBT → IMPLEMENT → RUNTIME CHECK → LINEAGE DEBUG). For low-complexity
   scripts (score < 3), collapse to SPEC → IMPLEMENT.
-- **`hamilton_pipeline/build/` is throwaway.** Anything in there must be
+- **`hamilton_pipeline/spec_build/` is throwaway.** Anything in there must be
   regenerable from `hamilton_pipeline/dag_specs/` and `hamilton_pipeline/src/`.
   Never commit it (`.gitignore` already excludes it).
 - **`hamilton_pipeline/runs/` is the audit trail.** Commit execution artifacts
   here so downstream consumers can trace lineage.
 - **Run commands from inside `hamilton_pipeline/`.** The scripts' CWD-relative
-  `build/` output lands in `hamilton_pipeline/build/` only when that is the CWD.
+  `spec_build/` output lands in `hamilton_pipeline/spec_build/` only when that is the CWD.
 
 ## How to invoke the skill
 

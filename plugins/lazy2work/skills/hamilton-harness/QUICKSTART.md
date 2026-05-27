@@ -55,16 +55,16 @@ python "$CLAUDE_SKILL_DIR/scripts/viz.py" dag_specs/orders_etl.yaml --format all
 
 This writes (all inside `hamilton_pipeline/`):
 
-- `build/stubs/orders_etl_stub.py`
-- `build/dags/spec/orders_etl.mmd`
-- `build/dags/spec/orders_etl.png`
-- `build/dags/spec/orders_etl.meta.json`
+- `spec_build/stubs/orders_etl_stub.py`
+- `spec_build/dags/spec/orders_etl.mmd`
+- `spec_build/dags/spec/orders_etl.png`
+- `spec_build/dags/spec/orders_etl.meta.json`
 
 Open the PNG to confirm the structure matches the Mermaid.
 
 ## Step 5 — Fill in the stubs and run
 
-Edit `build/stubs/orders_etl_stub.py` — replace each `raise NotImplementedError` with real logic. Copy the result into `src/pipelines/orders_etl.py` once you're happy with the first function.
+Edit `spec_build/stubs/orders_etl_stub.py` — replace each `raise NotImplementedError` with real logic. Copy the result into `src/pipelines/orders_etl.py` once you're happy with the first function.
 
 Run a minimal execution (from inside `hamilton_pipeline/`):
 

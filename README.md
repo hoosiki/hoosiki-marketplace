@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.26.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.27.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.26.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, and Hamilton spec-driven pipelines |
+| [**lazy2work**](plugins/lazy2work/) | 1.27.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, and Hamilton spec-driven pipelines |
 
 ---
 
@@ -55,7 +55,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 | **pyright-setup** | `/lazy2work:pyright-setup` | Auto-configure Pyright for Python projects — detects Python version from venv, adds `[tool.pyright]` to pyproject.toml, resolves "Import could not be resolved" LSP errors in Neovim/VS Code |
 | **apply-all-sc-save** | `/lazy2work:apply-all-sc-save` | Broadcast `/sc:save` to all Claude Code panes in the current tmux session — auto-detects Claude panes, excludes self, supports `--dry-run`, `--all-sessions`, and custom commands |
 | **fix-mermaid** | `/lazy2work:fix-mermaid` | Fix Markdown rendering issues that break Mermaid diagrams or pandoc PDF conversion — Mermaid v11 syntax (reserved words, Unicode/Langium issues, message escaping) **and** pandoc PDF pitfalls (blank-line compliance before lists/tables/fences as auto-fixed errors, long-mixed-cell overflow as warnings, always-on Unicode glyph map covering U+2212/U+2717/U+2718, **currency-dollar auto-escape** for `$100`/`$76.4억` that prevents `Bad math environment delimiter` errors, **unsafe-inline-code warnings** for `` `pass^k` ``-style content that collides with the `\seqsplit` wrapper and causes `Missing number, treated as zero`, **closing-dollar-trailing-space auto-fix** for `$\mathcal{H}_1 = $ rest` patterns that violate pandoc's `tex_math_dollars` rule and cause `\symcal allowed only in math mode`, plus opt-in **`--latin1-normalize`** for Latin-1 Supplement diacritics like `á é ñ ü ß`). Three bundled Python scripts (`fix_mermaid.py`, `fix_pandoc_blanks.py`, `validate_mermaid.py`) with lint / `--fix` / `--json` modes, plus optional **`--with-mmdc` feedback loop** that renders each diagram with Mermaid CLI and iterates targeted fixes until clean |
-| **hamilton-harness** | `/lazy2work:hamilton-harness` | Build Hamilton data pipelines through a spec-driven workflow — 4 modes (prompt→YAML, validate, stub+viz, modify), Pydantic schemas, Mermaid/Graphviz/Hamilton rendering, 3 domain examples (ETL/ML/RAG). Self-contained — no plugin-level hooks or rules needed |
+| **hamilton-harness** | `/lazy2work:hamilton-harness` | Build Hamilton data pipelines through a spec-driven workflow — 4 modes (prompt→YAML, validate, stub+viz, modify), Pydantic schemas, Mermaid/Graphviz/Hamilton rendering, 3 domain examples (ETL/ML/RAG). Artifacts land under **`spec_build/`** (renamed from `build/` in v1.27.0 to avoid colliding with Python packaging / Sphinx / CMake build directories). Self-contained — no plugin-level hooks or rules needed |
 
 <details>
 <summary><strong>up2date — Usage Examples</strong></summary>
@@ -633,7 +633,7 @@ your-project/
     ├── tests/
     │   ├── test_dag_matches_spec.py   # L1 structural equivalence (auto-gen)
     │   └── test_properties/test_*.py  # L3 Hypothesis property tests
-    ├── build/                         # gitignored; regenerable
+    ├── spec_build/                    # gitignored; regenerable (renamed from build/ in v1.27.0)
     │   ├── stubs/                     # YAML → Python stubs (F3 output)
     │   ├── dags/{spec,impl,diff}/     # rendered diagrams
     │   ├── reports/                   # pytest + hypothesis reports
@@ -647,7 +647,7 @@ your-project/
 **Guardrails:**
 
 - **`dag_specs/` is human-only** — Claude proposes changes via F4 but writes only after user confirms the diff.
-- **`build/` is throwaway** — must regenerate from `dag_specs/` + `src/`; never commit it.
+- **`spec_build/` is throwaway** — must regenerate from `dag_specs/` + `src/`; never commit it.
 - **`runs/` is the audit trail** — execution artifacts are reproducibility anchors; commit them.
 - **`src/schemas.py` is generated** — regenerate through F3 rather than hand-editing.
 
@@ -664,7 +664,7 @@ cp "$CLAUDE_SKILL_DIR/templates/project-layout/README.md.tpl"   README.md
 
 ---
 
-> **Working directory convention**: All CLI commands assume `cd hamilton_pipeline/` first — the scripts' CWD-relative `build/` output lands inside the pipeline folder, not the repo root. All pipeline assets live under `<project-root>/hamilton_pipeline/` (see the skill's `LAYOUT.md`).
+> **Working directory convention**: All CLI commands assume `cd hamilton_pipeline/` first — the scripts' CWD-relative `spec_build/` output lands inside the pipeline folder, not the repo root. All pipeline assets live under `<project-root>/hamilton_pipeline/` (see the skill's `LAYOUT.md`).
 
 **F1 — Natural-language → YAML spec:**
 
@@ -708,11 +708,13 @@ python "$CLAUDE_SKILL_DIR/scripts/viz.py" dag_specs/orders_etl.yaml --format all
 Writes (all inside `hamilton_pipeline/`):
 
 ```
-build/stubs/orders_etl_stub.py          # Hamilton function stubs + Pydantic schemas
-build/dags/spec/orders_etl.mmd          # Mermaid source
-build/dags/spec/orders_etl.png          # Graphviz render
-build/dags/spec/orders_etl.meta.json    # Driver metadata (for CI diffs)
+spec_build/stubs/orders_etl_stub.py          # Hamilton function stubs + Pydantic schemas
+spec_build/dags/spec/orders_etl.mmd          # Mermaid source
+spec_build/dags/spec/orders_etl.png          # Graphviz render
+spec_build/dags/spec/orders_etl.meta.json    # Driver metadata (for CI diffs)
 ```
+
+> The default output directory is `spec_build/` (renamed from `build/` in v1.27.0). Override with `--output-dir <path>` if you need the legacy location or a different folder.
 
 ---
 
@@ -758,7 +760,7 @@ Hamilton-harness scores the user's request against 6 signals (pipeline keywords,
 
 **Score < 3** → collapses to F1 → F3 (`--stub-only`) → implement.
 
-The complexity score is logged to `build/metrics/session-<timestamp>.json` for audit.
+The complexity score is logged to `spec_build/metrics/session-<timestamp>.json` for audit.
 
 ---
 
@@ -771,7 +773,7 @@ The complexity score is logged to `build/metrics/session-<timestamp>.json` for a
 | `QUICKSTART.md` | 10-minute onboarding tutorial |
 | `DEBUG.md` | Decision tree for three common failure modes |
 | `METRICS.md` | Session metrics logging schema |
-| `CHANGELOG.md` | Skill-independent SemVer history (currently 1.2.0) |
+| `CHANGELOG.md` | Skill-independent SemVer history (currently 1.27.0) |
 
 **Trigger phrases (Korean + English)** — the skill auto-activates on: `파이프라인 만들어`, `DAG 설계`, `DAG 시각화`, `시각화해줘`, `YAML 스펙 검증`, `Hamilton으로`, `ETL 구현`, `feature engineering`, `RAG 인덱싱`, `ML 학습 파이프라인`, `data pipeline`.
 
@@ -1056,6 +1058,20 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.27.0 (2026-05-27)
+
+- **hamilton-harness → skill 1.27.0: artifact directory renamed `build/` → `spec_build/`** — visualization and stub-generation artifacts (`stubs/`, `dags/{spec,impl,diff}/`, `reports/`, `metrics/`) now land under `hamilton_pipeline/spec_build/` instead of `hamilton_pipeline/build/`. Motivation: `build/` collides with conventional output directories used by Python packaging (`setuptools`, `hatch`, `pdm-build`), Sphinx, CMake, and many JS/TS toolchains when the pipeline lives in a polyglot repo. The directory's internal structure and contents are unchanged
+- **hamilton-harness: `scripts/viz.py` default flipped** — `--output-dir` default changed from `Path("build")` to `Path("spec_build")` (one-line code change, help text updated). Users who explicitly pass `--output-dir build` get the legacy location, so existing CI scripts that already supplied the flag continue to work without modification
+- **hamilton-harness: docs synchronized** — `SKILL.md` (Paths and conventions + complexity-score metrics path), `LAYOUT.md` (target-layout tree + Guardrails + working-directory note + scaffolding bullet), `DEBUG.md` (`display_upstream_of` example), `QUICKSTART.md` (Step 4 + Step 5 artifact paths), `METRICS.md` (file location and `/sc:analyze` example) all reference `spec_build/` instead of `build/`
+- **hamilton-harness: templates updated** — `.gitignore.tpl` now ignores `hamilton_pipeline/spec_build/`; `CLAUDE.md.tpl` core rules and `README.md.tpl` key-directories list reference `spec_build/`; `github-workflow-dag-gate.yml` `mkdir` calls, `dump_impl_meta.py` output paths, and `upload-artifact.path` globs all use `spec_build/`
+- **hamilton-harness: examples updated** — `examples/etl/README.md` (`cp spec_build/stubs/...` step) and `examples/ml-training/README.md` (PNG location) updated; example YAMLs and Python source unchanged
+- **hamilton-harness: TDD regression coverage** — new `test_f3_default_output_dir_is_spec_build` asserts that running `viz.py` without `--output-dir` writes to `./spec_build/` and does **not** create a stray `./build/`; existing `test_f3_stub_is_importable` and `test_f3_mermaid_renders` migrated to `tmp_path / "spec_build"` for consistency. Full skill suite: **15 tests pass**
+- **hamilton-harness: pre-existing test drift fixed** — `test_example_specs_validate` was still looking for `examples/<domain>/specs/` after the v1.20.0 `specs/ → dag_specs/` rename, causing three parametrized failures unrelated to the rename. The path is now `examples/<domain>/dag_specs/`, restoring the suite to a green baseline before the new regression test was added
+- **hamilton-harness: skill CHANGELOG entry 1.27.0** — added with rationale, file-by-file change list, and a one-command migration: `cd hamilton_pipeline && git mv build spec_build` (preserves history) plus `.gitignore` and CI path updates. No Python source changes required because Hamilton modules in `src/pipelines/*.py` never imported from `build/` — only CLI invocations, CI workflows, and documentation referenced the directory
+- **README: hamilton-harness skill description** — Skills table entry now mentions the `spec_build/` rename and motivation; the Target project layout tree, Guardrails bullets, F3 output paths, working-directory note, and 7-stage workflow metrics path all reference `spec_build/`; Supporting docs table updated from `currently 1.2.0` to `currently 1.27.0`
+- **marketplace.json + plugin.json sync** — both manifests bumped from 1.26.0 to 1.27.0 in lockstep with the badge and plugin table
+- **Version bump**: 1.26.0 → 1.27.0
 
 ### v1.26.0 (2026-05-03)
 

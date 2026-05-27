@@ -1,5 +1,5 @@
 # hamilton-harness
-hamilton_pipeline/build/
+hamilton_pipeline/spec_build/
 
 # Python
 __pycache__/

@@ -2,6 +2,61 @@
 
 This changelog tracks the skill's own version independently from the `lazy2work` plugin that bundles it. Follow SemVer.
 
+## [1.27.0] — 2026-05-27
+
+### Changed
+
+- **Renamed the artifact directory: `build/` → `spec_build/`.** Visualization and
+  stub-generation artifacts (`stubs/`, `dags/spec/`, `dags/impl/`, `dags/diff/`,
+  `reports/`, `metrics/`) now live under `spec_build/` instead of `build/`. The
+  new name avoids collisions with conventional `build/` directories used by
+  Python packaging (`setuptools`, `hatch`), Sphinx, CMake, and many JS/TS tools
+  in the same repo. The directory's contents and structure are unchanged.
+- **`scripts/viz.py`** — `--output-dir` default changed from `Path("build")` to
+  `Path("spec_build")`. Help text updated. Users who explicitly pass
+  `--output-dir build` get the old behavior.
+- **Docs** — `SKILL.md` (Paths and conventions, complexity-score metrics path),
+  `LAYOUT.md` (tree, guardrails, working-directory note, scaffolding bullet),
+  `DEBUG.md` (display_upstream_of example), `QUICKSTART.md` (Step 4 + Step 5
+  artifact paths), `METRICS.md` (file location and `/sc:analyze` example) all
+  reference `spec_build/` instead of `build/`.
+- **Templates** — `.gitignore.tpl` ignores `hamilton_pipeline/spec_build/`;
+  `CLAUDE.md.tpl` core rules and `README.md.tpl` directory list reference
+  `spec_build/`; `github-workflow-dag-gate.yml` `mkdir` calls,
+  `dump_impl_meta.py` output paths, and `upload-artifact.path` globs all use
+  `spec_build/`.
+- **Examples** — `examples/etl/README.md` (`cp spec_build/stubs/...` step) and
+  `examples/ml-training/README.md` (PNG location) updated.
+
+### Fixed
+
+- **`tests/test_skill_behaves.py`** — `test_example_specs_validate` was still
+  looking for `examples/<domain>/specs/` after the v1.2.0 `specs/ → dag_specs/`
+  rename, causing three parametrized failures unrelated to this change. The
+  path is now `examples/<domain>/dag_specs/`.
+
+### Added
+
+- **`test_f3_default_output_dir_is_spec_build`** — regression test asserting
+  that running `viz.py` without `--output-dir` writes to `./spec_build/` and
+  does not create a stray `./build/` directory.
+
+### Migration
+
+For projects already using the 1.26.0 (or earlier) layout:
+
+```bash
+cd hamilton_pipeline
+git mv build spec_build  # preserve history
+# Update .gitignore: hamilton_pipeline/build/ → hamilton_pipeline/spec_build/
+# Update .github/workflows/dag-gate.yml if you copied the template:
+#   build/dags/, build/stubs/ → spec_build/dags/, spec_build/stubs/
+```
+
+No source-code changes are required — Hamilton modules in `src/pipelines/*.py`
+never imported from `build/`; only the CLI invocations, CI workflows, and
+documentation referenced the directory.
+
 ## [1.2.0] — 2026-04-13
 
 ### Changed

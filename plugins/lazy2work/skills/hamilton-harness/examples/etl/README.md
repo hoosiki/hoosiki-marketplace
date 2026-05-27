@@ -25,8 +25,8 @@ python "$CLAUDE_SKILL_DIR/scripts/validate.py" dag_specs/orders_etl.yaml
 python "$CLAUDE_SKILL_DIR/scripts/viz.py" dag_specs/orders_etl.yaml --format all
 
 # 3. Copy the generated stub into src/pipelines/ and fill in the bodies:
-#    cp build/stubs/orders_etl_stub.py src/pipelines/orders_etl.py
-#    cp build/stubs/schemas.py src/schemas.py
+#    cp spec_build/stubs/orders_etl_stub.py src/pipelines/orders_etl.py
+#    cp spec_build/stubs/schemas.py src/schemas.py
 ```
 
 Or stay inside the skill's example directory (`cd $CLAUDE_SKILL_DIR/examples/etl`)

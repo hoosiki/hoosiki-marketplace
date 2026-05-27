@@ -44,18 +44,18 @@ jobs:
 
       - name: Generate spec DAG metadata
         run: |
-          mkdir -p build/dags/spec build/stubs
+          mkdir -p spec_build/dags/spec spec_build/stubs
           for spec in dag_specs/*.yaml; do
             python "$CLAUDE_SKILL_DIR/scripts/viz.py" "$spec" --stub-only
           done
 
       - name: Generate impl DAG metadata
         run: |
-          mkdir -p build/dags/impl
+          mkdir -p spec_build/dags/impl
           for module in src/pipelines/*.py; do
             name=$(basename "$module" .py)
             python "$CLAUDE_SKILL_DIR/scripts/dump_impl_meta.py" \
-              "src.pipelines.$name" "build/dags/impl/$name.meta.json"
+              "src.pipelines.$name" "spec_build/dags/impl/$name.meta.json"
           done
 
       - name: Run DAG structure tests
@@ -67,7 +67,7 @@ jobs:
         with:
           name: dag-diagrams
           path: |
-            hamilton_pipeline/build/dags/**/*.png
-            hamilton_pipeline/build/dags/**/*.meta.json
-            hamilton_pipeline/build/stubs/*.py
+            hamilton_pipeline/spec_build/dags/**/*.png
+            hamilton_pipeline/spec_build/dags/**/*.meta.json
+            hamilton_pipeline/spec_build/stubs/*.py
           retention-days: 14

@@ -39,7 +39,7 @@ Each entry points to a dedicated procedure below. Work each procedure sequential
    from hamilton import driver
    import src.pipelines.<module> as pipeline
    dr = driver.Builder().with_modules(pipeline).build()
-   dr.display_upstream_of("<node>", "build/dags/debug/upstream.png")
+   dr.display_upstream_of("<node>", "spec_build/dags/debug/upstream.png")
    ```
 3. Execute only the upstream nodes, checking the actual values:
    ```python

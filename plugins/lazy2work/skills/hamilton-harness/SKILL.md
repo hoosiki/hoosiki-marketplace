@@ -46,7 +46,7 @@ Score the user's request against these signals:
 - **Score ≥ 3** → Enforce the 7-stage workflow (start at F1 unless the user provided a YAML).
 - **Score < 3** → Offer the structured flow as an option but let Claude write code directly if the user prefers speed.
 
-Record the final score in `build/metrics/session-<timestamp>.json` under `complexity_score` so the user can audit decisions later.
+Record the final score in `spec_build/metrics/session-<timestamp>.json` under `complexity_score` so the user can audit decisions later.
 
 ## The four modes (F1–F4)
 
@@ -159,8 +159,8 @@ Always include the expected downstream impact ("this will break 2 downstream nod
 ## Paths and conventions
 
 - `${CLAUDE_SKILL_DIR}` → this skill's directory; use it for every internal script call.
-- `${CLAUDE_PROJECT_DIR}` → the user's project root. **All pipeline assets live under `${CLAUDE_PROJECT_DIR}/hamilton_pipeline/`** (see `LAYOUT.md`). Reach `dag_specs/`, `src/`, `tests/`, `build/`, `runs/` through that prefix.
-- CLI commands assume the CWD is `${CLAUDE_PROJECT_DIR}/hamilton_pipeline/` so the scripts' CWD-relative `build/` output lands inside the pipeline folder, not the repo root.
+- `${CLAUDE_PROJECT_DIR}` → the user's project root. **All pipeline assets live under `${CLAUDE_PROJECT_DIR}/hamilton_pipeline/`** (see `LAYOUT.md`). Reach `dag_specs/`, `src/`, `tests/`, `spec_build/`, `runs/` through that prefix.
+- CLI commands assume the CWD is `${CLAUDE_PROJECT_DIR}/hamilton_pipeline/` so the scripts' CWD-relative `spec_build/` output lands inside the pipeline folder, not the repo root.
 - Never reach into the plugin root. The skill is self-contained; all skill assets live under `${CLAUDE_SKILL_DIR}`.
 
 ## Supporting documents (read on demand)
