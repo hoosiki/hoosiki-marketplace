@@ -21,3 +21,4 @@ rag_agent/
 tests/
 requirements-rag.txt
 claudedocs/
+make-ppt-html-workspace/

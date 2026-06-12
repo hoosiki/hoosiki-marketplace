@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><!-- REPLACE: 덱 제목 --></title>
+
+  <!-- 전략 A: 내장 테마 미사용 — reset.css + reveal.css만 로드 -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/dist/reset.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/dist/reveal.css">
+
+  <!-- Pretendard (프로토타입용 CDN — 발표 배포 시 로컬 번들로 교체) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+
+  <!-- Tailwind Play CDN — 프로토타입용. 배포·오프라인 발표 시 빌드로 교체할 것 -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { darkMode: 'class' };
+  </script>
+
+  <style>
+    .reveal {
+      font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont,
+                   "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+    }
+    .reveal .slides { text-align: center; }
+    /* [필수] reveal reset.css(Meyer)가 border-style을 none으로 덮는 것 보정 — 이 줄이 없으면
+       모든 Tailwind border 유틸의 computed width가 0이 되어 카드 테두리가 조용히 사라진다 */
+    .reveal .slides *, .reveal .slides *::before, .reveal .slides *::after { border-style: solid; }
+    /* 테마 부재 시 UI 크롬(슬라이드 번호·진행바·컨트롤) 색 — 라이트/다크 각각 */
+    .reveal .slide-number { color: #64748b; background: transparent; font-size: 16px; left: 18px; right: auto; bottom: 14px; font-family: inherit; }
+    html.dark .reveal .slide-number { color: #94a3b8; }
+    .reveal .progress { height: 4px; background: rgba(2, 6, 23, 0.06); }
+    .reveal .progress span { background: #2563eb; }
+    html.dark .reveal .progress { background: rgba(248, 250, 252, 0.08); }
+    html.dark .reveal .progress span { background: #38bdf8; }
+    .reveal .controls { color: #64748b; }
+    html.dark .reveal .controls { color: #94a3b8; }
+    ::selection { background: #bfdbfe; }
+    html.dark ::selection { background: #075985; }
+    /* 토글 전환 시 배경 플래시 방지 */
+    body { background: #f8fafc; transition: background-color 0.3s; }
+    html.dark body { background: #0f172a; }
+    .reveal .slide-background-content { transition: background-color 0.3s; }
+    /* 라이트/다크 토글 버튼 */
+    #theme-toggle {
+      position: fixed; top: 16px; right: 16px; z-index: 40;
+      width: 44px; height: 44px; border-radius: 9999px;
+      display: flex; align-items: center; justify-content: center;
+      color: #64748b; background: rgba(255, 255, 255, 0.7);
+      border: 1px solid #e2e8f0; cursor: pointer; transition: all 0.3s;
+    }
+    #theme-toggle:hover { color: #2563eb; }
+    html.dark #theme-toggle { color: #94a3b8; background: rgba(30, 41, 59, 0.7); border-color: #334155; }
+    html.dark #theme-toggle:hover { color: #38bdf8; }
+    /* [필수] PDF(?print-pdf)·일반 인쇄 시 토글 숨김 — fixed 요소는 모든 페이지에 찍힌다 */
+    html.reveal-print #theme-toggle { display: none !important; }
+    @media print { #theme-toggle { display: none !important; } }
+  </style>
+</head>
+<body>
+  <button id="theme-toggle" title="라이트/다크 전환 (단축키 D)" aria-label="라이트/다크 테마 전환">
+    <svg class="icon-moon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    <svg class="icon-sun" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+  </button>
+
+  <div class="reveal"><div class="slides">
+
+    <!-- ============================================================
+         아래는 슬라이드 패턴 견본이다. 실제 내용으로 교체하라.
+         규칙: leaf section마다 data-background-color="#f8fafc" (필수),
+               하이라이트/디바이더는 data-bg-role="divider" + "#f1f5f9".
+               vertical 래퍼 <section>에는 배경 속성을 넣지 않는다.
+         ============================================================ -->
+
+    <!-- PATTERN: 표지 (중앙 대형 — Z 패턴) -->
+    <section data-background-color="#f8fafc">
+      <p class="text-lg font-semibold tracking-[0.3em] text-blue-600 dark:text-sky-400 mb-6">KICKER LABEL</p>
+      <h1 class="text-6xl font-bold text-slate-800 dark:text-slate-100 leading-tight">덱 제목 —<br>주장을 담은 부제</h1>
+      <p class="text-2xl text-slate-500 dark:text-slate-400 mt-8">부제 &middot; 발표자 &middot; 날짜</p>
+      <aside class="notes">발표 노트: 본문의 3~5배 분량 + 타이밍 마커.</aside>
+    </section>
+
+    <!-- PATTERN: 단일 주장 + 증거 카드 (BLUF·결론용) -->
+    <section data-background-color="#f8fafc">
+      <h2 class="text-4xl font-bold text-slate-800 dark:text-slate-100">제목은 주장 문장으로 — <span class="text-blue-600 dark:text-sky-400">강조는 1~2곳</span></h2>
+      <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-10 py-8 mt-12 inline-block">
+        <p class="text-3xl font-bold text-slate-800 dark:text-slate-100">주인공 — 슬라이드에서 가장 큰 요소</p>
+      </div>
+      <p class="text-2xl text-slate-700 dark:text-slate-200 mt-10">핵심 근거 한 줄 (text-2xl 표준)</p>
+      <p class="text-lg text-slate-500 dark:text-slate-400 mt-6">보조 정보는 작고 연하게</p>
+      <aside class="notes">상세 수치·출처·부연은 여기로.</aside>
+    </section>
+
+    <!-- PATTERN: 코드 카드 (테마 불변 — 내부에 dark: 불필요) -->
+    <section data-background-color="#f8fafc">
+      <h2 class="text-4xl font-bold text-slate-800 dark:text-slate-100 mb-8">코드는 줄여서 크게 (text-base 하한)</h2>
+      <div class="bg-slate-900 dark:bg-slate-950 border border-slate-700 rounded-xl px-10 py-8 inline-block text-left">
+        <pre class="font-mono text-xl text-slate-100 leading-relaxed"><code>one_line_of_code(<span class="font-bold text-sky-400">'highlight'</span>)  <span class="text-slate-400"># 주석은 slate-400</span></code></pre>
+      </div>
+      <aside class="notes"></aside>
+    </section>
+
+    <!-- PATTERN: 비교 2분할 (동일 구조·동일 크기, 차이점만 강조) -->
+    <section data-background-color="#f8fafc">
+      <h2 class="text-4xl font-bold text-slate-800 dark:text-slate-100 mb-10">비교 슬라이드 제목</h2>
+      <div class="grid grid-cols-2 gap-8">
+        <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-8 text-left">
+          <p class="text-2xl font-bold text-slate-800 dark:text-slate-100"><span class="text-red-600 dark:text-red-400">&#10007;</span> 왼쪽 (기각안)</p>
+          <p class="text-xl text-slate-500 dark:text-slate-400 mt-4">설명 — 시맨틱 색은 아이콘과 병행(이중 단서)</p>
+        </div>
+        <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-8 text-left">
+          <p class="text-2xl font-bold text-slate-800 dark:text-slate-100"><span class="text-emerald-700 dark:text-emerald-400">&#10003;</span> 오른쪽 (채택안)</p>
+          <p class="text-xl text-slate-700 dark:text-slate-200 mt-4">차이점에만 <span class="font-bold text-blue-600 dark:text-sky-400">강조색</span></p>
+        </div>
+      </div>
+      <aside class="notes"></aside>
+    </section>
+
+    <!-- PATTERN: 표 (정확한 수치 대조 전용 — 추세는 차트로) -->
+    <section data-background-color="#f8fafc">
+      <h2 class="text-4xl font-bold text-slate-800 dark:text-slate-100 mb-10">표 슬라이드 제목 (주장 문장)</h2>
+      <table class="w-full text-left border-collapse">
+        <thead>
+          <tr class="border-b-2 border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 text-lg">
+            <th class="py-3 pr-4 font-semibold">열 1</th>
+            <th class="py-3 pr-4 font-semibold">열 2</th>
+            <th class="py-3 font-semibold">열 3</th>
+          </tr>
+        </thead>
+        <tbody class="text-xl text-slate-700 dark:text-slate-200">
+          <tr class="border-b border-slate-200 dark:border-slate-700">
+            <td class="py-4 pr-4 font-bold">핵심 행</td>
+            <td class="py-4 pr-4 font-bold text-emerald-700 dark:text-emerald-400">&#10003; 값</td>
+            <td class="py-4">비고</td></tr>
+          <tr class="border-b border-slate-200 dark:border-slate-700">
+            <td class="py-4 pr-4">일반 행</td>
+            <td class="py-4 pr-4 text-amber-700 dark:text-amber-400">&#9888; 주의 값</td>
+            <td class="py-4 text-slate-500 dark:text-slate-400">보조 설명</td></tr>
+        </tbody>
+      </table>
+      <aside class="notes"></aside>
+    </section>
+
+    <!-- PATTERN: 하이라이트/디바이더 (배경 교차 — data-bg-role="divider" 필수.
+         주의: divider 배경 위 보조 텍스트는 slate-500이 아니라 slate-600) -->
+    <section data-background-color="#f1f5f9" data-bg-role="divider">
+      <p class="text-lg font-semibold tracking-[0.3em] text-slate-600 dark:text-slate-400 mb-6">PART N — 하이라이트</p>
+      <h2 class="text-5xl font-bold text-slate-800 dark:text-slate-100">섹션 전환 또는 <span class="text-blue-600 dark:text-sky-400">핵심 메시지</span></h2>
+      <p class="text-2xl text-slate-600 dark:text-slate-400 mt-8">부제 — divider 위에서는 slate-600 (대비 4.34:1 함정 회피)</p>
+      <aside class="notes"></aside>
+    </section>
+
+    <!-- PATTERN: 프로세스 플로우 (≤5단계, 번호+화살표) + 우측 1/3 이미지(선택) -->
+    <section data-background-color="#f8fafc">
+      <h2 class="text-4xl font-bold text-slate-800 dark:text-slate-100 mb-8">프로세스 슬라이드 제목</h2>
+      <div class="grid grid-cols-3 gap-6 items-center">
+        <div class="col-span-2 space-y-3 text-left">
+          <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-5 py-3.5">
+            <p class="text-lg text-slate-700 dark:text-slate-200">&#9312; <strong>1단계</strong> — 설명</p>
+          </div>
+          <p class="text-center text-slate-500 text-base leading-none">&darr;</p>
+          <div class="bg-white dark:bg-slate-800 border-2 border-blue-600 dark:border-sky-400 rounded-lg px-5 py-3.5">
+            <p class="text-lg text-slate-700 dark:text-slate-200">&#9313; <strong>핵심 단계</strong> — <span class="font-bold text-blue-600 dark:text-sky-400">강조</span></p>
+          </div>
+          <p class="text-center text-slate-500 text-base leading-none">&darr;</p>
+          <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-5 py-3.5">
+            <p class="text-lg text-slate-700 dark:text-slate-200">&#9314; <strong>3단계</strong> — 설명</p>
+          </div>
+        </div>
+        <div>
+          <!-- 이미지는 출력 옆 img/로 복사해 상대 경로로. 없으면 이 칸을 지우고 col-span-3으로 -->
+          <img src="img/example.png" alt="대체 텍스트 필수" class="rounded-xl w-full">
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-2">캡션 — CC 라이선스 표기는 정자체로</p>
+        </div>
+      </div>
+      <aside class="notes"></aside>
+    </section>
+
+    <!-- PATTERN: vertical 부록 (메인 흐름은 가로 일직선 유지 — 래퍼에는 배경 속성 금지!) -->
+    <section>
+      <section data-background-color="#f8fafc">
+        <h2 class="text-4xl font-bold text-slate-800 dark:text-slate-100">본 슬라이드 (아래로 부록)</h2>
+        <p class="text-2xl text-slate-700 dark:text-slate-200 mt-8">상세가 궁금하면 &darr;</p>
+        <aside class="notes"></aside>
+      </section>
+      <section data-background-color="#f8fafc">
+        <p class="text-base font-semibold tracking-[0.3em] text-slate-600 dark:text-slate-400 mb-4">부록</p>
+        <h2 class="text-3xl font-bold text-slate-800 dark:text-slate-100">상세·재현 코드·질문 대비 자료</h2>
+        <aside class="notes"></aside>
+      </section>
+    </section>
+
+    <!-- PATTERN: 결론 (중앙 대형 + 미니 요약) -->
+    <section data-background-color="#f8fafc">
+      <h2 class="text-4xl font-bold text-slate-800 dark:text-slate-100">결론 — 덱 전체를 관통한 <span class="text-blue-600 dark:text-sky-400">키워드</span>로 마무리</h2>
+      <p class="text-2xl text-slate-700 dark:text-slate-200 mt-10">가져갈 메시지 한 줄</p>
+      <p class="text-base text-slate-500 dark:text-slate-400 mt-8">출처: 원문 문서명 — 검증 방법 명시</p>
+      <aside class="notes"></aside>
+    </section>
+
+  </div></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/dist/reveal.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/plugin/notes/notes.js"></script>
+  <script>
+    // ----- 라이트/다크 토글 (검증된 배관 — 수정 없이 사용) -----
+    const THEME_BG = {
+      light: { canvas: '#f8fafc', divider: '#f1f5f9' },
+      dark:  { canvas: '#0f172a', divider: '#1e293b' },
+    };
+    let theme = localStorage.getItem('deck-theme') === 'dark' ? 'dark' : 'light';
+
+    function applyTheme(next) {
+      theme = next;
+      document.documentElement.classList.toggle('dark', theme === 'dark');
+      // leaf 섹션만 선택된다 — 래퍼 <section>에 data-background-color를 넣지 않는 이유
+      document.querySelectorAll('.reveal .slides section[data-background-color]').forEach(sec => {
+        const role = sec.dataset.bgRole === 'divider' ? 'divider' : 'canvas';
+        sec.setAttribute('data-background-color', THEME_BG[theme][role]);
+      });
+      if (window.Reveal && Reveal.isReady && Reveal.isReady()) Reveal.sync();
+      localStorage.setItem('deck-theme', theme);
+      document.querySelector('#theme-toggle .icon-sun').style.display = theme === 'dark' ? '' : 'none';
+      document.querySelector('#theme-toggle .icon-moon').style.display = theme === 'dark' ? 'none' : '';
+    }
+
+    applyTheme(theme); // Reveal 초기화 전에 data-background-color 선반영
+
+    document.getElementById('theme-toggle').addEventListener('click', () => {
+      applyTheme(theme === 'dark' ? 'light' : 'dark');
+    });
+    document.addEventListener('keydown', e => {
+      const a = document.activeElement; // 슬라이드 점프(G) 등 입력 필드 보호
+      if (a && (/input|textarea/i.test(a.tagName) || a.isContentEditable)) return;
+      if ((e.key === 'd' || e.key === 'D') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        applyTheme(theme === 'dark' ? 'light' : 'dark');
+      }
+    });
+
+    Reveal.initialize({
+      hash: true,
+      slideNumber: 'c/t',
+      transition: 'slide',
+      pdfMaxPagesPerSlide: 1,
+      pdfSeparateFragments: false,
+      plugins: [ RevealNotes ],
+    });
+  </script>
+</body>
+</html>

@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.27.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.28.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.27.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, and Hamilton spec-driven pipelines |
+| [**lazy2work**](plugins/lazy2work/) | 1.28.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, and a document→reveal.js presentation builder |
 
 ---
 
@@ -44,7 +44,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 - Python 3.10+ (for skills scripts and webhook hooks)
 - Node.js 18+ (for MCP setup commands that use `npx`)
 
-### Skills (8)
+### Skills (9)
 
 | Skill | Command | Description |
 |-------|---------|-------------|
@@ -56,6 +56,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 | **apply-all-sc-save** | `/lazy2work:apply-all-sc-save` | Broadcast `/sc:save` to all Claude Code panes in the current tmux session — auto-detects Claude panes, excludes self, supports `--dry-run`, `--all-sessions`, and custom commands |
 | **fix-mermaid** | `/lazy2work:fix-mermaid` | Fix Markdown rendering issues that break Mermaid diagrams or pandoc PDF conversion — Mermaid v11 syntax (reserved words, Unicode/Langium issues, message escaping) **and** pandoc PDF pitfalls (blank-line compliance before lists/tables/fences as auto-fixed errors, long-mixed-cell overflow as warnings, always-on Unicode glyph map covering U+2212/U+2717/U+2718, **currency-dollar auto-escape** for `$100`/`$76.4억` that prevents `Bad math environment delimiter` errors, **unsafe-inline-code warnings** for `` `pass^k` ``-style content that collides with the `\seqsplit` wrapper and causes `Missing number, treated as zero`, **closing-dollar-trailing-space auto-fix** for `$\mathcal{H}_1 = $ rest` patterns that violate pandoc's `tex_math_dollars` rule and cause `\symcal allowed only in math mode`, plus opt-in **`--latin1-normalize`** for Latin-1 Supplement diacritics like `á é ñ ü ß`). Three bundled Python scripts (`fix_mermaid.py`, `fix_pandoc_blanks.py`, `validate_mermaid.py`) with lint / `--fix` / `--json` modes, plus optional **`--with-mmdc` feedback loop** that renders each diagram with Mermaid CLI and iterates targeted fixes until clean |
 | **hamilton-harness** | `/lazy2work:hamilton-harness` | Build Hamilton data pipelines through a spec-driven workflow — 4 modes (prompt→YAML, validate, stub+viz, modify), Pydantic schemas, Mermaid/Graphviz/Hamilton rendering, 3 domain examples (ETL/ML/RAG). Artifacts land under **`spec_build/`** (renamed from `build/` in v1.27.0 to avoid colliding with Python packaging / Sphinx / CMake build directories). Self-contained — no plugin-level hooks or rules needed |
+| **make-ppt-html** | `/lazy2work:make-ppt-html` | Convert any document (research note, report, README, storyboard) into a presentation-quality **reveal.js 5.2.1 + Tailwind CSS** single-file HTML deck with a **light↔dark theme toggle** (button + `D` key + localStorage). Follows bundled design guidelines — assertion-style slide titles, 60-30-10 single-accent color system, WCAG-verified contrast pairs, Pretendard, speaker notes, `?print-pdf` export — and ships a browser-verified `template.html` that pre-solves the reveal×Tailwind integration traps (Meyer-reset border-style kill, `Reveal.sync()` background re-theming, print-mode toggle hiding, dark-variant class pairing) |
 
 <details>
 <summary><strong>up2date — Usage Examples</strong></summary>
@@ -781,6 +782,47 @@ The complexity score is logged to `spec_build/metrics/session-<timestamp>.json` 
 
 </details>
 
+<details>
+<summary><strong>make-ppt-html — Usage Examples</strong></summary>
+
+**Convert a research document into a slide deck:**
+
+```
+/lazy2work:make-ppt-html @claudedocs/research_monitoring_stack_20260608.md 를 발표자료로 만들어줘
+```
+
+**Natural-language trigger (no slash command needed):**
+
+```
+이 문서를 ppt로 만들어줘. 라이트/다크 토글도 넣어줘 @docs/quarterly-report.md
+```
+
+**Output** — a single self-contained HTML file (`presentation_<topic>_<YYYYMMDD>.html`, written next to the input document):
+
+| Feature | Detail |
+|---|---|
+| Slides | 10–20 slides, every title an **assertion sentence** (주장 문장), one protagonist element per slide, speaker notes on content slides (`S` key) |
+| Theme toggle | Top-right button or `D` key; choice persisted via localStorage; reveal slide backgrounds re-synced live via `Reveal.sync()` |
+| Design system | Light `slate-50`/`slate-800`/`blue-600` ↔ dark `slate-900`/`slate-100`/`sky-400`; semantic ✓/✗/⚠ colors with icon double-cues; WCAG-checked contrast pairs |
+| PDF export | `?print-pdf` → Chrome print (Landscape · no margins · background graphics ON); toggle button auto-hidden; `pdfMaxPagesPerSlide: 1` preset |
+| Tech | reveal.js **5.2.1 pinned** + Tailwind Play CDN (Strategy A — no built-in theme) + Pretendard; highlights/dividers alternate backgrounds via `data-bg-role="divider"` |
+
+**Keyboard controls in the deck:** `D` theme toggle · `S` speaker notes · `ESC`/`O` overview · `G` jump to slide · arrows navigate.
+
+**Why it ships a template** — `assets/template.html` encodes fixes that are invisible until they bite:
+
+- reveal's Meyer `reset.css` beats Tailwind Preflight on specificity and silently zeroes **every** border utility → one load-bearing `border-style: solid` override restores them
+- the light/dark toggle rewrites each leaf section's `data-background-color` and calls `Reveal.sync()` — wrapper sections of vertical stacks must stay attribute-free
+- contrast traps verified by computation: `slate-500` on the divider background fails 4.5:1; `amber-600`/`emerald-600` text on white fail below 24px (use the `-700` shades); `slate-400` is a dark-mode-only text token
+
+**Built-in verification:** static checks (every color class `dark:`-paired, no `md:`/`vh`/`vw`, leaf-only backgrounds, ≤2 accent spots per slide) plus optional browser checks (per-slide overflow ≤ 680px, console clean, `?print-pdf` page count) when chrome-devtools MCP or Playwright is available.
+
+**Benchmark** (skill-creator eval, 2 documents × with/without skill): with-skill passed **20/20** structural assertions vs **10/20** baseline — baselines omitted speaker notes and PDF config on both runs, and without the word "reveal.js" in the prompt the baseline invented a custom slide framework entirely.
+
+> ⚠️ Tailwind Play CDN and the Pretendard CDN are for prototyping — bundle locally before presenting offline (the skill reminds you).
+
+</details>
+
 ### Setup Commands (7)
 
 One-command MCP server installers accessible via `/lazy2work:setup:*`:
@@ -1018,6 +1060,10 @@ hoosiki-marketplace/
 │       │   │   ├── templates/             ← JSON Schema + CI + project-layout
 │       │   │   ├── examples/              ← etl, ml-training, rag
 │       │   │   └── tests/
+│       │   ├── make-ppt-html/             ← document → reveal.js+Tailwind deck w/ light·dark toggle
+│       │   │   ├── SKILL.md
+│       │   │   ├── references/            ← design-guidelines.md (색상·폰트·배치 규격)
+│       │   │   └── assets/                ← template.html (browser-verified boilerplate)
 │       │   └── up2date/
 │       │       ├── SKILL.md
 │       │       ├── scripts/
@@ -1058,6 +1104,16 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.28.0 (2026-06-12)
+
+- **NEW skill: make-ppt-html** — converts any input document (research note, report, README, storyboard) into a presentation-quality **reveal.js 5.2.1 + Tailwind CSS single-file HTML deck with a light↔dark theme toggle** (top-right button + `D` shortcut + localStorage persistence). Triggers on "ppt로 만들어", "발표자료로", "슬라이드로 변환", "html 프레젠테이션", "make slides from this doc" and similar phrasings
+- **make-ppt-html: SKILL.md workflow** — ① read document → plan 10–20 assertion-titled slides (one protagonist per slide, details into speaker notes) ② copy the bundled template ③ apply the light/dark token-pair table (every color utility outside theme-stable code cards must carry its `dark:` counterpart) ④ run static + optional browser verification. Contrast traps verified by WCAG computation are documented inline: `slate-500`-on-divider 4.34:1 fail → `slate-600`; `amber-600`/`emerald-600` text on white fail below 24px → `-700` shades; `slate-400` reserved for dark mode
+- **make-ppt-html: assets/template.html** — browser-verified boilerplate with 9 slide-pattern exemplars (title, assertion+evidence, code card, comparison, table, divider/highlight, process flow, vertical appendix, conclusion). Pre-solves the reveal×Tailwind integration traps discovered during real deck production: Meyer-reset `div{border:0}` beating Preflight's universal `border-style: solid` (computed border widths forced to 0 — fixed by a scoped override), theme toggle re-syncing per-section `data-background-color` via `Reveal.sync()` (wrapper sections must stay attribute-free), `position:fixed` toggle button hidden in `?print-pdf`/`@media print`, `D`-key guard against reveal's jump-to-slide input, and UI-chrome (slide number/progress/controls) colors for both themes
+- **make-ppt-html: references/design-guidelines.md** — bundled copy of the reveal.js+Tailwind slide design guideline (60-30-10 single-accent rule, contrast 7:1 target, Pretendard typography scale, hierarchy levers, layout-per-information-type mapping, prohibition list, production checklist)
+- **make-ppt-html: benchmarked via skill-creator** — 2 eval documents (unicode-conversion research, monitoring-stack research) × with/without skill: with-skill passed **20/20** structural assertions (reveal structure, working dark-class toggle with persistence, `dark:` pairing, no responsive prefixes, PDF config, speaker notes, sane slide count, leaf-section backgrounds, no inline styles) vs **10/20** baseline; both baselines omitted speaker notes/PDF config, and the baseline without an explicit "reveal.js" mention invented a custom slide framework
+- **marketplace.json + plugin.json sync** — descriptions mention the presentation builder; keywords extended with `reveal.js`, `tailwind`, `presentation`, `slides`; tags extended with `presentation-builder`; both manifests bumped in lockstep
+- **Version bump**: 1.27.0 → 1.28.0
 
 ### v1.27.0 (2026-05-27)
 

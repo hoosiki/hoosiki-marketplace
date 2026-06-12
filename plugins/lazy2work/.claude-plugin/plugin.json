@@ -1,7 +1,7 @@
 {
   "name": "lazy2work",
-  "version": "1.27.0",
-  "description": "One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills for arXiv analysis, package updates, and Hamilton spec-driven pipelines.",
+  "version": "1.28.0",
+  "description": "One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills for arXiv analysis, package updates, Hamilton spec-driven pipelines, and document-to-reveal.js presentation building.",
   "author": {
     "name": "Junsang Park",
     "url": "https://github.com/hoosiki"
@@ -24,7 +24,11 @@
     "diagram-fixer",
     "hamilton",
     "dag",
-    "pipeline"
+    "pipeline",
+    "reveal.js",
+    "tailwind",
+    "presentation",
+    "slides"
   ],
   "category": "productivity",
   "tags": [
@@ -32,6 +36,7 @@
     "webhook-hooks",
     "paper-analysis",
     "package-updater",
-    "data-pipeline"
+    "data-pipeline",
+    "presentation-builder"
   ]
 }
