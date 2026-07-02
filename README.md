@@ -44,7 +44,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 - Python 3.10+ (for skills scripts and webhook hooks)
 - Node.js 18+ (for MCP setup commands that use `npx`)
 
-### Skills (9)
+### Skills (10)
 
 | Skill | Command | Description |
 |-------|---------|-------------|
@@ -824,6 +824,51 @@ The complexity score is logged to `spec_build/metrics/session-<timestamp>.json` 
 
 </details>
 
+<details>
+<summary><strong>from-grill-me-to-linear — Usage Examples</strong></summary>
+
+**Purpose** — `grill-me`/`grill-with-docs` chains produce a PRD plus vertical-slice issue files, but even when the tracker is set to Linear they only create flat issues. This skill fills the structuring gap: it converts those outputs into a proper **Project→Milestone→Issue→Sub-issue** hierarchy under a team you name, filtering out everything that should *not* become an issue.
+
+**Prerequisite** — the **linear-server MCP** integration must be connected (the skill verifies with `list_teams` and stops with guidance if unavailable).
+
+**Publish a PRD + issue files to a Linear team:**
+
+```
+/lazy2work:from-grill-me-to-linear test 팀에 @PRD.md 와 @issues/ 를 linear로 정리해서 발행해줘
+```
+
+**Natural-language trigger (no slash command needed):**
+
+```
+이 PRD랑 이슈 파일들을 WertIntelligence 팀 아래 linear에 기록해줘 @PRD.md @issues/
+```
+
+**What lands where** (the noise filter is half the value — ❌ rows never become issues):
+
+| grill-me artifact | → Linear |
+|---|---|
+| PRD (whole) | **Project** (PRD as description, single owner) |
+| User-story narration | ❌ → project brief |
+| tracer-bullet vertical slice | **Issue** (verb-first title) — big slices promote to **Milestone** |
+| Scaffold/boilerplate splits | **Sub-issue** (1 level max) |
+| Decisions / glossary / open questions / out-of-scope | ❌ → ADR·repo links / triage / summary line |
+| "tests pass" clauses | ❌ → the issue's **DoD checklist** |
+| `Blocked by` references | **blocked-by relations** (DAG, published in topological order) |
+| HITL/AFK markers | labels `mode:hitl` / `mode:afk` (optional `delegate: "Linear"`) |
+
+**Safety rails:**
+
+- **Gate ①** — blocks un-grilled first drafts (unresolved TODO/TBD decisions)
+- **Gate ②** — prints the full create/update/reuse plan as a table and waits for approval before any write
+- **Idempotent upsert** — queries existing projects/milestones/labels/issues first and updates by id; re-runs never duplicate (guards against real-world label drift like `type:bug` vs `Bug` coexisting)
+- **Resumable** — every write's returned ID is logged, so an interrupted run continues as updates
+
+**Output** — a summary report: created/updated/reused counts per object type, the project URL, dependency edges established, and where each filtered-out fragment went (brief / docs link / comment).
+
+> Also works with any generic `PRD.md` + `issues/*.md` pair following the same shape (What to build / Acceptance criteria / Blocked by). Conversion rules live in the skill's [`references/mapping-rules.md`](plugins/lazy2work/skills/from-grill-me-to-linear/references/mapping-rules.md).
+
+</details>
+
 ### Setup Commands (7)
 
 One-command MCP server installers accessible via `/lazy2work:setup:*`:
@@ -1111,6 +1156,7 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 - **NEW skill: from-grill-me-to-linear** — publishes grill-me/grill-with-docs outputs (PRD + vertical-slice issue files) into a Linear team as a **Project→Milestone→Issue→Sub-issue hierarchy** via the linear-server MCP. Takes a team name, verifies it with `list_teams`, then converts and records the PRD/issues Linear-appropriately. Triggers on "linear에 발행", "linear로 정리", "PRD를 linear에", "publish PRD to Linear" and similar phrasings
 - **from-grill-me-to-linear: noise filter** — user stories, implementation/testing decisions, glossary entries, open questions, and out-of-scope items are **never created as Issues** (Linear's official anti-pattern); they are absorbed into the project brief or left as repo/ADR links. Issue titles are rewritten verb-first (`Add Stripe webhook`), and "tests pass" clauses fold into each issue's DoD checklist instead of becoming standalone issues
 - **from-grill-me-to-linear: safety rails** — two HITL gates (input sanity + dry-run plan table before any write), idempotent upsert contract (`list_projects`/`list_milestones`/`list_issue_labels`/`list_issues` → reuse → update-by-id, so re-runs never duplicate — guards against real-world label drift like `type:bug` vs `Bug` coexisting), dependency DAG preserved via `blockedBy` relations published in topological order (no false milestone serialization), and a per-write ID log for resumable runs. Ships `references/mapping-rules.md` with the full conversion table, anti-pattern guardrails, and live MCP parameter notes
+- **README: from-grill-me-to-linear usage examples** — added a dedicated `<details>` section covering purpose (fills the structuring gap `/to-issues` leaves), the linear-server MCP prerequisite, slash-command and natural-language triggers, the what-lands-where mapping table with the ❌ noise-filter rows, safety rails (two gates, idempotent upsert, resumable ID log), and the output report format
 - **Version bump**: 1.28.0 → 1.29.0
 
 ### v1.28.0 (2026-06-12)
