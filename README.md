@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.28.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.29.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.28.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, and a document→reveal.js presentation builder |
+| [**lazy2work**](plugins/lazy2work/) | 1.29.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and a PRD-to-Linear hierarchy publisher |
 
 ---
 
@@ -57,6 +57,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 | **fix-mermaid** | `/lazy2work:fix-mermaid` | Fix Markdown rendering issues that break Mermaid diagrams or pandoc PDF conversion — Mermaid v11 syntax (reserved words, Unicode/Langium issues, message escaping) **and** pandoc PDF pitfalls (blank-line compliance before lists/tables/fences as auto-fixed errors, long-mixed-cell overflow as warnings, always-on Unicode glyph map covering U+2212/U+2717/U+2718, **currency-dollar auto-escape** for `$100`/`$76.4억` that prevents `Bad math environment delimiter` errors, **unsafe-inline-code warnings** for `` `pass^k` ``-style content that collides with the `\seqsplit` wrapper and causes `Missing number, treated as zero`, **closing-dollar-trailing-space auto-fix** for `$\mathcal{H}_1 = $ rest` patterns that violate pandoc's `tex_math_dollars` rule and cause `\symcal allowed only in math mode`, plus opt-in **`--latin1-normalize`** for Latin-1 Supplement diacritics like `á é ñ ü ß`). Three bundled Python scripts (`fix_mermaid.py`, `fix_pandoc_blanks.py`, `validate_mermaid.py`) with lint / `--fix` / `--json` modes, plus optional **`--with-mmdc` feedback loop** that renders each diagram with Mermaid CLI and iterates targeted fixes until clean |
 | **hamilton-harness** | `/lazy2work:hamilton-harness` | Build Hamilton data pipelines through a spec-driven workflow — 4 modes (prompt→YAML, validate, stub+viz, modify), Pydantic schemas, Mermaid/Graphviz/Hamilton rendering, 3 domain examples (ETL/ML/RAG). Artifacts land under **`spec_build/`** (renamed from `build/` in v1.27.0 to avoid colliding with Python packaging / Sphinx / CMake build directories). Self-contained — no plugin-level hooks or rules needed |
 | **make-ppt-html** | `/lazy2work:make-ppt-html` | Convert any document (research note, report, README, storyboard) into a presentation-quality **reveal.js 5.2.1 + Tailwind CSS** single-file HTML deck with a **light↔dark theme toggle** (button + `D` key + localStorage). Follows bundled design guidelines — assertion-style slide titles, 60-30-10 single-accent color system, WCAG-verified contrast pairs, Pretendard, speaker notes, `?print-pdf` export — and ships a browser-verified `template.html` that pre-solves the reveal×Tailwind integration traps (Meyer-reset border-style kill, `Reveal.sync()` background re-theming, print-mode toggle hiding, dark-variant class pairing) |
+| **from-grill-me-to-linear** | `/lazy2work:from-grill-me-to-linear` | Publish grill-me/grill-with-docs outputs (PRD + vertical-slice issue files) into a Linear team as a **Project→Milestone→Issue→Sub-issue** hierarchy via the linear-server MCP — filters non-issue noise (user stories, decisions, glossary → project brief/links), preserves the dependency DAG with `blocked-by` relations (no false milestone serialization), and enforces **dry-run approval + idempotent upsert** (query-reuse-update so re-runs never duplicate labels or issues). Requires the Linear MCP integration |
 
 <details>
 <summary><strong>up2date — Usage Examples</strong></summary>
@@ -1104,6 +1105,13 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.29.0 (2026-07-03)
+
+- **NEW skill: from-grill-me-to-linear** — publishes grill-me/grill-with-docs outputs (PRD + vertical-slice issue files) into a Linear team as a **Project→Milestone→Issue→Sub-issue hierarchy** via the linear-server MCP. Takes a team name, verifies it with `list_teams`, then converts and records the PRD/issues Linear-appropriately. Triggers on "linear에 발행", "linear로 정리", "PRD를 linear에", "publish PRD to Linear" and similar phrasings
+- **from-grill-me-to-linear: noise filter** — user stories, implementation/testing decisions, glossary entries, open questions, and out-of-scope items are **never created as Issues** (Linear's official anti-pattern); they are absorbed into the project brief or left as repo/ADR links. Issue titles are rewritten verb-first (`Add Stripe webhook`), and "tests pass" clauses fold into each issue's DoD checklist instead of becoming standalone issues
+- **from-grill-me-to-linear: safety rails** — two HITL gates (input sanity + dry-run plan table before any write), idempotent upsert contract (`list_projects`/`list_milestones`/`list_issue_labels`/`list_issues` → reuse → update-by-id, so re-runs never duplicate — guards against real-world label drift like `type:bug` vs `Bug` coexisting), dependency DAG preserved via `blockedBy` relations published in topological order (no false milestone serialization), and a per-write ID log for resumable runs. Ships `references/mapping-rules.md` with the full conversion table, anti-pattern guardrails, and live MCP parameter notes
+- **Version bump**: 1.28.0 → 1.29.0
 
 ### v1.28.0 (2026-06-12)
 

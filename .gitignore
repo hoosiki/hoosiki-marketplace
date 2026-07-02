@@ -22,3 +22,4 @@ tests/
 requirements-rag.txt
 claudedocs/
 make-ppt-html-workspace/
+md/
