@@ -43,8 +43,18 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/up2date.py --skill
 ```
 
 - `~/.claude/skills/` user skill list and registration status
+- **Global agent skills** → `npx skills@latest update -g -y` updates every globally
+  installed skill (e.g. mattpocock/skills under `~/.agents/skills/`), then
+  **removes skills deleted upstream** that the non-interactive updater only warns
+  about (parsed from its "deleted upstream" output → `npx skills remove <names> -g -y`)
 - `~/.claude/plugins/` plugin installation status and marketplace currency → `git pull` marketplaces
 - `~/.claude/commands/sc/` SuperClaude command list → `superclaude update`
+
+Add `--no-skill-prune` to update global skills **without** removing the dead ones:
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/up2date.py --skill --no-skill-prune
+```
 
 ## Notes
 
@@ -52,6 +62,8 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/up2date.py --skill
 - Marketplace updates use `git pull --ff-only` for safety
 - SuperClaude updates use `superclaude update`
 - User skills (`~/.claude/skills/`) are manually managed; only status checks are performed
+- Global agent-skill update needs `npx` (Node.js 18+); it is skipped with a notice if `npx` is absent
+- Dead-skill pruning is **on by default** with `--skill`; pass `--no-skill-prune` to keep them
 - `brew upgrade --cask --greedy` upgrades all casks including those with `auto_updates=true`
 - `brew cleanup --prune=all` removes all cached downloads
 - Summarize script output and report to the user

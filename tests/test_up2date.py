@@ -451,3 +451,155 @@ class TestCheckSuperclaude:
         assert result["total"] == 3
         assert "analyze" in result["commands"]
         assert "build" in result["commands"]
+
+
+# ── Global agent skills (npx skills) ─────────────────────────────
+
+
+class TestStripAnsi:
+    """Tests for _strip_ansi."""
+
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            ("\x1b[38;5;145mhello\x1b[0m", "hello"),
+            ("\x1b[1mUpdated\x1b[0m 3 skill(s)", "Updated 3 skill(s)"),
+            ("plain text", "plain text"),
+            ("", ""),
+        ],
+        ids=["colored", "bold-mixed", "plain", "empty"],
+    )
+    def test_removes_ansi_codes(self, raw: str, expected: str) -> None:
+        """_strip_ansi removes ANSI escape sequences."""
+        assert up2date._strip_ansi(raw) == expected
+
+
+class TestParseDeadSkills:
+    """Tests for _parse_dead_skills."""
+
+    def test_single_source_extracts_bullets(self) -> None:
+        """_parse_dead_skills extracts skill names from one source block."""
+        output = (
+            "Checking skills from source: mattpocock/skills\n"
+            "Warning: The following skills from mattpocock/skills "
+            "appear to have been deleted upstream:\n"
+            "  • write-a-skill\n"
+            "  • zoom-out\n"
+            "Skipping deletion in non-interactive mode.\n"
+            "✓ Updated 3 skill(s)\n"
+        )
+        assert up2date._parse_dead_skills(output) == ["write-a-skill", "zoom-out"]
+
+    def test_multiple_source_blocks_merge_and_dedupe(self) -> None:
+        """_parse_dead_skills merges bullets across blocks and dedupes."""
+        output = (
+            "appear to have been deleted upstream:\n"
+            "  • alpha\n"
+            "  • beta\n"
+            "Skipping deletion in non-interactive mode.\n"
+            "Checking skills from source: other/repo\n"
+            "appear to have been deleted upstream:\n"
+            "  • beta\n"
+            "  • gamma\n"
+            "done\n"
+        )
+        assert up2date._parse_dead_skills(output) == ["alpha", "beta", "gamma"]
+
+    def test_ignores_non_deleted_bullets(self) -> None:
+        """_parse_dead_skills ignores bullets under other warnings."""
+        output = (
+            "5 project skill(s) cannot be updated automatically:\n"
+            "  • crawl\n"
+            "    To refresh: npx skills add tavily-ai/skills -y\n"
+        )
+        assert up2date._parse_dead_skills(output) == []
+
+    def test_no_dead_returns_empty(self) -> None:
+        """_parse_dead_skills returns [] when no deletion warning is present."""
+        assert up2date._parse_dead_skills("✓ Updated 3 skill(s)\n") == []
+
+
+class TestParseUpdatedCount:
+    """Tests for _parse_updated_count."""
+
+    @pytest.mark.parametrize(
+        ("output", "expected"),
+        [
+            ("✓ Updated 11 skill(s)", 11),
+            ("Updated 1 skill(s)", 1),
+            ("No project skills can be updated in place.", 0),
+            ("", 0),
+        ],
+        ids=["eleven", "one", "none", "empty"],
+    )
+    def test_parses_count(self, output: str, expected: int) -> None:
+        """_parse_updated_count extracts the updated skill count."""
+        assert up2date._parse_updated_count(output) == expected
+
+
+class TestUpdateGlobalSkills:
+    """Tests for update_global_skills."""
+
+    def test_returns_unavailable_when_npx_missing(self) -> None:
+        """update_global_skills reports unavailable when npx is absent."""
+        with patch.object(up2date.shutil, "which", return_value=None):
+            result = up2date.update_global_skills()
+        assert result["available"] is False
+        assert result["updated"] == 0
+        assert result["dead"] == []
+        assert result["removed"] == []
+
+    def test_parses_updated_and_dead(self) -> None:
+        """update_global_skills parses updated count and dead skills."""
+        update_out = subprocess.CompletedProcess(
+            [], returncode=0,
+            stdout=(
+                "appear to have been deleted upstream:\n"
+                "  • zoom-out\n"
+                "Skipping deletion in non-interactive mode.\n"
+                "✓ Updated 4 skill(s)\n"
+            ),
+            stderr="",
+        )
+        remove_out = subprocess.CompletedProcess([], returncode=0, stdout="ok", stderr="")
+        with patch.object(up2date.shutil, "which", return_value="/usr/bin/npx"), \
+                patch.object(up2date, "run", side_effect=[update_out, remove_out]) as mrun:
+            result = up2date.update_global_skills(remove_dead=True)
+        assert result["available"] is True
+        assert result["updated"] == 4
+        assert result["dead"] == ["zoom-out"]
+        assert result["removed"] == ["zoom-out"]
+        # Second call must be the remove command including the dead skill name.
+        remove_call_args = mrun.call_args_list[1].args[0]
+        assert "remove" in remove_call_args
+        assert "zoom-out" in remove_call_args
+
+    def test_skips_removal_when_disabled(self) -> None:
+        """update_global_skills does not remove dead skills when remove_dead=False."""
+        update_out = subprocess.CompletedProcess(
+            [], returncode=0,
+            stdout=(
+                "appear to have been deleted upstream:\n"
+                "  • zoom-out\n"
+                "✓ Updated 0 skill(s)\n"
+            ),
+            stderr="",
+        )
+        with patch.object(up2date.shutil, "which", return_value="/usr/bin/npx"), \
+                patch.object(up2date, "run", side_effect=[update_out]) as mrun:
+            result = up2date.update_global_skills(remove_dead=False)
+        assert result["dead"] == ["zoom-out"]
+        assert result["removed"] == []
+        assert mrun.call_count == 1  # only the update call, no remove
+
+    def test_no_dead_skips_remove_call(self) -> None:
+        """update_global_skills makes no remove call when there are no dead skills."""
+        update_out = subprocess.CompletedProcess(
+            [], returncode=0, stdout="✓ Updated 2 skill(s)\n", stderr=""
+        )
+        with patch.object(up2date.shutil, "which", return_value="/usr/bin/npx"), \
+                patch.object(up2date, "run", side_effect=[update_out]) as mrun:
+            result = up2date.update_global_skills(remove_dead=True)
+        assert result["dead"] == []
+        assert result["removed"] == []
+        assert mrun.call_count == 1

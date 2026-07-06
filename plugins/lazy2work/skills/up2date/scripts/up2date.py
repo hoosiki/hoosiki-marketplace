@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -35,6 +36,12 @@ SETTINGS_FILE = CLAUDE_DIR / "settings.json"
 _BREW_TIMEOUT: int = 300
 _GIT_TIMEOUT: int = 60
 _DEFAULT_TIMEOUT: int = 120
+_NPX_TIMEOUT: int = 300
+
+# Matches ANSI SGR color/style escape sequences (e.g. "\x1b[38;5;145m").
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+# Matches the summary line "Updated <N> skill(s)" emitted by `npx skills update`.
+_UPDATED_COUNT_RE = re.compile(r"Updated\s+(\d+)\s+skill\(s\)")
 
 
 def run(
@@ -858,15 +865,162 @@ def _print_skill_info(sk: dict) -> None:
         print(f"    Resources: {', '.join(parts)}")
 
 
-def run_skill() -> None:
+def _strip_ansi(text: str) -> str:
+    """Remove ANSI SGR color/style escape sequences from text.
+
+    Args:
+        text: Raw text that may contain ANSI escape codes.
+
+    Returns:
+        The text with all ANSI SGR sequences removed.
+
+    Examples:
+        >>> _strip_ansi("\\x1b[1mUpdated\\x1b[0m 3 skill(s)")
+        'Updated 3 skill(s)'
+        >>> _strip_ansi("plain")
+        'plain'
+    """
+    return _ANSI_RE.sub("", text)
+
+
+def _parse_dead_skills(output: str) -> list[str]:
+    """Extract skill names flagged as deleted upstream from update output.
+
+    Collects the bullet-listed names that appear under any
+    "...deleted upstream:" warning block emitted by ``npx skills update``.
+    Bullets under other warnings (e.g. "cannot be updated automatically")
+    are ignored. Names are de-duplicated preserving first-seen order.
+
+    Args:
+        output: Combined stdout/stderr from ``npx skills update``.
+
+    Returns:
+        Ordered list of unique skill names deleted upstream.
+
+    Examples:
+        >>> _parse_dead_skills(
+        ...     "appear to have been deleted upstream:\\n"
+        ...     "  • write-a-skill\\n"
+        ...     "Skipping deletion in non-interactive mode.\\n"
+        ... )
+        ['write-a-skill']
+        >>> _parse_dead_skills("Updated 3 skill(s)")
+        []
+    """
+    clean = _strip_ansi(output)
+    dead: list[str] = []
+    in_block = False
+    for line in clean.splitlines():
+        stripped = line.strip()
+        if "deleted upstream" in stripped:
+            in_block = True
+            continue
+        if not in_block:
+            continue
+        if stripped.startswith("•"):  # bullet "•"
+            name = stripped.lstrip("•").strip()
+            if name and name not in dead:
+                dead.append(name)
+        elif stripped:
+            in_block = False
+    return dead
+
+
+def _parse_updated_count(output: str) -> int:
+    """Parse the number of updated skills from update output.
+
+    Args:
+        output: Combined stdout/stderr from ``npx skills update``.
+
+    Returns:
+        The count from the "Updated <N> skill(s)" summary line, or 0
+        if no such line is present.
+
+    Examples:
+        >>> _parse_updated_count("✓ Updated 11 skill(s)")
+        11
+        >>> _parse_updated_count("No project skills can be updated in place.")
+        0
+    """
+    match = _UPDATED_COUNT_RE.search(_strip_ansi(output))
+    return int(match.group(1)) if match else 0
+
+
+def update_global_skills(remove_dead: bool = True) -> dict[str, object]:
+    """Update global agent skills via ``npx skills`` and prune dead ones.
+
+    Runs ``npx skills@latest update -g -y`` to refresh all globally
+    installed skills (e.g. mattpocock/skills under ``~/.agents/skills``),
+    then optionally removes skills that were deleted upstream (which the
+    non-interactive updater only warns about but leaves in place).
+
+    Args:
+        remove_dead: When True, remove skills flagged as deleted upstream
+            via ``npx skills remove <names> -g -y``. Defaults to True.
+
+    Returns:
+        Dict with keys: ``available`` (bool — npx found and ran),
+        ``updated`` (int), ``dead`` (list[str] deleted upstream),
+        ``removed`` (list[str] actually removed), ``error`` (str),
+        and ``output`` (str — cleaned update output).
+
+    Examples:
+        >>> result = update_global_skills(remove_dead=False)
+        >>> set(result) >= {"available", "updated", "dead", "removed"}
+        True
+    """
+    result: dict[str, object] = {
+        "available": False,
+        "updated": 0,
+        "dead": [],
+        "removed": [],
+        "error": "",
+        "output": "",
+    }
+
+    if shutil.which("npx") is None:
+        result["error"] = "npx not found (Node.js 18+ required for skills CLI)"
+        return result
+
+    result["available"] = True
+    proc = run(
+        ["npx", "--yes", "skills@latest", "update", "-g", "-y"],
+        timeout=_NPX_TIMEOUT,
+    )
+    output = _strip_ansi(f"{proc.stdout or ''}\n{proc.stderr or ''}").strip()
+    result["output"] = output
+    result["updated"] = _parse_updated_count(output)
+
+    dead = _parse_dead_skills(output)
+    result["dead"] = dead
+
+    if dead and remove_dead:
+        rm = run(
+            ["npx", "--yes", "skills@latest", "remove", *dead, "-g", "-y"],
+            timeout=_NPX_TIMEOUT,
+        )
+        if rm.returncode == 0:
+            result["removed"] = dead
+        else:
+            result["error"] = _strip_ansi(rm.stderr or rm.stdout or "").strip()[:200]
+
+    return result
+
+
+def run_skill(prune_dead: bool = True) -> None:
     """Run full skill/plugin/SuperClaude check and update.
 
     Executes the complete skills maintenance workflow:
-    user skills → plugin skills → plugin update detection →
-    marketplace pull → cache refresh → SuperClaude update.
+    user skills → global agent-skill update (npx skills) → plugin skills →
+    plugin update detection → marketplace pull → cache refresh →
+    SuperClaude update.
+
+    Args:
+        prune_dead: When True, remove global skills deleted upstream during
+            the ``npx skills`` update step. Defaults to True.
 
     Examples:
-        >>> run_skill()  # prints skill/plugin status to stdout
+        >>> run_skill(prune_dead=False)  # prints skill/plugin status to stdout
     """
     # -- 1. User Skills --
     print_section("User Skills")
@@ -877,6 +1031,29 @@ def run_skill() -> None:
             _print_skill_info(sk)
     else:
         print("\n  No user skills found in ~/.claude/skills/")
+
+    # -- 1a. Global Agent Skills (npx skills CLI) --
+    print_section("Global Agent Skills (npx skills)")
+    global_result = update_global_skills(remove_dead=prune_dead)
+    if not global_result["available"]:
+        print(f"\n  Skipped: {global_result['error']}")
+    else:
+        print(f"\n  Updated: {global_result['updated']} skill(s)")
+        dead = global_result["dead"]
+        if dead:
+            print(f"  Deleted upstream ({len(dead)}):")
+            for name in dead:
+                print(f"    - {name}")
+            if prune_dead:
+                removed = global_result["removed"]
+                if removed:
+                    print(f"  Removed {len(removed)} dead skill(s).")
+                elif global_result["error"]:
+                    print(f"  Removal failed: {global_result['error']}")
+            else:
+                print("  Pruning disabled (--no-skill-prune); left in place.")
+        else:
+            print("  Deleted upstream: none")
 
     # -- 1b. Plugin Skills --
     print_section("Plugin Skills")
@@ -991,6 +1168,11 @@ def main() -> None:
     parser.add_argument(
         "--skill", action="store_true", help="Run skill/plugin/SuperClaude update only"
     )
+    parser.add_argument(
+        "--no-skill-prune",
+        action="store_true",
+        help="Keep global skills deleted upstream instead of removing them",
+    )
     args = parser.parse_args()
 
     # If neither flag is set, run both
@@ -1003,7 +1185,7 @@ def main() -> None:
         run_brew()
 
     if run_all or args.skill:
-        run_skill()
+        run_skill(prune_dead=not args.no_skill_prune)
 
     print_section("Update Complete")
     print()

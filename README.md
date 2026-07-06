@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.30.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.31.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.30.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
+| [**lazy2work**](plugins/lazy2work/) | 1.31.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
 
 ---
 
@@ -48,7 +48,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Skill | Command | Description |
 |-------|---------|-------------|
-| **up2date** | `/lazy2work:up2date` | Unified updater — checks and updates Homebrew packages, Claude Code skills/plugins, and SuperClaude commands in one go (`--brew` for Homebrew only, `--skill` for skills only) |
+| **up2date** | `/lazy2work:up2date` | Unified updater — checks and updates Homebrew packages, Claude Code skills/plugins, and SuperClaude commands in one go (`--brew` for Homebrew only, `--skill` for skills only). The `--skill` path also runs **`npx skills@latest update -g -y`** to refresh global agent skills (e.g. mattpocock/skills) and **prunes skills deleted upstream** by parsing the updater's warning and calling `npx skills remove` (opt out with `--no-skill-prune`) |
 | **analyze-arxiv** | `/lazy2work:analyze-arxiv` | Study arXiv papers — fetches paper content, generates structured summaries, and creates prerequisite knowledge documents for deeper understanding |
 | **constitution-generator** | `/lazy2work:constitution-generator` | Generate optimized `/speckit.constitution` prompts — gathers project info (tech stack, architecture, conventions), detects brownfield patterns, and outputs a verifiable constitution with validation checklist |
 | **generate-optimized-spec-kit-prompt** | `/lazy2work:generate-optimized-spec-kit-prompt` | Generate complete Spec Kit prompts (specify/clarify/plan/tasks/implement/commit) for all features — splits project into 1-5 day features, generates 6-stage prompts per feature with Mermaid diagrams and auto-clarify/auto-commit steps |
@@ -1198,6 +1198,13 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.31.0 (2026-07-06)
+
+- **up2date: global agent-skill update + dead-skill pruning** — the `--skill` path now runs **`npx skills@latest update -g -y`** to refresh every globally installed agent skill (e.g. mattpocock/skills under `~/.agents/skills/`), not just marketplace plugins and SuperClaude. Because the non-interactive updater only *warns* about skills deleted upstream ("Skipping deletion in non-interactive mode"), up2date parses that warning and **removes the dead skills itself** via `npx skills remove <names> -g -y`. Verified live: the parser correctly identified 6 upstream-deleted skills (`write-a-skill`, `zoom-out`, `diagnose`, `caveman`, `decision-mapping`, `review`) from real updater output
+- **up2date: `--no-skill-prune` flag** — updates global skills but keeps the upstream-deleted ones in place (pruning is on by default with `--skill`). Global-skill update is skipped with a notice when `npx` (Node.js 18+) is unavailable
+- **up2date: new helpers** — `update_global_skills()` (npx orchestration + structured result), `_parse_dead_skills()` (multi-source, deduped, ignores non-deletion bullets), `_parse_updated_count()`, and `_strip_ansi()` (ANSI-code-safe parsing of colored CLI output). 16 new TDD tests (parametrized ANSI stripping, dead-skill parsing across single/multiple/none cases, updated-count parsing, and `update_global_skills` npx-missing / parse / remove-enabled / remove-disabled / no-dead paths) — full up2date suite: 51 passing
+- **Version bump**: 1.30.0 → 1.31.0
 
 ### v1.30.0 (2026-07-04)
 
