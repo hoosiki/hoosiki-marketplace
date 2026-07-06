@@ -86,11 +86,11 @@ Create output directory and write files. See [references/api_reference.md](refer
 
 **Directory**: `.speckit-prompts/` (project root)
 
-**Structure**: All feature folders live under a single `feature/` parent. One folder per issue, each containing 6 stage files.
+**Structure**: All per-issue folders live under a single parent folder **named after the PRD** — read the PRD and derive a short, fitting kebab-case project name yourself (do NOT use a literal `feature/`). One folder per issue, each containing 6 stage files.
 
 ```
 .speckit-prompts/
-└── feature/
+└── japanese-tutor/              ← parent name derived from the PRD
     ├── 000-env-compat-gate/
     │   ├── 01_specify.md
     │   ├── 02_clarify.md
@@ -114,7 +114,10 @@ Create output directory and write files. See [references/api_reference.md](refer
         └── 06_commit.md
 ```
 
-**Folder naming**: `feature/{NNN}-{kebab-case-name}` — `{NNN}` is the source issue number zero-padded to 3 digits (`00` → `000`, `08` → `008`), `{kebab-case-name}` is the issue filename slug with the number prefix removed (e.g. `00-env-compat-gate.md` → `feature/000-env-compat-gate/`).
+**Folder naming**: `{prd-name}/{NNN}-{kebab-case-name}`
+- `{prd-name}` — a short kebab-case project name you derive from the PRD (title/product name, 2-4 words; strip generic words like "PRD"). Example: PRD titled "일본어 학습 튜터 챗봇" → `japanese-tutor`.
+- `{NNN}` — source issue number zero-padded to 3 digits (`00` → `000`, `08` → `008`).
+- `{kebab-case-name}` — issue filename slug with the number prefix removed (e.g. `00-env-compat-gate.md` → `{prd-name}/000-env-compat-gate/`).
 
 **File content**: Each file contains only the prompt for that stage. Do not include frontmatter (YAML `---` blocks). The first line of each file must start directly with the command (`/speckit.specify`, `/speckit.clarify`, `/speckit.plan`, `/speckit.tasks`, `/speckit.implement`, or `/sc:git`).
 
@@ -125,7 +128,8 @@ After generating all prompts, verify each feature against:
 | Check | Rule |
 |-------|------|
 | 1 issue file = 1 feature folder | No merging or re-splitting of issues |
-| Folder number matches issue number | `00-env-compat-gate.md` → `feature/000-env-compat-gate/` |
+| Parent folder named from the PRD | Short kebab-case project name (e.g. `japanese-tutor`), never a literal `feature` |
+| Folder number matches issue number | `00-env-compat-gate.md` → `{prd-name}/000-env-compat-gate/` |
 | Issue acceptance criteria appear in tasks | Every criterion maps to a task or success criterion |
 | /speckit.specify has no tech terms | Tech-neutral (survives stack change) |
 | /speckit.specify uses official spec-template structure | Prioritized user stories + Given/When/Then + FR-NNN/SC-NNN; no trailing questions |

@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.33.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.34.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.33.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
+| [**lazy2work**](plugins/lazy2work/) | 1.34.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
 
 ---
 
@@ -285,7 +285,7 @@ Workflow:
 1. Reads the PRD and every issue file — **1 issue file = 1 feature**, never merged or re-split
 2. Extracts Mermaid diagrams and classifies them by stage placement
 3. Generates 6 prompts per feature following strict stage separation (specify ← issue scope + acceptance criteria + referenced PRD user stories; plan ← PRD decisions + issue tech details; tasks ← issue acceptance criteria + blocked-by)
-4. Writes output to `.speckit-prompts/feature/{NNN}-{slug}/` folders (issue number zero-padded to 3 digits)
+4. Writes output to `.speckit-prompts/{prd-name}/{NNN}-{slug}/` folders — the parent folder name is derived from the PRD (short kebab-case project name), the issue number is zero-padded to 3 digits
 
 #### 6-Stage Role Separation
 
@@ -318,7 +318,7 @@ Placement test: "Does this diagram remain valid if the tech stack changes?" — 
 
 ```
 .speckit-prompts/
-└── feature/
+└── japanese-tutor/              ← parent name derived from the PRD
     ├── 000-env-compat-gate/
     │   ├── 01_specify.md
     │   ├── 02_clarify.md
@@ -332,7 +332,7 @@ Placement test: "Does this diagram remain valid if the tech stack changes?" — 
         └── ...
 ```
 
-Folder naming: `feature/{NNN}-{kebab-case-name}` — `{NNN}` is the source issue number zero-padded to 3 digits (`00-env-compat-gate.md` → `feature/000-env-compat-gate/`).
+Folder naming: `{prd-name}/{NNN}-{kebab-case-name}` — `{prd-name}` is a short kebab-case project name derived from the PRD title/product name (e.g. "일본어 학습 튜터 챗봇" → `japanese-tutor`), `{NNN}` is the source issue number zero-padded to 3 digits (`00-env-compat-gate.md` → `{prd-name}/000-env-compat-gate/`).
 
 #### Quality Checklist
 
@@ -341,7 +341,8 @@ Every generated feature is verified against:
 | Check | Rule |
 |-------|------|
 | 1 issue file = 1 feature folder | No merging or re-splitting of issues |
-| Folder number matches issue number | `00-env-compat-gate.md` → `feature/000-env-compat-gate/` |
+| Parent folder named from the PRD | Short kebab-case project name (e.g. `japanese-tutor`), never a literal `feature` |
+| Folder number matches issue number | `00-env-compat-gate.md` → `{prd-name}/000-env-compat-gate/` |
 | Issue acceptance criteria appear in tasks | Every criterion maps to a task or success criterion |
 | /speckit.specify has no tech terms | Tech-neutral (survives stack change) |
 | /speckit.specify uses official spec-template structure | Prioritized user stories + Given/When/Then + FR-NNN/SC-NNN; no trailing questions |
@@ -1202,6 +1203,12 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.34.0 (2026-07-06)
+
+- **generate-optimized-spec-kit-prompt: PRD-derived parent folder name** — the output parent folder is no longer a literal `feature/`; the skill now reads the PRD and derives a short kebab-case project name itself (2-4 words, generic words like "PRD" stripped — e.g. PRD titled "일본어 학습 튜터 챗봇" → `japanese-tutor`). Output layout is now `.speckit-prompts/{prd-name}/{NNN}-{slug}/`; per-issue folder naming (issue number zero-padded to 3 digits + filename slug) is unchanged
+- **generate-optimized-spec-kit-prompt: templates + checklist synced** — `references/api_reference.md` directory structure and naming convention updated to `{prd-name}/`, and the quality checklist gains a "Parent folder named from the PRD" check (README mirror updated to match)
+- **Version bump**: 1.33.0 → 1.34.0
 
 ### v1.33.0 (2026-07-06)
 

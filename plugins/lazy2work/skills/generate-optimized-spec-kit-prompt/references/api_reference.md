@@ -4,7 +4,7 @@
 
 ```
 .speckit-prompts/
-└── feature/
+└── {prd-name}/
     └── {NNN}-{kebab-case-name}/
         ├── 01_specify.md
         ├── 02_clarify.md
@@ -16,13 +16,14 @@
 
 ## Folder Naming Convention
 
-- Format: `feature/{NNN}-{kebab-case-name}` — all feature folders live under a single `feature/` parent
+- Format: `{prd-name}/{NNN}-{kebab-case-name}` — all per-issue folders live under a single parent named after the PRD
+- `{prd-name}`: short kebab-case project name derived from the PRD title/product name (2-4 words, strip generic words like "PRD"), e.g. PRD titled "일본어 학습 튜터 챗봇" → `japanese-tutor`
 - `{NNN}`: source issue number zero-padded to 3 digits (`00` → `000`, `08` → `008`)
 - `{kebab-case-name}`: issue filename slug with the number prefix removed
-- Examples (issue file → folder):
-  - `00-env-compat-gate.md` → `feature/000-env-compat-gate/`
-  - `01-sync-chat-http.md` → `feature/001-sync-chat-http/`
-  - `03-ws-streaming-thin-graph.md` → `feature/003-ws-streaming-thin-graph/`
+- Examples (issue file → folder, PRD → `japanese-tutor`):
+  - `00-env-compat-gate.md` → `japanese-tutor/000-env-compat-gate/`
+  - `01-sync-chat-http.md` → `japanese-tutor/001-sync-chat-http/`
+  - `03-ws-streaming-thin-graph.md` → `japanese-tutor/003-ws-streaming-thin-graph/`
 
 ## 01_specify.md Template
 
