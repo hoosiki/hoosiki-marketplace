@@ -32,17 +32,29 @@
 ## Purpose (Why)
 {2-3 sentences}
 
-## Users (Who)
-- {Persona}: {goal}
+## User Stories (prioritized, official spec-template format)
 
-## Core Features (What)
-1. {Feature 1}
-2. {Feature 2}
-...
+### US1 - {title} (Priority: P1)
 
-## User Scenarios
+{plain-language user journey}
 
-### Happy Path
+**Independent Test**: {how this story is verified on its own}
+
+**Acceptance Scenarios**:
+
+1. **Given** {initial state}, **When** {action}, **Then** {expected outcome}
+
+### US2 - {title} (Priority: P2)
+
+{plain-language user journey}
+
+**Independent Test**: {how this story is verified on its own}
+
+**Acceptance Scenarios**:
+
+1. **Given** {initial state}, **When** {action}, **Then** {expected outcome}
+
+## User Workflow
 
 {1-2 sentence explanation of the user workflow}
 
@@ -54,21 +66,25 @@ flowchart TD
     C -->|No| E[{error handling}]
 ```
 
-1. {step}
+## Edge Cases
 
-### Error: {error name}
-1. {step}
+- What happens when {boundary condition}?
+- How does the system handle {error scenario}?
+
+## Functional Requirements
+
+- **FR-001**: System MUST {specific capability}
+- **FR-002**: System MUST {capability} [NEEDS CLARIFICATION: {open question}]
 
 ## Success Criteria
-- {measurable criterion}
+
+- **SC-001**: {measurable, technology-agnostic metric}
 
 ## Constraints
 - {constraint}
 
 ## Out of Scope
 - {exclusion}
-
-What questions do you have?
 ```
 
 ## 02_clarify.md Template
@@ -144,19 +160,21 @@ Explicit Exclusions:
 ```markdown
 /speckit.tasks
 
-Task Classification:
+Task Format (official): `[ID] [P?] [Story] Description with exact file path`
 - Each task = 1 git commit
-- [MODIFY] existing file, [NEW] new file, [TEST] test
+- [P] = parallelizable (different files, no dependencies)
+- [USn] = user story label from the spec (US1, US2, ...)
 
-Phase 1 (Foundation):
-  Task 1 [{tag}]: {file} — {description}
-  Task 2 [{tag}]: {file} — {description}
+Phase 1 (Setup):
+  - [ ] T001 {description} in {file path}
 
-Phase 2 (Integration):
-  Task 3 [{tag}]: {file} — {description}
+Phase 2 (Foundational — blocks all user stories):
+  - [ ] T002 {description} in {file path}
+  - [ ] T003 [P] {description} in {file path}
 
-Phase 3 (Testing):
-  Task 4 [{tag}]: {description}
+Phase 3+ (one phase per user story, priority order):
+  - [ ] T004 [P] [US1] {description} in {file path}
+  - [ ] T005 [US1] {description} in {file path}
 
 Dependencies:
 - {dependency info}

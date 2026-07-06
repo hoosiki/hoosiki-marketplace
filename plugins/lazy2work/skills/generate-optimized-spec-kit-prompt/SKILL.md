@@ -65,10 +65,10 @@ For each issue file (in issue-number order), generate all 6 prompts following st
 - `/speckit.implement` ← rules only, as before.
 
 **Critical rules:**
-- `/speckit.specify` — WHAT + WHY only. Zero tech references. End with "What questions do you have?"
+- `/speckit.specify` — WHAT + WHY only. Zero tech references. Official spec-template structure (prioritized user stories with Independent Test, Given/When/Then scenarios, `FR-NNN`/`SC-NNN`); mark unknowns `[NEEDS CLARIFICATION]` — no trailing questions.
 - `/speckit.clarify` — Auto-accept recommended options to resolve spec ambiguities before planning.
 - `/speckit.plan` — HOW only. Tech stack, architecture, file paths. No feature requirements.
-- `/speckit.tasks` — ORDER only. Sequence, deps, tags `[NEW]`/`[MODIFY]`/`[TEST]`. No tech decisions.
+- `/speckit.tasks` — ORDER only. Sequence, deps, official `[ID] [P?] [Story]` task lines with exact file paths. No tech decisions.
 - `/speckit.implement` — RULES only. Scope `--tasks N-M`, commit strategy, failure behavior. No design changes.
 - `/sc:git commit` — Commit after implementation completes.
 
@@ -128,11 +128,11 @@ After generating all prompts, verify each feature against:
 | Folder number matches issue number | `00-env-compat-gate.md` → `feature/000-env-compat-gate/` |
 | Issue acceptance criteria appear in tasks | Every criterion maps to a task or success criterion |
 | /speckit.specify has no tech terms | Tech-neutral (survives stack change) |
-| /speckit.specify ends with "What questions do you have?" | Always present |
+| /speckit.specify uses official spec-template structure | Prioritized user stories + Given/When/Then + FR-NNN/SC-NNN; no trailing questions |
 | /speckit.specify has Out of Scope section | Prevents AI scope creep |
 | /speckit.plan references specific file paths | Not vague "follow patterns" |
 | /speckit.plan has explicit exclusions | Prevents AI adding Docker/CI/CD |
-| /speckit.tasks uses `[NEW]`/`[MODIFY]`/`[TEST]` tags | Every task tagged |
+| /speckit.tasks uses official `[ID] [P?] [Story]` format | Exact file path in every task line |
 | /speckit.tasks has 1 task = 1 commit size | Not too large |
 | /speckit.implement uses `--tasks N-M` | Never all tasks at once |
 | /speckit.implement has failure behavior | Stop and report on failure |

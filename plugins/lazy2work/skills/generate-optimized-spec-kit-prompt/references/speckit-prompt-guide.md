@@ -13,21 +13,23 @@
 
 ## /speckit.specify — Required Fields
 
+Aligned with the official spec-template mandatory sections:
+
 1. Feature name + one-line description
 2. Purpose (Why)
-3. Users (Who) — persona + goal
-4. Core features (What) — numbered list
-5. User scenarios — happy path + error paths
-6. Success criteria — measurable
-7. Constraints — business/regulatory
-8. Out of Scope — explicit
-9. "What questions do you have?" — always end with this
+3. User stories — prioritized (P1, P2, P3...), each independently testable with an **Independent Test** statement
+4. Acceptance scenarios — **Given/When/Then** format per user story
+5. Edge cases — boundary conditions and error scenarios
+6. Functional requirements — numbered `FR-NNN` ("System MUST ..."); mark unknowns as `[NEEDS CLARIFICATION: ...]`
+7. Success criteria — numbered `SC-NNN`, measurable and technology-agnostic
+8. Constraints — business/regulatory
+9. Out of Scope — explicit
 
-**Rules**: WHAT & WHY only. No HOW. Tech-neutral (spec survives stack change).
+**Rules**: WHAT & WHY only. No HOW. Tech-neutral (spec survives stack change). Do NOT append trailing questions ("What questions do you have?") — the official flow resolves ambiguity via `/speckit.clarify`, and open unknowns are marked inline with `[NEEDS CLARIFICATION]`.
 
 ## /speckit.clarify — Auto-Accept Mode
 
-1. Scans spec for ambiguities across 11 categories
+1. Scans spec for ambiguities across the official 10-category taxonomy (Functional Scope & Behavior, Domain & Data Model, Interaction & UX Flow, Non-Functional Quality Attributes, Integration & External Dependencies, Edge Cases & Failure Handling, Constraints & Tradeoffs, Terminology & Consistency, Completion Signals, Misc/Placeholders)
 2. Generates up to 5 clarification questions
 3. Automatically selects recommended/suggested options (no user input needed)
 4. Integrates answers into the spec
@@ -52,7 +54,7 @@
 3. Dependencies — predecessor tasks
 4. Parallel hints — `[P]` marker for independent tasks
 5. TDD flag — test-first or test-after
-6. Tags — `[MODIFY]` existing file, `[NEW]` new file, `[TEST]` test
+6. Task line format — official `[ID] [P?] [Story]` (e.g., `- [ ] T012 [P] [US1] Create model in src/models/user.py`); every description carries an exact file path
 7. Acceptance criteria per task
 
 **Rules**: No tech decisions (already in plan). Keep tasks small.

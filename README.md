@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.32.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.33.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.32.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
+| [**lazy2work**](plugins/lazy2work/) | 1.33.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
 
 ---
 
@@ -344,13 +344,13 @@ Every generated feature is verified against:
 | Folder number matches issue number | `00-env-compat-gate.md` → `feature/000-env-compat-gate/` |
 | Issue acceptance criteria appear in tasks | Every criterion maps to a task or success criterion |
 | /speckit.specify has no tech terms | Tech-neutral (survives stack change) |
-| /speckit.specify ends with "What questions do you have?" | Always present |
+| /speckit.specify uses official spec-template structure | Prioritized user stories + Given/When/Then + FR-NNN/SC-NNN; no trailing questions |
 | /speckit.specify has Out of Scope section | Prevents AI scope creep |
 | /speckit.specify Mermaid has no tech terms | No Django, PostgreSQL, etc. in nodes |
 | /speckit.plan references specific file paths | Not vague "follow patterns" |
 | /speckit.plan has architecture + API sequence diagrams | Mermaid with explanation text |
 | /speckit.plan has explicit exclusions | Prevents AI adding Docker/CI/CD |
-| /speckit.tasks uses `[NEW]`/`[MODIFY]`/`[TEST]` tags | Every task tagged |
+| /speckit.tasks uses official `[ID] [P?] [Story]` format | Exact file path in every task line |
 | /speckit.tasks has 1 task = 1 commit size | Not too large |
 | /speckit.implement uses `--tasks N-M` | Never all tasks at once |
 | /speckit.implement has failure behavior | Stop and report on failure |
@@ -1202,6 +1202,16 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.33.0 (2026-07-06)
+
+- **generate-optimized-spec-kit-prompt: align prompt rules with official Spec Kit** — the reference guide was verified claim-by-claim against `github/spec-kit` main (command prompt sources `templates/commands/*.md` + `spec-template.md`/`tasks-template.md`); validation findings fixed:
+  - `/speckit.specify` required fields and the 01_specify template now follow the official spec-template **mandatory structure**: prioritized user stories (P1/P2/P3) with an **Independent Test** statement, **Given/When/Then** acceptance scenarios, `FR-NNN` functional requirements ("System MUST ..."), measurable technology-agnostic `SC-NNN` success criteria, and Edge Cases. Open unknowns are marked inline with `[NEEDS CLARIFICATION: ...]`
+  - **Removed the custom "What questions do you have?" trailing question** from specify prompts — ambiguity resolution belongs to `/speckit.clarify` in the official flow, so trailing questions are now an explicit anti-rule
+  - `/speckit.tasks` switched from local `[NEW]`/`[MODIFY]`/`[TEST]` tags to the **official `[ID] [P?] [Story]` task-line format** with exact file paths (e.g. `- [ ] T012 [P] [US1] Create model in src/models/user.py`); the 04_tasks template now follows the official phase layout (Setup → Foundational (blocks all user stories) → one phase per user story in priority order)
+  - `/speckit.clarify` docs corrected: the official ambiguity taxonomy has **10 categories, not 11** (all 10 now listed: Functional Scope & Behavior, Domain & Data Model, Interaction & UX Flow, Non-Functional Quality Attributes, Integration & External Dependencies, Edge Cases & Failure Handling, Constraints & Tradeoffs, Terminology & Consistency, Completion Signals, Misc/Placeholders)
+  - SKILL.md critical rules + quality checklist (and the README mirror) synced to the new rules so the skill is internally consistent
+- **Version bump**: 1.32.0 → 1.33.0
 
 ### v1.32.0 (2026-07-06)
 
