@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.31.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.32.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.31.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
+| [**lazy2work**](plugins/lazy2work/) | 1.32.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
 
 ---
 
@@ -51,7 +51,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 | **up2date** | `/lazy2work:up2date` | Unified updater — checks and updates Homebrew packages, Claude Code skills/plugins, and SuperClaude commands in one go (`--brew` for Homebrew only, `--skill` for skills only). The `--skill` path also runs **`npx skills@latest update -g -y`** to refresh global agent skills (e.g. mattpocock/skills) and **prunes skills deleted upstream** by parsing the updater's warning and calling `npx skills remove` (opt out with `--no-skill-prune`) |
 | **analyze-arxiv** | `/lazy2work:analyze-arxiv` | Study arXiv papers — fetches paper content, generates structured summaries, and creates prerequisite knowledge documents for deeper understanding |
 | **constitution-generator** | `/lazy2work:constitution-generator` | Generate optimized `/speckit.constitution` prompts — gathers project info (tech stack, architecture, conventions), detects brownfield patterns, and outputs a verifiable constitution with validation checklist |
-| **generate-optimized-spec-kit-prompt** | `/lazy2work:generate-optimized-spec-kit-prompt` | Generate complete Spec Kit prompts (specify/clarify/plan/tasks/implement/commit) for all features — splits project into 1-5 day features, generates 6-stage prompts per feature with Mermaid diagrams and auto-clarify/auto-commit steps |
+| **generate-optimized-spec-kit-prompt** | `/lazy2work:generate-optimized-spec-kit-prompt` | Generate complete Spec Kit prompts (specify/clarify/plan/tasks/implement/commit) from a PRD + pre-sliced issue files — 1 issue = 1 feature (no re-slicing), 6-stage prompts per feature with Mermaid diagrams and auto-clarify/auto-commit steps |
 | **pyright-setup** | `/lazy2work:pyright-setup` | Auto-configure Pyright for Python projects — detects Python version from venv, adds `[tool.pyright]` to pyproject.toml, resolves "Import could not be resolved" LSP errors in Neovim/VS Code |
 | **apply-all-sc-save** | `/lazy2work:apply-all-sc-save` | Broadcast `/sc:save` to all Claude Code panes in the current tmux session — auto-detects Claude panes, excludes self, supports `--dry-run`, `--all-sessions`, and custom commands |
 | **fix-mermaid** | `/lazy2work:fix-mermaid` | Fix Markdown rendering issues that break Mermaid diagrams or pandoc PDF conversion — Mermaid v11 syntax (reserved words, Unicode/Langium issues, message escaping) **and** pandoc PDF pitfalls (blank-line compliance before lists/tables/fences as auto-fixed errors, long-mixed-cell overflow as warnings, always-on Unicode glyph map covering U+2212/U+2717/U+2718, **currency-dollar auto-escape** for `$100`/`$76.4억` that prevents `Bad math environment delimiter` errors, **unsafe-inline-code warnings** for `` `pass^k` ``-style content that collides with the `\seqsplit` wrapper and causes `Missing number, treated as zero`, **closing-dollar-trailing-space auto-fix** for `$\mathcal{H}_1 = $ rest` patterns that violate pandoc's `tex_math_dollars` rule and cause `\symcal allowed only in math mode`, plus opt-in **`--latin1-normalize`** for Latin-1 Supplement diacritics like `á é ñ ü ß`). Three bundled Python scripts (`fix_mermaid.py`, `fix_pandoc_blanks.py`, `validate_mermaid.py`) with lint / `--fix` / `--json` modes, plus optional **`--with-mmdc` feedback loop** that renders each diagram with Mermaid CLI and iterates targeted fixes until clean |
@@ -269,25 +269,23 @@ Validation checklist:
 <details>
 <summary><strong>generate-optimized-spec-kit-prompt — Usage Examples</strong></summary>
 
-**Generate Spec Kit prompts from a constitution file:**
+**Generate Spec Kit prompts from a PRD + pre-sliced issues directory:**
 
 ```
-/lazy2work:generate-optimized-spec-kit-prompt @path/to/speckit.constitution
+/lazy2work:generate-optimized-spec-kit-prompt @docs/prd-japanese-tutor.md @docs/issues
 ```
 
-**Generate from a PRD or project description:**
+Inputs:
 
-```
-/lazy2work:generate-optimized-spec-kit-prompt @path/to/project-description.md
-```
+- **PRD file** — global context shared by every feature: problem statement, user stories, implementation/testing decisions, out of scope
+- **Issues directory** — pre-sliced vertical features, one `NN-slug.md` file per feature (the first issue is typically the environment/prefactor setup slice); a `README.md` in the directory is used only as a dependency-order index, never as a feature
 
 Workflow:
 
-1. Reads project information from the provided file
+1. Reads the PRD and every issue file — **1 issue file = 1 feature**, never merged or re-split
 2. Extracts Mermaid diagrams and classifies them by stage placement
-3. Decomposes into features (1-5 day units, independently testable)
-4. Generates 6 prompts per feature following strict stage separation
-5. Writes output to `.speckit-prompts/` with feature-based folder structure
+3. Generates 6 prompts per feature following strict stage separation (specify ← issue scope + acceptance criteria + referenced PRD user stories; plan ← PRD decisions + issue tech details; tasks ← issue acceptance criteria + blocked-by)
+4. Writes output to `.speckit-prompts/feature/{NNN}-{slug}/` folders (issue number zero-padded to 3 digits)
 
 #### 6-Stage Role Separation
 
@@ -320,18 +318,21 @@ Placement test: "Does this diagram remain valid if the tech stack changes?" — 
 
 ```
 .speckit-prompts/
-├── feature-001-user-authentication/
-│   ├── 01_specify.md
-│   ├── 02_clarify.md
-│   ├── 03_plan.md
-│   ├── 04_tasks.md
-│   ├── 05_implement.md
-│   └── 06_commit.md
-├── feature-002-dashboard/
-│   └── ...
-└── feature-003-api-endpoints/
-    └── ...
+└── feature/
+    ├── 000-env-compat-gate/
+    │   ├── 01_specify.md
+    │   ├── 02_clarify.md
+    │   ├── 03_plan.md
+    │   ├── 04_tasks.md
+    │   ├── 05_implement.md
+    │   └── 06_commit.md
+    ├── 001-sync-chat-http/
+    │   └── ...
+    └── 002-persistence-auth/
+        └── ...
 ```
+
+Folder naming: `feature/{NNN}-{kebab-case-name}` — `{NNN}` is the source issue number zero-padded to 3 digits (`00-env-compat-gate.md` → `feature/000-env-compat-gate/`).
 
 #### Quality Checklist
 
@@ -339,6 +340,9 @@ Every generated feature is verified against:
 
 | Check | Rule |
 |-------|------|
+| 1 issue file = 1 feature folder | No merging or re-splitting of issues |
+| Folder number matches issue number | `00-env-compat-gate.md` → `feature/000-env-compat-gate/` |
+| Issue acceptance criteria appear in tasks | Every criterion maps to a task or success criterion |
 | /speckit.specify has no tech terms | Tech-neutral (survives stack change) |
 | /speckit.specify ends with "What questions do you have?" | Always present |
 | /speckit.specify has Out of Scope section | Prevents AI scope creep |
@@ -1198,6 +1202,13 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.32.0 (2026-07-06)
+
+- **generate-optimized-spec-kit-prompt: PRD + pre-sliced issues input** — the skill now takes two inputs (a PRD file for global context and an issues directory of vertically sliced features, one `NN-slug.md` per feature with the first issue as the environment/prefactor slice) instead of a single constitution/project file. The "Decompose into Features" step is removed — **1 issue file = 1 feature**, never merged or re-split; the issues `README.md` is treated as a dependency-order index, not a feature
+- **generate-optimized-spec-kit-prompt: input → stage mapping** — `/speckit.specify` ← issue "What to build" + acceptance criteria + referenced PRD user stories (tech terms stripped to stay tech-neutral); `/speckit.plan` ← PRD implementation/testing decisions + issue tech details; `/speckit.tasks` ← issue acceptance criteria as task acceptance and issue "Blocked by" as dependency context
+- **generate-optimized-spec-kit-prompt: new output layout** — feature folders now live under a single `feature/` parent as `.speckit-prompts/feature/{NNN}-{slug}/` with `{NNN}` = source issue number zero-padded to 3 digits (`00-env-compat-gate.md` → `feature/000-env-compat-gate/`), replacing the flat `feature-{NNN}-{name}/` prefix layout. Quality checklist gains 3 checks: 1:1 issue↔folder mapping, folder number = issue number, acceptance criteria present in tasks
+- **Version bump**: 1.31.0 → 1.32.0
 
 ### v1.31.0 (2026-07-06)
 

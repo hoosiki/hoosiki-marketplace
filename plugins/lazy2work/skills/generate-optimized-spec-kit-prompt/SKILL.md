@@ -1,30 +1,42 @@
 ---
 name: generate-optimized-spec-kit-prompt
-description: Generate optimized GitHub Spec Kit prompts (/speckit.specify, /speckit.plan, /speckit.tasks, /speckit.implement) for all features of a project. Use when user provides project information via @ file path and wants complete Spec Kit prompts generated. Triggers on "speckit prompts", "generate spec kit", "feature breakdown", "specify plan tasks implement", "SDD prompts", or when user provides a constitution/project file and wants full spec-driven development prompts. Assumes constitution already exists.
+description: Generate optimized GitHub Spec Kit prompts (/speckit.specify, /speckit.plan, /speckit.tasks, /speckit.implement) for all pre-sliced feature issues of a project. Use when user provides a PRD file plus an issues directory (vertically sliced features, one file per feature) via @ file paths and wants complete Spec Kit prompts generated. Triggers on "speckit prompts", "generate spec kit", "specify plan tasks implement", "SDD prompts", or when user provides a PRD + issues folder and wants full spec-driven development prompts. Assumes constitution already exists and features are already decomposed.
 ---
 
 # Generate Optimized Spec Kit Prompts
 
-Split a project into features and generate optimized `/speckit.specify`, `/speckit.clarify`, `/speckit.plan`, `/speckit.tasks`, `/speckit.implement`, and `/sc:git commit` prompts for each feature. Each feature gets its own folder with 6 individual prompt files.
+Generate optimized `/speckit.specify`, `/speckit.clarify`, `/speckit.plan`, `/speckit.tasks`, `/speckit.implement`, and `/sc:git commit` prompts for each pre-sliced feature issue. Features arrive already decomposed (vertical slices in an issues directory); this skill does NOT re-split them. Each issue gets its own folder with 6 individual prompt files.
 
 ## Input
 
-User provides project information via `@` file path. This can be:
-- A constitution file (`speckit.constitution`)
-- A project description / PRD document
-- Any file describing the project's scope, tech stack, and goals
+User provides two inputs via `@` file paths:
+
+1. **PRD file** (e.g. `docs/prd-japanese-tutor.md`) — global context shared by every feature: problem statement, user stories, implementation/testing decisions, out of scope.
+2. **Issues directory** (e.g. `docs/issues/`) — pre-sliced vertical features, **one file per feature**, named `NN-slug.md` (e.g. `00-env-compat-gate.md`, `01-sync-chat-http.md`). The first issue is typically the environment/prefactor setup slice. A `README.md` in this directory is an index (dependency order, blocked-by graph) — use it for ordering, never treat it as a feature.
+
+**1 issue file = 1 feature.** Do not merge, split, or re-decompose issues.
 
 ## Workflow
 
-### 1. Read and Analyze Project Info
+### 1. Read and Analyze Inputs
 
-Read the provided file(s). Extract:
+Read the PRD and every issue file (use the issues `README.md` only for ordering/dependency info).
+
+From the **PRD**, extract:
 - Project name and purpose
 - Tech stack and versions
-- Architecture decisions
+- Architecture decisions and testing policy
 - Existing code patterns (brownfield)
-- Constraints and exclusions
-- Mermaid diagrams — classify each diagram for stage placement:
+- Constraints and exclusions (Out of Scope)
+
+From **each issue file**, extract:
+- Feature name (from filename slug) and number (from filename prefix)
+- What to build (scope of the slice)
+- Acceptance criteria
+- Blocked by (dependency on earlier issues)
+- Referenced user story numbers (resolve against the PRD)
+
+From either input, collect Mermaid diagrams — classify each diagram for stage placement:
 
 **Mermaid Diagram Classification** (placement test: "Does this diagram remain valid if the tech stack changes?"):
 
@@ -42,19 +54,15 @@ Read the provided file(s). Extract:
 | Deployment structure (Docker, cloud) | **plan** | HOW — infrastructure |
 | Task dependency (gantt) | **tasks** | ORDER — rarely used, text preferred |
 
-### 2. Decompose into Features
+### 2. Generate 6-Stage Prompts per Feature
 
-Split the project into features following these rules:
-- Each feature: 1 person, 1-5 days to complete
-- Each feature: independently testable and deployable
-- Name format: short imperative phrase (e.g., "User Authentication", "Markdown Rendering")
-- Order: foundation features first, then dependent features
+For each issue file (in issue-number order), generate all 6 prompts following strict stage separation. Read [references/speckit-prompt-guide.md](references/speckit-prompt-guide.md) for the rules on what each stage MUST and MUST NOT include.
 
-Output a numbered feature list for confirmation awareness before proceeding.
-
-### 3. Generate 6-Stage Prompts per Feature
-
-For each feature, generate all 6 prompts following strict stage separation. Read [references/speckit-prompt-guide.md](references/speckit-prompt-guide.md) for the rules on what each stage MUST and MUST NOT include.
+**Input → stage mapping:**
+- `/speckit.specify` ← issue "What to build" + acceptance criteria + the PRD user stories the issue references. Strip tech terms from issue text (keep it tech-neutral).
+- `/speckit.plan` ← PRD implementation/testing decisions + the issue's technical details.
+- `/speckit.tasks` ← issue acceptance criteria as task acceptance; issue "Blocked by" as dependency context (assume blockers are already implemented).
+- `/speckit.implement` ← rules only, as before.
 
 **Critical rules:**
 - `/speckit.specify` — WHAT + WHY only. Zero tech references. End with "What questions do you have?"
@@ -72,40 +80,41 @@ For each feature, generate all 6 prompts following strict stage separation. Read
 - `/speckit.implement` — No Mermaid diagrams.
 - One diagram = one concern. Do not combine architecture + sequence + ERD into a single Mermaid block.
 
-### 4. Write Output Files
+### 3. Write Output Files
 
 Create output directory and write files. See [references/api_reference.md](references/api_reference.md) for the exact output template.
 
 **Directory**: `.speckit-prompts/` (project root)
 
-**Structure**: One folder per feature, each containing 6 stage files.
+**Structure**: All feature folders live under a single `feature/` parent. One folder per issue, each containing 6 stage files.
 
 ```
 .speckit-prompts/
-├── feature-001-user-authentication/
-│   ├── 01_specify.md
-│   ├── 02_clarify.md
-│   ├── 03_plan.md
-│   ├── 04_tasks.md
-│   ├── 05_implement.md
-│   └── 06_commit.md
-├── feature-002-dashboard/
-│   ├── 01_specify.md
-│   ├── 02_clarify.md
-│   ├── 03_plan.md
-│   ├── 04_tasks.md
-│   ├── 05_implement.md
-│   └── 06_commit.md
-└── feature-003-api-endpoints/
-    ├── 01_specify.md
-    ├── 02_clarify.md
-    ├── 03_plan.md
-    ├── 04_tasks.md
-    ├── 05_implement.md
-    └── 06_commit.md
+└── feature/
+    ├── 000-env-compat-gate/
+    │   ├── 01_specify.md
+    │   ├── 02_clarify.md
+    │   ├── 03_plan.md
+    │   ├── 04_tasks.md
+    │   ├── 05_implement.md
+    │   └── 06_commit.md
+    ├── 001-sync-chat-http/
+    │   ├── 01_specify.md
+    │   ├── 02_clarify.md
+    │   ├── 03_plan.md
+    │   ├── 04_tasks.md
+    │   ├── 05_implement.md
+    │   └── 06_commit.md
+    └── 002-persistence-auth/
+        ├── 01_specify.md
+        ├── 02_clarify.md
+        ├── 03_plan.md
+        ├── 04_tasks.md
+        ├── 05_implement.md
+        └── 06_commit.md
 ```
 
-**Folder naming**: `feature-{NNN}-{kebab-case-name}` (e.g., `feature-001-user-authentication`)
+**Folder naming**: `feature/{NNN}-{kebab-case-name}` — `{NNN}` is the source issue number zero-padded to 3 digits (`00` → `000`, `08` → `008`), `{kebab-case-name}` is the issue filename slug with the number prefix removed (e.g. `00-env-compat-gate.md` → `feature/000-env-compat-gate/`).
 
 **File content**: Each file contains only the prompt for that stage. Do not include frontmatter (YAML `---` blocks). The first line of each file must start directly with the command (`/speckit.specify`, `/speckit.clarify`, `/speckit.plan`, `/speckit.tasks`, `/speckit.implement`, or `/sc:git`).
 
@@ -115,6 +124,9 @@ After generating all prompts, verify each feature against:
 
 | Check | Rule |
 |-------|------|
+| 1 issue file = 1 feature folder | No merging or re-splitting of issues |
+| Folder number matches issue number | `00-env-compat-gate.md` → `feature/000-env-compat-gate/` |
+| Issue acceptance criteria appear in tasks | Every criterion maps to a task or success criterion |
 | /speckit.specify has no tech terms | Tech-neutral (survives stack change) |
 | /speckit.specify ends with "What questions do you have?" | Always present |
 | /speckit.specify has Out of Scope section | Prevents AI scope creep |

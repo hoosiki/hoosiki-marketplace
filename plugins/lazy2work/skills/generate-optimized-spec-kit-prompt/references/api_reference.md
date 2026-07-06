@@ -4,24 +4,25 @@
 
 ```
 .speckit-prompts/
-├── feature-{NNN}-{kebab-case-name}/
-│   ├── 01_specify.md
-│   ├── 02_clarify.md
-│   ├── 03_plan.md
-│   ├── 04_tasks.md
-│   ├── 05_implement.md
-│   └── 06_commit.md
+└── feature/
+    └── {NNN}-{kebab-case-name}/
+        ├── 01_specify.md
+        ├── 02_clarify.md
+        ├── 03_plan.md
+        ├── 04_tasks.md
+        ├── 05_implement.md
+        └── 06_commit.md
 ```
 
 ## Folder Naming Convention
 
-- Format: `feature-{NNN}-{kebab-case-name}`
-- `{NNN}`: 3-digit zero-padded number (001, 002, ...)
-- `{kebab-case-name}`: feature name converted to kebab-case
-- Examples:
-  - `feature-001-user-authentication`
-  - `feature-002-markdown-rendering`
-  - `feature-003-api-endpoints`
+- Format: `feature/{NNN}-{kebab-case-name}` — all feature folders live under a single `feature/` parent
+- `{NNN}`: source issue number zero-padded to 3 digits (`00` → `000`, `08` → `008`)
+- `{kebab-case-name}`: issue filename slug with the number prefix removed
+- Examples (issue file → folder):
+  - `00-env-compat-gate.md` → `feature/000-env-compat-gate/`
+  - `01-sync-chat-http.md` → `feature/001-sync-chat-http/`
+  - `03-ws-streaming-thin-graph.md` → `feature/003-ws-streaming-thin-graph/`
 
 ## 01_specify.md Template
 

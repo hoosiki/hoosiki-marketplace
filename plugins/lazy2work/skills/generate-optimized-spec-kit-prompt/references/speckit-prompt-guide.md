@@ -73,11 +73,12 @@ Commits all changes after implementation completes. This is a fixed prompt — n
 
 **Rules**: Only commit after successful implementation. The commit message is auto-generated based on changes.
 
-## Feature Sizing
+## Feature Source (pre-sliced issues)
 
-- 1 person, 1-5 days to complete
-- If larger, split into sub-features
-- Each feature should be independently deployable
+- Features arrive as issue files (`NN-slug.md`), one vertical slice each — do NOT re-split or merge them
+- The first issue (e.g. `00-env-*`) is the environment/prefactor setup slice; treat it as a normal feature
+- Use each issue's "Blocked by" for implementation order and task dependency context
+- Map issue acceptance criteria → measurable success criteria (specify) and per-task acceptance (tasks)
 
 ## Mermaid Diagram Placement
 
@@ -121,4 +122,4 @@ Commits all changes after implementation completes. This is a fixed prompt — n
 | Skip output review | Manual review after each stage |
 | Vague success criteria ("fast") | Measurable ("< 1 second") |
 | Missing Out of Scope | Always specify to prevent AI scope creep |
-| Feature too large | Split to 1-5 day units |
+| Re-slicing pre-sliced issues | Keep 1 issue file = 1 feature |
