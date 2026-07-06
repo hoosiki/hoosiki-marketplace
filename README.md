@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.29.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.30.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.29.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and a PRD-to-Linear hierarchy publisher |
+| [**lazy2work**](plugins/lazy2work/) | 1.30.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
 
 ---
 
@@ -44,7 +44,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 - Python 3.10+ (for skills scripts and webhook hooks)
 - Node.js 18+ (for MCP setup commands that use `npx`)
 
-### Skills (10)
+### Skills (11)
 
 | Skill | Command | Description |
 |-------|---------|-------------|
@@ -58,6 +58,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 | **hamilton-harness** | `/lazy2work:hamilton-harness` | Build Hamilton data pipelines through a spec-driven workflow — 4 modes (prompt→YAML, validate, stub+viz, modify), Pydantic schemas, Mermaid/Graphviz/Hamilton rendering, 3 domain examples (ETL/ML/RAG). Artifacts land under **`spec_build/`** (renamed from `build/` in v1.27.0 to avoid colliding with Python packaging / Sphinx / CMake build directories). Self-contained — no plugin-level hooks or rules needed |
 | **make-ppt-html** | `/lazy2work:make-ppt-html` | Convert any document (research note, report, README, storyboard) into a presentation-quality **reveal.js 5.2.1 + Tailwind CSS** single-file HTML deck with a **light↔dark theme toggle** (button + `D` key + localStorage). Follows bundled design guidelines — assertion-style slide titles, 60-30-10 single-accent color system, WCAG-verified contrast pairs, Pretendard, speaker notes, `?print-pdf` export — and ships a browser-verified `template.html` that pre-solves the reveal×Tailwind integration traps (Meyer-reset border-style kill, `Reveal.sync()` background re-theming, print-mode toggle hiding, dark-variant class pairing) |
 | **from-grill-me-to-linear** | `/lazy2work:from-grill-me-to-linear` | Publish grill-me/grill-with-docs outputs (PRD + vertical-slice issue files) into a Linear team as a **Project→Milestone→Issue→Sub-issue** hierarchy via the linear-server MCP — filters non-issue noise (user stories, decisions, glossary → project brief/links), preserves the dependency DAG with `blocked-by` relations (no false milestone serialization), and enforces **dry-run approval + idempotent upsert** (query-reuse-update so re-runs never duplicate labels or issues). Requires the Linear MCP integration |
+| **from-speckit-to-linear** | `/lazy2work:from-speckit-to-linear` | Publish GitHub Spec Kit outputs (`spec.md` + `plan.md` + `tasks.md`) into a Linear team as a **Project→Milestone→Issue→Sub-issue** hierarchy via the linear-server MCP — **mirrors the tasks.md phase structure instead of re-slicing** (Setup+Foundational → an `M0 Foundation` milestone that blocks every story, User Stories P1/P2/P3 → milestones whose "done" = each story's Independent Test, tasks → verb-first issues keyed by their **T-ID for idempotent re-runs**), keeps the 40–50 FRs as acceptance-criteria checklists instead of issues, and blocks publication while `[NEEDS CLARIFICATION]` markers remain (routes to `/speckit.clarify` first). Sibling of from-grill-me-to-linear — same publish engine, SpecKit-specific parser. Requires the Linear MCP integration |
 
 <details>
 <summary><strong>up2date — Usage Examples</strong></summary>
@@ -869,6 +870,53 @@ The complexity score is logged to `spec_build/metrics/session-<timestamp>.json` 
 
 </details>
 
+<details>
+<summary><strong>from-speckit-to-linear — Usage Examples</strong></summary>
+
+**Purpose** — Spec Kit finishes the slicing work (`/speckit.specify` → vertical User Stories, `/speckit.tasks` → per-story tasks + an isolated Foundational phase), but nothing carries that structure into Linear: `/speckit.taskstoissues` produces flat GitHub issues, and GitHub↔Linear sync drops milestones/hierarchy/blocked-by entirely. This skill is the structure-preserving path: it **mirrors** the phase structure into a **Project→Milestone→Issue→Sub-issue** hierarchy under a team you name — it never re-slices.
+
+**Prerequisite** — the **linear-server MCP** integration must be connected (the skill verifies with `list_teams` and stops with guidance if unavailable).
+
+**Publish a spec directory to a Linear team:**
+
+```
+/lazy2work:from-speckit-to-linear test 팀에 @specs/001-user-auth/ 를 linear로 정리해서 발행해줘
+```
+
+**Natural-language trigger (no slash command needed):**
+
+```
+이 speckit 결과물(spec.md, tasks.md)을 WertIntelligence 팀 아래 linear에 기록해줘 @specs/002-payments/
+```
+
+**What lands where** (mirror, don't re-slice — ❌ rows never become issues):
+
+| Spec Kit artifact | → Linear |
+|---|---|
+| Feature spec (`spec.md`) | **Project** (spec/plan linked, single owner) |
+| **Phase Setup + Phase Foundational** | **Milestone "M0 Foundation"** — the only legal horizontal slice; blocks every story; close first |
+| User Story P1 (🎯 MVP) / P2 / P3 | **Milestones M1/M2/M3** — "done" = each story's Independent Test criterion |
+| Task line `- [ ] T001 [P] [US1] …` | **Issue** in the story's milestone, verb-first title, `SpecKit: T001` footer |
+| `[P]` splits / scaffold detail | **Sub-issue** (1 level max) — only when independently tracked |
+| Functional Requirements (40–50/spec) | ❌ → **acceptance-criteria checklists** inside issue bodies |
+| User-story narration | ❌ → milestone name/description + project brief |
+| `plan.md` / `constitution.md` | ❌ → project document links (files stay SSOT) |
+| Story dependencies | **blocked-by relations** (DAG, topological publish; parallel stories stay parallel) |
+
+**Safety rails:**
+
+- **Gate ①** — blocks publication while `[NEEDS CLARIFICATION]` markers remain (routes to `/speckit.clarify` first)
+- **Gate ②** — prints the full create/update/reuse plan (with T-IDs) as a table and waits for approval before any write
+- **T-ID idempotency** — issues carry a `SpecKit: T001` footer, so re-runs match by stable ID even after titles get rephrased; existing projects/milestones/labels are reused (guards against real-world label drift like `type:bug` vs `Bug` coexisting)
+- **Scale-aware** — tiny specs (1–2 stories) skip milestones in favor of `story:USn` labels; multi-spec features get offered an Initiative
+- **Resumable** — every write's returned ID is logged, so an interrupted run continues as updates
+
+**Output** — a summary report: created/updated/reused counts, the project URL, dependency edges, the **T-ID → Linear-ID mapping table**, and where each filtered fragment went (FR → which issue's AC, plan.md → link).
+
+> Sibling skill: [`from-grill-me-to-linear`](plugins/lazy2work/skills/from-grill-me-to-linear/SKILL.md) — same publish engine, grill-me/PRD-specific parser. Conversion rules live in this skill's [`references/mapping-rules.md`](plugins/lazy2work/skills/from-speckit-to-linear/references/mapping-rules.md).
+
+</details>
+
 ### Setup Commands (7)
 
 One-command MCP server installers accessible via `/lazy2work:setup:*`:
@@ -1150,6 +1198,14 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.30.0 (2026-07-04)
+
+- **NEW skill: from-speckit-to-linear** — publishes GitHub Spec Kit outputs (`spec.md` + `plan.md` + `tasks.md` from `/speckit.specify`/`plan`/`tasks`) into a Linear team as a **Project→Milestone→Issue→Sub-issue hierarchy** via the linear-server MCP. Takes a team name, verifies it with `list_teams`, then converts and records the Spec Kit artifacts Linear-appropriately. Triggers on "speckit을 linear에", "tasks.md를 linear로 발행", "spec을 linear에 정리", "publish spec kit to Linear" and similar phrasings. Sibling of from-grill-me-to-linear — same publish engine (two HITL gates, idempotent upsert, blocked-by DAG in topological order), SpecKit-specific parser and mapping
+- **from-speckit-to-linear: mirror, don't re-slice** — SpecKit already finished vertical slicing (User Stories) and horizontal-foundation isolation (Foundational phase), so the skill performs a structure-preserving transfer: Setup+Foundational → an **M0 Foundation milestone** that blocks every story's first issue, User Stories P1/P2/P3 → milestones whose "done" = each story's Independent Test criterion, task lines → verb-first issues, `[P]` splits/scaffold → 1-level sub-issues. Layer-based re-decomposition (Backend/Frontend/DB issues) is an enforced anti-pattern
+- **from-speckit-to-linear: SpecKit-specific rails** — parses `- [ ] T001 [P] [US1]` task lines with loose phase-header matching (SpecKit versions vary), keeps **T-IDs as the idempotency key** via a `SpecKit: T001` body footer (re-runs match by stable ID even after title rephrasing — sturdier than the title matching the grill-me sibling falls back to), folds the 40–50 FRs into acceptance-criteria checklists instead of issues, blocks publication while `[NEEDS CLARIFICATION]` markers remain (Gate ① routes to `/speckit.clarify`), and branches by scale (tiny specs skip milestones → `story:USn` labels; multi-spec features get offered an Initiative). Ships `references/mapping-rules.md` with the full conversion table, parsing rules, guardrails, and live MCP parameter notes
+- **README: from-speckit-to-linear usage examples** — added a dedicated `<details>` section covering purpose (the structure-preserving path `/speckit.taskstoissues` + GitHub sync can't provide), the linear-server MCP prerequisite, slash-command and natural-language triggers, the what-lands-where mapping table, safety rails, and the T-ID → Linear-ID report format
+- **Version bump**: 1.29.0 → 1.30.0
 
 ### v1.29.0 (2026-07-03)
 
