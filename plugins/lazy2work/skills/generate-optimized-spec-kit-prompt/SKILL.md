@@ -7,6 +7,8 @@ description: Generate optimized GitHub Spec Kit prompts (/speckit.specify, /spec
 
 Generate optimized `/speckit.specify`, `/speckit.clarify`, `/speckit.plan`, `/speckit.tasks`, `/speckit.implement`, and `/sc:git commit` prompts for each pre-sliced feature issue. Features arrive already decomposed (vertical slices in an issues directory); this skill does NOT re-split them. Each issue gets its own folder with 6 individual prompt files.
 
+It also drops a headless runner script at `<project>/utilities/speckit_pipeline.sh` that executes those generated prompts end-to-end via `claude -p` (per-stage model/effort, resume, dry-run).
+
 ## Input
 
 User provides two inputs via `@` file paths:
@@ -69,7 +71,7 @@ For each issue file (in issue-number order), generate all 6 prompts following st
 - `/speckit.clarify` — Auto-accept recommended options to resolve spec ambiguities before planning.
 - `/speckit.plan` — HOW only. Tech stack, architecture, file paths. No feature requirements.
 - `/speckit.tasks` — ORDER only. Sequence, deps, official `[ID] [P?] [Story]` task lines with exact file paths. No tech decisions.
-- `/speckit.implement` — RULES only. Scope `--tasks N-M`, commit strategy, failure behavior. No design changes.
+- `/speckit.implement` — RULES only. Run **all tasks in one pass**, commit strategy, failure behavior. No design changes.
 - `/sc:git commit` — Commit after implementation completes.
 
 **Mermaid diagram rules:**
@@ -121,6 +123,18 @@ Create output directory and write files. See [references/api_reference.md](refer
 
 **File content**: Each file contains only the prompt for that stage. Do not include frontmatter (YAML `---` blocks). The first line of each file must start directly with the command (`/speckit.specify`, `/speckit.clarify`, `/speckit.plan`, `/speckit.tasks`, `/speckit.implement`, or `/sc:git`).
 
+### 4. Drop the Headless Runner Script
+
+After writing the prompts, install the bundled pipeline runner so the user can execute all generated prompts headlessly.
+
+- **Copy** this skill's `assets/speckit_pipeline.sh` verbatim to `<project-root>/utilities/speckit_pipeline.sh` (create `utilities/` if missing). Do NOT hand-retype the ~450-line script — copy the asset file so it stays byte-for-byte correct.
+- **`chmod +x`** the destination so it is runnable.
+- If a `utilities/speckit_pipeline.sh` already exists, do not clobber it silently — diff and ask the user before overwriting.
+
+The script reads the `NNN-<slug>` feature folders under `.speckit-prompts/{prd-name}/` (the exact layout this skill just wrote) and runs each feature through `01_specify → … → 05_implement → commit` via `claude -p`. Usage: `./utilities/speckit_pipeline.sh .speckit-prompts/{prd-name}` (plus `--only`/`--from`/`--dry-run`/`--resume`/`--skip-clarify`). Per-stage model/effort defaults are opus-4-8 for reasoning stages and sonnet-5 for execution stages, overridable via env vars.
+
+> Note: the script's headless prompt tells Claude to use `uv run` for Python commands. If the target project does not use `uv`, tell the user to adjust that line (or set it via the project's `CLAUDE.md`).
+
 ## Quality Checklist
 
 After generating all prompts, verify each feature against:
@@ -129,6 +143,7 @@ After generating all prompts, verify each feature against:
 |-------|------|
 | 1 issue file = 1 feature folder | No merging or re-splitting of issues |
 | Parent folder named from the PRD | Short kebab-case project name (e.g. `japanese-tutor`), never a literal `feature` |
+| `utilities/speckit_pipeline.sh` installed | Bundled runner copied verbatim + `chmod +x` |
 | Folder number matches issue number | `00-env-compat-gate.md` → `{prd-name}/000-env-compat-gate/` |
 | Issue acceptance criteria appear in tasks | Every criterion maps to a task or success criterion |
 | /speckit.specify has no tech terms | Tech-neutral (survives stack change) |
@@ -138,7 +153,7 @@ After generating all prompts, verify each feature against:
 | /speckit.plan has explicit exclusions | Prevents AI adding Docker/CI/CD |
 | /speckit.tasks uses official `[ID] [P?] [Story]` format | Exact file path in every task line |
 | /speckit.tasks has 1 task = 1 commit size | Not too large |
-| /speckit.implement uses `--tasks N-M` | Never all tasks at once |
+| /speckit.implement runs all tasks in one pass | Execute the whole task list at once |
 | /speckit.implement has failure behavior | Stop and report on failure |
 | Success criteria are measurable | "< 1s" not "fast" |
 | /speckit.specify Mermaid has no tech terms | No Django, PostgreSQL, Redis in nodes |
@@ -149,3 +164,4 @@ After generating all prompts, verify each feature against:
 
 - **Prompt rules**: [references/speckit-prompt-guide.md](references/speckit-prompt-guide.md) — what each stage must/must not include
 - **Output format**: [references/api_reference.md](references/api_reference.md) — file naming and template
+- **Headless runner**: [assets/speckit_pipeline.sh](assets/speckit_pipeline.sh) — copy to `<project>/utilities/speckit_pipeline.sh` to execute the generated prompts via `claude -p`

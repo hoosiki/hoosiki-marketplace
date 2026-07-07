@@ -61,13 +61,13 @@ Aligned with the official spec-template mandatory sections:
 
 ## /speckit.implement — Required Fields
 
-1. Scope — `--tasks N-M` for partial impl
+1. Scope — implement all tasks in one pass (no `--tasks N-M` slicing)
 2. Commit strategy — per-task commit
 3. Code style — formatter, docstring, type hints
 4. Verification — test after each task
 5. Failure behavior — stop and report on test failure
 
-**Rules**: Never implement all tasks at once. Go back to /speckit.plan if design change needed.
+**Rules**: Implement the entire task list at once. Go back to /speckit.plan if design change needed.
 
 ## /sc:git commit
 
@@ -119,7 +119,6 @@ Commits all changes after implementation completes. This is a fixed prompt — n
 | Anti-Pattern | Correct Approach |
 |-------------|-----------------|
 | Tech stack in /speckit.specify | Tech decisions only in /speckit.plan |
-| All tasks at once in /speckit.implement | `--tasks 1-3` partial impl |
 | Spec change without re-plan | spec change → re-plan → re-tasks |
 | Skip output review | Manual review after each stage |
 | Vague success criteria ("fast") | Measurable ("< 1 second") |

@@ -3,15 +3,18 @@
 ## Directory Structure
 
 ```
-.speckit-prompts/
-└── {prd-name}/
-    └── {NNN}-{kebab-case-name}/
-        ├── 01_specify.md
-        ├── 02_clarify.md
-        ├── 03_plan.md
-        ├── 04_tasks.md
-        ├── 05_implement.md
-        └── 06_commit.md
+<project-root>/
+├── .speckit-prompts/
+│   └── {prd-name}/
+│       └── {NNN}-{kebab-case-name}/
+│           ├── 01_specify.md
+│           ├── 02_clarify.md
+│           ├── 03_plan.md
+│           ├── 04_tasks.md
+│           ├── 05_implement.md
+│           └── 06_commit.md
+└── utilities/
+    └── speckit_pipeline.sh   # headless runner (copied from the skill's assets/, chmod +x)
 ```
 
 ## Folder Naming Convention
@@ -184,9 +187,10 @@ Dependencies:
 ## 05_implement.md Template
 
 ```markdown
-/speckit.implement --tasks 1-{N}
+/speckit.implement
 
 Implementation Rules:
+- Implement all tasks in the task list in one pass
 - Run tests after each task
 - Stop on test failure
 - Commit per task: "feat: [Task N] {description}"
@@ -204,3 +208,31 @@ Failure Handling:
 ```markdown
 /sc:git commit
 ```
+
+## Headless Runner (`utilities/speckit_pipeline.sh`)
+
+Copy the skill's bundled `assets/speckit_pipeline.sh` verbatim to `<project-root>/utilities/speckit_pipeline.sh` and `chmod +x`. Do not regenerate it by hand — it is a fixed ~450-line script.
+
+It iterates the `NNN-<slug>` feature folders under `.speckit-prompts/{prd-name}/` and runs each stage via `claude -p` (slash commands aren't supported headless, so it feeds each prompt file's contents as the instruction).
+
+```bash
+# Run every feature under the PRD folder
+./utilities/speckit_pipeline.sh .speckit-prompts/{prd-name}
+
+# One feature only / from a feature or stage / preview
+./utilities/speckit_pipeline.sh .speckit-prompts/{prd-name} --only 002
+./utilities/speckit_pipeline.sh .speckit-prompts/{prd-name} --from 003/04
+./utilities/speckit_pipeline.sh .speckit-prompts/{prd-name} --dry-run
+./utilities/speckit_pipeline.sh .speckit-prompts/{prd-name} --resume
+```
+
+Per-stage defaults (override via env vars `SPECIFY_MODEL`/`SPECIFY_EFFORT`, `CLARIFY_*`, `PLAN_*`, `TASKS_*`, `IMPLEMENT_*`):
+
+| Stage | Model | Effort |
+|-------|-------|--------|
+| 01_specify / 02_clarify | `claude-opus-4-8` | high |
+| 03_plan | `claude-opus-4-8` | xhigh |
+| 04_tasks / 05_implement | `claude-sonnet-5` | xhigh |
+| commit | session default | — |
+
+Logs land in `.speckit-logs/<timestamp>/`; a checkpoint file enables `--resume`.

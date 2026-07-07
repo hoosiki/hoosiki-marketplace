@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.34.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.35.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.34.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
+| [**lazy2work**](plugins/lazy2work/) | 1.35.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
 
 ---
 
@@ -51,7 +51,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 | **up2date** | `/lazy2work:up2date` | Unified updater — checks and updates Homebrew packages, Claude Code skills/plugins, and SuperClaude commands in one go (`--brew` for Homebrew only, `--skill` for skills only). The `--skill` path also runs **`npx skills@latest update -g -y`** to refresh global agent skills (e.g. mattpocock/skills) and **prunes skills deleted upstream** by parsing the updater's warning and calling `npx skills remove` (opt out with `--no-skill-prune`) |
 | **analyze-arxiv** | `/lazy2work:analyze-arxiv` | Study arXiv papers — fetches paper content, generates structured summaries, and creates prerequisite knowledge documents for deeper understanding |
 | **constitution-generator** | `/lazy2work:constitution-generator` | Generate optimized `/speckit.constitution` prompts — gathers project info (tech stack, architecture, conventions), detects brownfield patterns, and outputs a verifiable constitution with validation checklist |
-| **generate-optimized-spec-kit-prompt** | `/lazy2work:generate-optimized-spec-kit-prompt` | Generate complete Spec Kit prompts (specify/clarify/plan/tasks/implement/commit) from a PRD + pre-sliced issue files — 1 issue = 1 feature (no re-slicing), 6-stage prompts per feature with Mermaid diagrams and auto-clarify/auto-commit steps |
+| **generate-optimized-spec-kit-prompt** | `/lazy2work:generate-optimized-spec-kit-prompt` | Generate complete Spec Kit prompts (specify/clarify/plan/tasks/implement/commit) from a PRD + pre-sliced issue files — 1 issue = 1 feature (no re-slicing), 6-stage prompts per feature with Mermaid diagrams and auto-clarify/auto-commit steps. Also installs a headless runner at `utilities/speckit_pipeline.sh` to execute the generated prompts via `claude -p` |
 | **pyright-setup** | `/lazy2work:pyright-setup` | Auto-configure Pyright for Python projects — detects Python version from venv, adds `[tool.pyright]` to pyproject.toml, resolves "Import could not be resolved" LSP errors in Neovim/VS Code |
 | **apply-all-sc-save** | `/lazy2work:apply-all-sc-save` | Broadcast `/sc:save` to all Claude Code panes in the current tmux session — auto-detects Claude panes, excludes self, supports `--dry-run`, `--all-sessions`, and custom commands |
 | **fix-mermaid** | `/lazy2work:fix-mermaid` | Fix Markdown rendering issues that break Mermaid diagrams or pandoc PDF conversion — Mermaid v11 syntax (reserved words, Unicode/Langium issues, message escaping) **and** pandoc PDF pitfalls (blank-line compliance before lists/tables/fences as auto-fixed errors, long-mixed-cell overflow as warnings, always-on Unicode glyph map covering U+2212/U+2717/U+2718, **currency-dollar auto-escape** for `$100`/`$76.4억` that prevents `Bad math environment delimiter` errors, **unsafe-inline-code warnings** for `` `pass^k` ``-style content that collides with the `\seqsplit` wrapper and causes `Missing number, treated as zero`, **closing-dollar-trailing-space auto-fix** for `$\mathcal{H}_1 = $ rest` patterns that violate pandoc's `tex_math_dollars` rule and cause `\symcal allowed only in math mode`, plus opt-in **`--latin1-normalize`** for Latin-1 Supplement diacritics like `á é ñ ü ß`). Three bundled Python scripts (`fix_mermaid.py`, `fix_pandoc_blanks.py`, `validate_mermaid.py`) with lint / `--fix` / `--json` modes, plus optional **`--with-mmdc` feedback loop** that renders each diagram with Mermaid CLI and iterates targeted fixes until clean |
@@ -286,6 +286,7 @@ Workflow:
 2. Extracts Mermaid diagrams and classifies them by stage placement
 3. Generates 6 prompts per feature following strict stage separation (specify ← issue scope + acceptance criteria + referenced PRD user stories; plan ← PRD decisions + issue tech details; tasks ← issue acceptance criteria + blocked-by)
 4. Writes output to `.speckit-prompts/{prd-name}/{NNN}-{slug}/` folders — the parent folder name is derived from the PRD (short kebab-case project name), the issue number is zero-padded to 3 digits
+5. Installs the bundled headless runner at `<project>/utilities/speckit_pipeline.sh` (copied verbatim + `chmod +x`) — runs each feature through `01_specify → … → 05_implement → commit` via `claude -p` with per-stage model/effort, `--dry-run`, `--only`, `--from`, and `--resume`
 
 #### 6-Stage Role Separation
 
@@ -317,22 +318,33 @@ Placement test: "Does this diagram remain valid if the tech stack changes?" — 
 #### Output Structure
 
 ```
-.speckit-prompts/
-└── japanese-tutor/              ← parent name derived from the PRD
-    ├── 000-env-compat-gate/
-    │   ├── 01_specify.md
-    │   ├── 02_clarify.md
-    │   ├── 03_plan.md
-    │   ├── 04_tasks.md
-    │   ├── 05_implement.md
-    │   └── 06_commit.md
-    ├── 001-sync-chat-http/
-    │   └── ...
-    └── 002-persistence-auth/
-        └── ...
+<project-root>/
+├── .speckit-prompts/
+│   └── japanese-tutor/              ← parent name derived from the PRD
+│       ├── 000-env-compat-gate/
+│       │   ├── 01_specify.md
+│       │   ├── 02_clarify.md
+│       │   ├── 03_plan.md
+│       │   ├── 04_tasks.md
+│       │   ├── 05_implement.md
+│       │   └── 06_commit.md
+│       ├── 001-sync-chat-http/
+│       │   └── ...
+│       └── 002-persistence-auth/
+│           └── ...
+└── utilities/
+    └── speckit_pipeline.sh         ← headless runner (copied from skill assets, chmod +x)
 ```
 
 Folder naming: `{prd-name}/{NNN}-{kebab-case-name}` — `{prd-name}` is a short kebab-case project name derived from the PRD title/product name (e.g. "일본어 학습 튜터 챗봇" → `japanese-tutor`), `{NNN}` is the source issue number zero-padded to 3 digits (`00-env-compat-gate.md` → `{prd-name}/000-env-compat-gate/`).
+
+Run the generated prompts headlessly with the installed runner:
+
+```bash
+./utilities/speckit_pipeline.sh .speckit-prompts/japanese-tutor            # all features
+./utilities/speckit_pipeline.sh .speckit-prompts/japanese-tutor --dry-run  # preview plan
+./utilities/speckit_pipeline.sh .speckit-prompts/japanese-tutor --only 002 # one feature
+```
 
 #### Quality Checklist
 
@@ -353,7 +365,7 @@ Every generated feature is verified against:
 | /speckit.plan has explicit exclusions | Prevents AI adding Docker/CI/CD |
 | /speckit.tasks uses official `[ID] [P?] [Story]` format | Exact file path in every task line |
 | /speckit.tasks has 1 task = 1 commit size | Not too large |
-| /speckit.implement uses `--tasks N-M` | Never all tasks at once |
+| /speckit.implement runs all tasks in one pass | Execute the whole task list at once |
 | /speckit.implement has failure behavior | Stop and report on failure |
 | Each Mermaid block = one concern | No combined architecture + ERD blocks |
 | Success criteria are measurable | "< 1s" not "fast" |
@@ -1136,7 +1148,8 @@ hoosiki-marketplace/
 │       │   │   └── references/
 │       │   ├── generate-optimized-spec-kit-prompt/
 │       │   │   ├── SKILL.md
-│       │   │   └── references/
+│       │   │   ├── references/
+│       │   │   └── assets/               ← speckit_pipeline.sh (headless runner, copied into user projects)
 │       │   ├── pyright-setup/
 │       │   │   ├── SKILL.md
 │       │   │   └── scripts/
@@ -1203,6 +1216,12 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.35.0 (2026-07-07)
+
+- **generate-optimized-spec-kit-prompt: bundled headless runner** — the skill now installs `<project>/utilities/speckit_pipeline.sh` (a new bundled `assets/speckit_pipeline.sh`, copied verbatim + `chmod +x`) that executes the generated prompts end-to-end via `claude -p`. It iterates the `NNN-<slug>` feature folders under `.speckit-prompts/{prd-name}/` and runs `01_specify → … → 05_implement → commit` per feature, with per-stage model/effort (reasoning stages = opus-4-8, execution stages = sonnet-5, env-overridable), timestamped logs under `.speckit-logs/`, and `--dry-run`/`--only`/`--from`/`--resume`/`--skip-clarify`/`--no-commit` flags. SKILL.md gains a "Drop the Headless Runner Script" workflow step + checklist row; api_reference documents usage and per-stage defaults
+- **generate-optimized-spec-kit-prompt: `/speckit.implement` runs all tasks in one pass** — the implement stage no longer emits `--tasks N-M` partial slicing; the generated `05_implement.md` starts with a bare `/speckit.implement` and instructs execution of the whole task list at once. Removed the "all tasks at once" anti-pattern and updated the critical rules, quality checklist, and README mirror accordingly (per-task test-and-stop verification is retained)
+- **Version bump**: 1.34.0 → 1.35.0
 
 ### v1.34.0 (2026-07-06)
 
