@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.35.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.36.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.35.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
+| [**lazy2work**](plugins/lazy2work/) | 1.36.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
 
 ---
 
@@ -44,7 +44,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 - Python 3.10+ (for skills scripts and webhook hooks)
 - Node.js 18+ (for MCP setup commands that use `npx`)
 
-### Skills (11)
+### Skills (12)
 
 | Skill | Command | Description |
 |-------|---------|-------------|
@@ -59,6 +59,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 | **make-ppt-html** | `/lazy2work:make-ppt-html` | Convert any document (research note, report, README, storyboard) into a presentation-quality **reveal.js 5.2.1 + Tailwind CSS** single-file HTML deck with a **light↔dark theme toggle** (button + `D` key + localStorage). Follows bundled design guidelines — assertion-style slide titles, 60-30-10 single-accent color system, WCAG-verified contrast pairs, Pretendard, speaker notes, `?print-pdf` export — and ships a browser-verified `template.html` that pre-solves the reveal×Tailwind integration traps (Meyer-reset border-style kill, `Reveal.sync()` background re-theming, print-mode toggle hiding, dark-variant class pairing) |
 | **from-grill-me-to-linear** | `/lazy2work:from-grill-me-to-linear` | Publish grill-me/grill-with-docs outputs (PRD + vertical-slice issue files) into a Linear team as a **Project→Milestone→Issue→Sub-issue** hierarchy via the linear-server MCP — filters non-issue noise (user stories, decisions, glossary → project brief/links), preserves the dependency DAG with `blocked-by` relations (no false milestone serialization), and enforces **dry-run approval + idempotent upsert** (query-reuse-update so re-runs never duplicate labels or issues). Requires the Linear MCP integration |
 | **from-speckit-to-linear** | `/lazy2work:from-speckit-to-linear` | Publish GitHub Spec Kit outputs (`spec.md` + `plan.md` + `tasks.md`) into a Linear team as a **Project→Milestone→Issue→Sub-issue** hierarchy via the linear-server MCP — **mirrors the tasks.md phase structure instead of re-slicing** (Setup+Foundational → an `M0 Foundation` milestone that blocks every story, User Stories P1/P2/P3 → milestones whose "done" = each story's Independent Test, tasks → verb-first issues keyed by their **T-ID for idempotent re-runs**), keeps the 40–50 FRs as acceptance-criteria checklists instead of issues, and blocks publication while `[NEEDS CLARIFICATION]` markers remain (routes to `/speckit.clarify` first). Sibling of from-grill-me-to-linear — same publish engine, SpecKit-specific parser. Requires the Linear MCP integration |
+| **update-readme** | `/lazy2work:update-readme` | Audit and refresh a project's `README.md` against README best practices while reconciling it with the current code — reads the existing README, discovers real state from manifests/git/docs, then walks a bundled best-practice checklist (required backbone → recommended → anti-patterns → security "never include" → README-vs-AGENTS split → staleness). **Grilling-style**: resolves facts from the codebase directly and asks the user only decision gaps **one question at a time** (each with a recommended answer); sections the user says are unneeded are omitted, and raw answers are rewritten into clean scannable prose. Routes dev/build/CHANGELOG/full-API content *out* of the README instead of inlining, and flags any leaked secrets rather than keeping them |
 
 <details>
 <summary><strong>up2date — Usage Examples</strong></summary>
@@ -1216,6 +1217,11 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.36.0 (2026-07-09)
+
+- **New skill: update-readme** (`/lazy2work:update-readme`) — a grilling-style skill that audits and refreshes a project's `README.md` against README best practices while reconciling it with the current code. It reads the existing README, discovers real state from manifests/git/docs/structure, then walks a bundled rubric (`references/readme-checklist.md`, distilled from an exhaustive best-practices research report) covering the required backbone (title/pitch/why/requirements/install/usage/license/contributing), recommended sections, anti-patterns, the security "never include" list (secrets/internal URLs/PII → flag, never keep), the README-vs-AGENTS.md split, and staleness. Behavior mirrors the `grilling` pattern: **facts are resolved from the codebase directly, only decision gaps are asked — one question at a time, each with a recommended answer**; sections the user says are unneeded are omitted; raw answers are rewritten into clean scannable prose; dev/build/CHANGELOG/full-API content is routed *out* of the README rather than inlined. Skill count 11 → 12
+- **Version bump**: 1.35.0 → 1.36.0
 
 ### v1.35.0 (2026-07-07)
 
