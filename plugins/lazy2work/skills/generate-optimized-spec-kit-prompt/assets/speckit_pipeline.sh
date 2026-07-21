@@ -1,31 +1,31 @@
 #!/bin/bash
-# speckit_pipeline.sh — SpecKit 6-Stage Pipeline Automation (Headless Mode)
+# speckit_pipeline.sh — SpecKit 8-Stage Pipeline Automation (Headless Mode)
 #
 # Usage:
 #   ./utilities/speckit_pipeline.sh <PROMPTS_PATH>                 # <PROMPTS_PATH> 아래 전체 feature 순차 실행
 #   ./utilities/speckit_pipeline.sh <PROMPTS_PATH> --from 003      # 003 feature부터 실행 (해당 feature 포함, 이후 전부)
-#   ./utilities/speckit_pipeline.sh <PROMPTS_PATH> --from 003/04   # 003 feature의 04_tasks 단계부터 실행
+#   ./utilities/speckit_pipeline.sh <PROMPTS_PATH> --from 003/06   # 003 feature의 06_analyze 단계부터 실행
 #   ./utilities/speckit_pipeline.sh <PROMPTS_PATH> --only 002      # 002 feature만 실행
-#   ./utilities/speckit_pipeline.sh <PROMPTS_PATH> --step 05       # 05_implement 단계만 실행
+#   ./utilities/speckit_pipeline.sh <PROMPTS_PATH> --step 07       # 07_implement 단계만 실행
 #   ./utilities/speckit_pipeline.sh <PROMPTS_PATH> --dry-run       # 실행 없이 계획만 출력
-#   ./utilities/speckit_pipeline.sh <PROMPTS_PATH> --no-commit     # implement 후 커밋 생략
+#   ./utilities/speckit_pipeline.sh <PROMPTS_PATH> --no-commit     # converge 후 커밋 생략
 #   ./utilities/speckit_pipeline.sh <PROMPTS_PATH> --skip-clarify  # 02_clarify 단계 건너뛰기
 #   ./utilities/speckit_pipeline.sh <PROMPTS_PATH> --resume        # 마지막 실패/중단 지점부터 재개
 #
 #   <PROMPTS_PATH>: 'NNN-<slug>' 형식의 feature 폴더들을 직접 담고 있는 (절대) 경로.
 #                   예) /abs/path/to/.speckit-prompts/japanese-tutor
 #                   생략 시 기본값은 <project>/.speckit-prompts.
-#   --from 값: feature 번호(3, 03, 003 모두 동일하게 인식) 또는 'NNN/SS' (SS = 단계 번호, 예 003/04).
+#   --from 값: feature 번호(3, 03, 003 모두 동일하게 인식) 또는 'NNN/SS' (SS = 단계 번호, 예 003/06).
 #   단계별 모델·effort (토큰 최적화 — 추론군=Opus+고effort, 실행군=Sonnet):
-#     specify/clarify=opus-4-8/high · plan=opus-4-8/xhigh · tasks/implement=sonnet-5/xhigh · commit=기본값.
-#     env로 override: SPECIFY_MODEL/SPECIFY_EFFORT, CLARIFY_*, PLAN_*, TASKS_*, IMPLEMENT_* (예: PLAN_EFFORT=max ...).
+#     specify/clarify/checklist=opus-4-8/high · plan/analyze/converge=opus-4-8/xhigh · tasks/implement=sonnet-5/xhigh · commit=기본값.
+#     env로 override: SPECIFY_MODEL/SPECIFY_EFFORT, CLARIFY_*, PLAN_*, CHECKLIST_*, TASKS_*, ANALYZE_*, IMPLEMENT_*, CONVERGE_* (예: PLAN_EFFORT=max ...).
 #     ⚠️ xhigh는 Opus 4.7/4.8·Fable5·Mythos5만 정식 지원 — Sonnet 5+xhigh는 high로 폴백될 수 있음.
 #
-# Feature 폴더 구조 (각 feature 아래 6개 단계 파일):
-#   NNN-<slug>/{01_specify,02_clarify,03_plan,04_tasks,05_implement,06_commit}.md
+# Feature 폴더 구조 (각 feature 아래 8개 단계 파일 + commit):
+#   NNN-<slug>/{01_specify,02_clarify,03_plan,04_checklist,05_tasks,06_analyze,07_implement,08_converge,09_commit}.md
 #
-# 6-Stage Pipeline:
-#   01_specify → 02_clarify → 03_plan → 04_tasks → 05_implement → 06_commit(git)
+# 8-Stage Pipeline:
+#   01_specify → 02_clarify → 03_plan → 04_checklist → 05_tasks → 06_analyze → 07_implement → 08_converge → commit(git)
 #
 # 주의: claude -p는 슬래시 명령(/speckit.implement 등)을 지원하지 않으므로,
 # 프롬프트 파일 내용을 직접 지시사항으로 전달합니다.
@@ -39,12 +39,13 @@ DEFAULT_PROMPTS_DIR="$PROJECT_DIR/.speckit-prompts"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 LOG_DIR="$PROJECT_DIR/.speckit-logs/$TIMESTAMP"
 RESUME_FILE="$PROJECT_DIR/.speckit-logs/.last_checkpoint"
-STEPS=("01_specify" "02_clarify" "03_plan" "04_tasks" "05_implement")
-MAX_TURNS=300
+STEPS=("01_specify" "02_clarify" "03_plan" "04_checklist" "05_tasks" "06_analyze" "07_implement" "08_converge")
+MAX_TURNS=1000
 CLAUDE_BIN="${CLAUDE_BIN:-claude}"
 # 단계별 모델·effort (토큰 최적화: 추론군=Opus+고effort·소출력 / 실행군=Sonnet·대출력).
-# 근거: 추론군(specify/clarify/plan)은 Opus+높은 effort로 설계 품질을 확보하고,
+# 근거: 추론군(specify/clarify/plan/checklist/analyze/converge)은 Opus+높은 effort로 설계·검증 품질을 확보하고,
 #       실행군(tasks/implement)은 Sonnet+큰 출력으로 토큰/속도를 최적화한다.
+#       converge는 gap 검증+재구현 판단이 품질에 직결되므로 Opus로 둔다.
 # ⚠️ xhigh는 Opus 4.7/4.8·Fable5·Mythos5만 정식 지원 — Sonnet 5+xhigh는 high로 폴백될 수 있음.
 # 각 값은 env로 override 가능. commit(do_git_commit)은 기본값 유지.
 SPECIFY_MODEL="${SPECIFY_MODEL:-claude-opus-4-8}"
@@ -53,10 +54,16 @@ CLARIFY_MODEL="${CLARIFY_MODEL:-claude-opus-4-8}"
 CLARIFY_EFFORT="${CLARIFY_EFFORT:-high}"
 PLAN_MODEL="${PLAN_MODEL:-claude-opus-4-8}"
 PLAN_EFFORT="${PLAN_EFFORT:-xhigh}"
+CHECKLIST_MODEL="${CHECKLIST_MODEL:-claude-opus-4-8}"
+CHECKLIST_EFFORT="${CHECKLIST_EFFORT:-high}"
 TASKS_MODEL="${TASKS_MODEL:-claude-sonnet-5}"
 TASKS_EFFORT="${TASKS_EFFORT:-xhigh}"
+ANALYZE_MODEL="${ANALYZE_MODEL:-claude-opus-4-8}"
+ANALYZE_EFFORT="${ANALYZE_EFFORT:-xhigh}"
 IMPLEMENT_MODEL="${IMPLEMENT_MODEL:-claude-sonnet-5}"
 IMPLEMENT_EFFORT="${IMPLEMENT_EFFORT:-xhigh}"
+CONVERGE_MODEL="${CONVERGE_MODEL:-claude-opus-4-8}"
+CONVERGE_EFFORT="${CONVERGE_EFFORT:-xhigh}"
 
 # Colors
 RED='\033[0;31m'
@@ -131,26 +138,26 @@ while [[ $# -gt 0 ]]; do
 
 			Options:
 			  --from NNN       NNN feature부터 실행 (해당 feature 포함, 이후 전부). 3/03/003 동일 인식.
-			  --from NNN/SS    NNN feature의 SS 단계부터 실행 (예: 003/04)
+			  --from NNN/SS    NNN feature의 SS 단계부터 실행 (예: 003/06)
 			  --only NNN       NNN feature만 실행
-			  --step NN        NN 단계만 실행 (01~05)
+			  --step NN        NN 단계만 실행 (01~08)
 			  --dry-run        실행 없이 계획만 출력
-			  --no-commit      implement 후 커밋 생략
+			  --no-commit      converge 후 커밋 생략
 			  --skip-clarify   02_clarify 건너뛰기
 			  --resume         마지막 실패/중단 지점부터 재개
-			  --max-turns N    Claude 최대 턴 수 (기본: 300)
-			  (env) 단계별 모델/effort override: SPECIFY_MODEL/SPECIFY_EFFORT, CLARIFY_*, PLAN_*, TASKS_*, IMPLEMENT_*
-			        기본: specify·clarify=opus-4-8/high, plan=opus-4-8/xhigh, tasks·implement=sonnet-5/xhigh
+			  --max-turns N    Claude 최대 턴 수 (기본: 1000)
+			  (env) 단계별 모델/effort override: SPECIFY_MODEL/SPECIFY_EFFORT, CLARIFY_*, PLAN_*, CHECKLIST_*, TASKS_*, ANALYZE_*, IMPLEMENT_*, CONVERGE_*
+			        기본: specify·clarify·checklist=opus-4-8/high, plan·analyze·converge=opus-4-8/xhigh, tasks·implement=sonnet-5/xhigh
 			        ⚠️ xhigh는 Opus 4.7/4.8 계열만 정식 지원 — Sonnet 5+xhigh는 high로 폴백 가능
 
-			Feature 폴더: NNN-<slug>/{01_specify..06_commit}.md
-			Pipeline: 01_specify → 02_clarify → 03_plan → 04_tasks → 05_implement → commit
+			Feature 폴더: NNN-<slug>/{01_specify..09_commit}.md
+			Pipeline: 01_specify → 02_clarify → 03_plan → 04_checklist → 05_tasks → 06_analyze → 07_implement → 08_converge → commit
 
 			Examples:
 			  ./utilities/speckit_pipeline.sh /abs/.speckit-prompts/japanese-tutor
 			  ./utilities/speckit_pipeline.sh /abs/.speckit-prompts/japanese-tutor --only 000
 			  ./utilities/speckit_pipeline.sh /abs/.speckit-prompts/japanese-tutor --from 004 --skip-clarify
-			  ./utilities/speckit_pipeline.sh /abs/.speckit-prompts/japanese-tutor --from 002/03
+			  ./utilities/speckit_pipeline.sh /abs/.speckit-prompts/japanese-tutor --from 002/06
 			  ./utilities/speckit_pipeline.sh /abs/.speckit-prompts/japanese-tutor --resume
 			  ./utilities/speckit_pipeline.sh /abs/.speckit-prompts/japanese-tutor --dry-run
 		HELPEOF
@@ -171,7 +178,7 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
-# --from 의 단계 부분 정규화 (04 또는 04_tasks 모두 허용 → 04)
+# --from 의 단계 부분 정규화 (06 또는 06_analyze 모두 허용 → 06)
 [ -n "$FROM_STEP" ] && FROM_STEP="${FROM_STEP%%_*}"
 
 # Prompts 디렉터리 확정: 위치 인자(절대경로) 우선, 없으면 기본값
@@ -394,8 +401,11 @@ get_max_turns_for_step() {
 	01_specify) echo 30 ;;
 	02_clarify) echo 50 ;;
 	03_plan) echo "$MAX_TURNS" ;;
-	04_tasks) echo "$MAX_TURNS" ;;
-	05_implement) echo "$MAX_TURNS" ;;
+	04_checklist) echo 50 ;;
+	05_tasks) echo "$MAX_TURNS" ;;
+	06_analyze) echo 50 ;;
+	07_implement) echo "$MAX_TURNS" ;;
+	08_converge) echo "$MAX_TURNS" ;;
 	*) echo "$MAX_TURNS" ;;
 	esac
 }
@@ -407,8 +417,11 @@ get_model_for_step() {
 	01_specify) echo "$SPECIFY_MODEL" ;;
 	02_clarify) echo "$CLARIFY_MODEL" ;;
 	03_plan) echo "$PLAN_MODEL" ;;
-	04_tasks) echo "$TASKS_MODEL" ;;
-	05_implement) echo "$IMPLEMENT_MODEL" ;;
+	04_checklist) echo "$CHECKLIST_MODEL" ;;
+	05_tasks) echo "$TASKS_MODEL" ;;
+	06_analyze) echo "$ANALYZE_MODEL" ;;
+	07_implement) echo "$IMPLEMENT_MODEL" ;;
+	08_converge) echo "$CONVERGE_MODEL" ;;
 	*) echo "" ;;
 	esac
 }
@@ -420,8 +433,11 @@ get_effort_for_step() {
 	01_specify) echo "$SPECIFY_EFFORT" ;;
 	02_clarify) echo "$CLARIFY_EFFORT" ;;
 	03_plan) echo "$PLAN_EFFORT" ;;
-	04_tasks) echo "$TASKS_EFFORT" ;;
-	05_implement) echo "$IMPLEMENT_EFFORT" ;;
+	04_checklist) echo "$CHECKLIST_EFFORT" ;;
+	05_tasks) echo "$TASKS_EFFORT" ;;
+	06_analyze) echo "$ANALYZE_EFFORT" ;;
+	07_implement) echo "$IMPLEMENT_EFFORT" ;;
+	08_converge) echo "$CONVERGE_EFFORT" ;;
 	*) echo "" ;;
 	esac
 }
@@ -429,15 +445,15 @@ get_effort_for_step() {
 # ──────────────────────────────────────────────
 # Main Execution
 # ──────────────────────────────────────────────
-log_header "SpecKit 6-Stage Pipeline"
+log_header "SpecKit 8-Stage Pipeline"
 log_info "Project:   $PROJECT_DIR"
 log_info "Prompts:   $PROMPTS_DIR"
 log_info "Logs:      $LOG_DIR"
 log_info "Claude:    $($CLAUDE_BIN --version 2>/dev/null || echo 'unknown')"
-log_info "Max Turns: $MAX_TURNS (implement), others vary per step"
+log_info "Max Turns: $MAX_TURNS (plan/tasks/implement/converge), others vary per step"
 log_info "Per-step model/effort (토큰 최적화):"
-log_info "  specify=$SPECIFY_MODEL/$SPECIFY_EFFORT  clarify=$CLARIFY_MODEL/$CLARIFY_EFFORT  plan=$PLAN_MODEL/$PLAN_EFFORT"
-log_info "  tasks=$TASKS_MODEL/$TASKS_EFFORT  implement=$IMPLEMENT_MODEL/$IMPLEMENT_EFFORT  (commit=default)"
+log_info "  specify=$SPECIFY_MODEL/$SPECIFY_EFFORT  clarify=$CLARIFY_MODEL/$CLARIFY_EFFORT  plan=$PLAN_MODEL/$PLAN_EFFORT  checklist=$CHECKLIST_MODEL/$CHECKLIST_EFFORT"
+log_info "  tasks=$TASKS_MODEL/$TASKS_EFFORT  analyze=$ANALYZE_MODEL/$ANALYZE_EFFORT  implement=$IMPLEMENT_MODEL/$IMPLEMENT_EFFORT  converge=$CONVERGE_MODEL/$CONVERGE_EFFORT  (commit=default)"
 echo ""
 
 mkdir -p "$LOG_DIR"
@@ -625,9 +641,9 @@ for feature_dir in $FEATURES; do
 		fi
 	done
 
-	# Commit after implement
+	# Commit after converge
 	if ! $feature_failed; then
-		commit_log="$LOG_DIR/${feature_name}_06_commit.log"
+		commit_log="$LOG_DIR/${feature_name}_09_commit.log"
 		do_git_commit "$feature_name" "$feature_short" "$commit_log"
 		RESULTS+=("OK: $feature_name")
 		PASSED_FEATURES=$((PASSED_FEATURES + 1))

@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.37.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.39.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.37.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
+| [**lazy2work**](plugins/lazy2work/) | 1.39.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
 
 ---
 
@@ -51,7 +51,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 | **up2date** | `/lazy2work:up2date` | Unified updater — checks and updates Homebrew packages, Claude Code skills/plugins, and SuperClaude commands in one go (`--brew` for Homebrew only, `--skill` for skills only). The `--skill` path also runs **`npx skills@latest update -g -y`** to refresh global agent skills (e.g. mattpocock/skills) and **prunes skills deleted upstream** by parsing the updater's warning and calling `npx skills remove` (opt out with `--no-skill-prune`) |
 | **analyze-arxiv** | `/lazy2work:analyze-arxiv` | Study arXiv papers — fetches paper content, generates structured summaries, and creates prerequisite knowledge documents for deeper understanding |
 | **constitution-generator** | `/lazy2work:constitution-generator` | Generate optimized `/speckit.constitution` prompts — gathers project info (tech stack, project stage, conventions), detects brownfield patterns, and outputs a **minimal-but-enforceable** constitution: 6–12 non-negotiable principles in MUST/NO language, each with a `(Rationale: …)`, prototype-stage gate stripping, and a validation checklist |
-| **generate-optimized-spec-kit-prompt** | `/lazy2work:generate-optimized-spec-kit-prompt` | Generate complete Spec Kit prompts (specify/clarify/plan/tasks/implement/commit) from a PRD + pre-sliced issue files — 1 issue = 1 feature (no re-slicing), 6-stage prompts per feature with Mermaid diagrams and auto-clarify/auto-commit steps. Also installs a headless runner at `utilities/speckit_pipeline.sh` to execute the generated prompts via `claude -p` |
+| **generate-optimized-spec-kit-prompt** | `/lazy2work:generate-optimized-spec-kit-prompt` | Generate complete Spec Kit prompts for the full 8-stage flow (specify → clarify → plan → checklist → tasks → analyze → implement → converge, + commit) from a PRD + pre-sliced issue files — 1 issue = 1 feature (no re-slicing), Mermaid diagrams, `/speckit.tasks` command-only (no hand-authored tasks), and auto-accept prompts for clarify/checklist/analyze/converge. Also installs a headless runner at `utilities/speckit_pipeline.sh` to execute the generated prompts via `claude -p` |
 | **pyright-setup** | `/lazy2work:pyright-setup` | Auto-configure Pyright for Python projects — detects Python version from venv, adds `[tool.pyright]` to pyproject.toml, resolves "Import could not be resolved" LSP errors in Neovim/VS Code |
 | **apply-all-sc-save** | `/lazy2work:apply-all-sc-save` | Broadcast `/sc:save` to all Claude Code panes in the current tmux session — auto-detects Claude panes, excludes self, supports `--dry-run`, `--all-sessions`, and custom commands |
 | **fix-mermaid** | `/lazy2work:fix-mermaid` | Fix Markdown rendering issues that break Mermaid diagrams or pandoc PDF conversion — Mermaid v11 syntax (reserved words, Unicode/Langium issues, message escaping) **and** pandoc PDF pitfalls (blank-line compliance before lists/tables/fences as auto-fixed errors, long-mixed-cell overflow as warnings, always-on Unicode glyph map covering U+2212/U+2717/U+2718, **currency-dollar auto-escape** for `$100`/`$76.4억` that prevents `Bad math environment delimiter` errors, **unsafe-inline-code warnings** for `` `pass^k` ``-style content that collides with the `\seqsplit` wrapper and causes `Missing number, treated as zero`, **closing-dollar-trailing-space auto-fix** for `$\mathcal{H}_1 = $ rest` patterns that violate pandoc's `tex_math_dollars` rule and cause `\symcal allowed only in math mode`, plus opt-in **`--latin1-normalize`** for Latin-1 Supplement diacritics like `á é ñ ü ß`). Three bundled Python scripts (`fix_mermaid.py`, `fix_pandoc_blanks.py`, `validate_mermaid.py`) with lint / `--fix` / `--json` modes, plus optional **`--with-mmdc` feedback loop** that renders each diagram with Mermaid CLI and iterates targeted fixes until clean |
@@ -285,20 +285,25 @@ Workflow:
 
 1. Reads the PRD and every issue file — **1 issue file = 1 feature**, never merged or re-split
 2. Extracts Mermaid diagrams and classifies them by stage placement
-3. Generates 6 prompts per feature following strict stage separation (specify ← issue scope + acceptance criteria + referenced PRD user stories; plan ← PRD decisions + issue tech details; tasks ← issue acceptance criteria + blocked-by)
+3. Generates 8 stage prompts (+ commit) per feature following strict stage separation (specify ← issue scope + acceptance criteria + referenced PRD user stories; plan ← PRD decisions + issue tech details). `/speckit.tasks` is command-only — tasks are generated from spec + plan, never hand-authored; clarify/checklist/analyze/converge lead with `auto-accept all recommended options`
 4. Writes output to `.speckit-prompts/{prd-name}/{NNN}-{slug}/` folders — the parent folder name is derived from the PRD (short kebab-case project name), the issue number is zero-padded to 3 digits
-5. Installs the bundled headless runner at `<project>/utilities/speckit_pipeline.sh` (copied verbatim + `chmod +x`) — runs each feature through `01_specify → … → 05_implement → commit` via `claude -p` with per-stage model/effort, `--dry-run`, `--only`, `--from`, and `--resume`
+5. Installs the bundled headless runner at `<project>/utilities/speckit_pipeline.sh` (copied verbatim + `chmod +x`) — runs each feature through `01_specify → … → 08_converge → commit` via `claude -p` with per-stage model/effort, `--dry-run`, `--only`, `--from`, and `--resume`
 
-#### 6-Stage Role Separation
+#### 8-Stage Role Separation (+ commit)
+
+Based on the exhaustive Spec Kit prompting research (2026-07-21). Think in detail up front (specify/plan), act briefly at the back (tasks/analyze/implement/converge).
 
 | Stage | Role | Prompt Focus | MUST NOT Include |
 |-------|------|-------------|-----------------|
 | `/speckit.specify` | **What + Why** | Features, users, scenarios, constraints | Tech stack, architecture, code |
-| `/speckit.clarify` | **Refine** | Auto-accept recommended options for spec ambiguities | Manual intervention (auto mode) |
-| `/speckit.plan` | **How** | Tech stack, architecture, existing code refs | Feature requirements (in spec) |
-| `/speckit.tasks` | **Order** | Impl sequence, deps, TDD, task size | Tech decisions (in plan) |
-| `/speckit.implement` | **Rules** | Scope, commit strategy, code style | Design changes (go back to plan) |
-| `/sc:git commit` | **Commit** | Create git commit after implementation | Design changes, new features |
+| `/speckit.clarify` | **Refine** | `auto-accept all recommended options` — resolve spec ambiguities | Manual intervention |
+| `/speckit.plan` | **How** | Tech stack, architecture, file paths, stop-guard | Feature requirements; starting tasks/code |
+| `/speckit.checklist` | **Requirements QA** | `auto-accept` — completeness/clarity/consistency | Implementation detail |
+| `/speckit.tasks` | **Order (generated)** | Command only — derive tasks from spec + plan | Hand-authored `T001…`; tech decisions |
+| `/speckit.analyze` | **Cross-check** | `auto-accept` — 4-way consistency, fix at correct layer | Hand-editing tasks.md |
+| `/speckit.implement` | **Rules** | All tasks in one pass, per-task commit, failure behavior | Design changes |
+| `/speckit.converge` | **Close gaps** | `auto-accept` loop — converge → implement → converge | Manual gap triage |
+| `/sc:git commit` | **Commit** | Final commit after convergence | Design changes, new features |
 
 #### Mermaid Diagram Classification
 
@@ -326,13 +331,16 @@ Placement test: "Does this diagram remain valid if the tech stack changes?" — 
 │       │   ├── 01_specify.md
 │       │   ├── 02_clarify.md
 │       │   ├── 03_plan.md
-│       │   ├── 04_tasks.md
-│       │   ├── 05_implement.md
-│       │   └── 06_commit.md
+│       │   ├── 04_checklist.md
+│       │   ├── 05_tasks.md
+│       │   ├── 06_analyze.md
+│       │   ├── 07_implement.md
+│       │   ├── 08_converge.md
+│       │   └── 09_commit.md
 │       ├── 001-sync-chat-http/
-│       │   └── ...
+│       │   └── ... (same 9 files)
 │       └── 002-persistence-auth/
-│           └── ...
+│           └── ... (same 9 files)
 └── utilities/
     └── speckit_pipeline.sh         ← headless runner (copied from skill assets, chmod +x)
 ```
@@ -355,19 +363,23 @@ Every generated feature is verified against:
 |-------|------|
 | 1 issue file = 1 feature folder | No merging or re-splitting of issues |
 | Parent folder named from the PRD | Short kebab-case project name (e.g. `japanese-tutor`), never a literal `feature` |
+| 9 stage files per folder in order | `01_specify … 09_commit` — filenames encode run order |
 | Folder number matches issue number | `00-env-compat-gate.md` → `{prd-name}/000-env-compat-gate/` |
-| Issue acceptance criteria appear in tasks | Every criterion maps to a task or success criterion |
+| Issue acceptance criteria appear in spec | Every criterion maps to a `FR-NNN` or `SC-NNN` |
 | /speckit.specify has no tech terms | Tech-neutral (survives stack change) |
 | /speckit.specify uses official spec-template structure | Prioritized user stories + Given/When/Then + FR-NNN/SC-NNN; no trailing questions |
 | /speckit.specify has Out of Scope section | Prevents AI scope creep |
 | /speckit.specify Mermaid has no tech terms | No Django, PostgreSQL, etc. in nodes |
+| /speckit.clarify leads with auto-accept | `auto-accept all recommended options` |
 | /speckit.plan references specific file paths | Not vague "follow patterns" |
 | /speckit.plan has architecture + API sequence diagrams | Mermaid with explanation text |
-| /speckit.plan has explicit exclusions | Prevents AI adding Docker/CI/CD |
-| /speckit.tasks uses official `[ID] [P?] [Story]` format | Exact file path in every task line |
-| /speckit.tasks has 1 task = 1 commit size | Not too large |
-| /speckit.implement runs all tasks in one pass | Execute the whole task list at once |
+| /speckit.plan has explicit exclusions + stop-guard | Prevents Docker/CI/CD creep; "generate plan.md only" |
+| /speckit.checklist leads with auto-accept | Requirements-quality gate, non-interactive |
+| /speckit.tasks is command-only | No hand-authored `T001…`; derived from spec+plan, never hand-edited |
+| /speckit.analyze leads with auto-accept + layer guard | Fix plan/spec then regenerate tasks — never edit tasks.md |
+| /speckit.implement runs all tasks in one pass | Execute the whole task list at once, per-task verify+commit |
 | /speckit.implement has failure behavior | Stop and report on failure |
+| /speckit.converge leads with auto-accept loop | converge → implement → converge until "converged" |
 | Each Mermaid block = one concern | No combined architecture + ERD blocks |
 | Success criteria are measurable | "< 1s" not "fast" |
 
@@ -1217,6 +1229,20 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.39.0 (2026-07-21)
+
+- **generate-optimized-spec-kit-prompt: converge runs on Opus + higher turn budget** — in the headless runner (`assets/speckit_pipeline.sh`), `CONVERGE_MODEL` default changed from `claude-sonnet-5` to `claude-opus-4-8`. Converge verifies planned work and judges whether remaining gaps need re-implementation — quality-critical reasoning — so it now sits in the Opus reasoning group alongside specify/clarify/plan/checklist/analyze; only tasks and implement stay on Sonnet. Still env-overridable via `CONVERGE_MODEL`/`CONVERGE_EFFORT`
+- **generate-optimized-spec-kit-prompt: `MAX_TURNS` default raised 300 → 1000** — the shared max-turns budget inherited by the plan, tasks, implement, and converge stages is raised to 1000 so long features (especially the converge → implement → converge loop) don't hit the turn cap mid-run. The fixed light stages (specify=30, clarify/checklist/analyze=50) are unchanged; override with `--max-turns N`. SKILL.md, `references/api_reference.md` per-stage table, and inline help/comments updated to match
+- **Version bump**: 1.38.0 → 1.39.0
+
+### v1.38.0 (2026-07-21)
+
+- **generate-optimized-spec-kit-prompt: expanded to the full 8-stage Spec Kit flow** — the skill now generates prompts for `/speckit.specify → clarify → plan → checklist → tasks → analyze → implement → converge` (+ a final `/sc:git commit`), up from the previous 6-stage flow. Three stages are new: **`04_checklist`** (requirements-quality gate after plan), **`06_analyze`** (constitution↔spec↔plan↔tasks consistency check before implement), and **`08_converge`** (verify-and-close-gaps loop after implement). Per-feature folders now hold **9 files** (`01_specify … 09_commit`) whose numeric prefixes encode the sequential run order. Applies the 2026-07-21 exhaustive Spec Kit prompting research
+- **generate-optimized-spec-kit-prompt: `/speckit.tasks` is command-only (no hand-authored tasks)** — per the research (§6, "tasks are generated, never hand-authored"), `05_tasks.md` no longer pre-writes a `Phase 1 (Setup): T001…` enumeration. It is now just `/speckit.tasks` with guidance to derive `tasks.md` from spec + plan and never hand-edit it (fix `plan.md` and regenerate instead)
+- **generate-optimized-spec-kit-prompt: auto-accept gates for clarify/checklist/analyze/converge** — each of the four refine/verify stages now leads with `auto-accept all recommended options` so the pipeline runs non-interactively. `/speckit.analyze` carries a layer guard (apply fixes to plan/spec and regenerate tasks — never hand-edit `tasks.md`); `/speckit.converge` carries a loop instruction (converge → implement → converge until "converged"); `/speckit.plan` gains a stop-guard ("generate plan.md only, no tasks/code" — research trap #1011)
+- **generate-optimized-spec-kit-prompt: headless runner updated to 8 stages** — `assets/speckit_pipeline.sh` `STEPS` array, per-step model/effort/max-turns getters, help text, and log headers all updated. New env-overridable per-stage defaults: `CHECKLIST_*` (opus-4-8/high), `ANALYZE_*` (opus-4-8/xhigh), `CONVERGE_*` (sonnet-5/xhigh); reasoning group = Opus, execution group = Sonnet. `references/speckit-prompt-guide.md` and `references/api_reference.md` rewritten to match (new stage templates, cross-stage EARS principles, expanded anti-pattern table)
+- **Version bump**: 1.37.0 → 1.38.0
 
 ### v1.37.0 (2026-07-21)
 
