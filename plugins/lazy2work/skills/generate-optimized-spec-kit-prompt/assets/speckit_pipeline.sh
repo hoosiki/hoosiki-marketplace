@@ -29,6 +29,10 @@
 #
 # 주의: claude -p는 슬래시 명령(/speckit.implement 등)을 지원하지 않으므로,
 # 프롬프트 파일 내용을 직접 지시사항으로 전달합니다.
+#
+# 권한: 모든 claude -p 호출은 --permission-mode bypassPermissions + --dangerously-skip-permissions로
+# 무인 실행된다(권한 확인·다이얼로그 생략). ⚠️ root/sudo로는 거부되며, 격리 환경(컨테이너/VM/dev container)
+# 에서 실행할 것 — bypassPermissions는 프롬프트 인젝션·오작동에 대한 보호가 없다.
 set -euo pipefail
 
 # ──────────────────────────────────────────────
@@ -305,11 +309,14 @@ IMPORTANT:
 - Do NOT ask for confirmation — execute autonomously.
 - Always respond in Korean."
 
+	# bypassPermissions: 모든 권한 확인을 생략(헤드리스 무인 실행). --permission-mode로 모드를 명시하고,
+	# --dangerously-skip-permissions로 최초 1회 책임수용 다이얼로그까지 건너뛴다(둘은 동등하나 함께 두어 의도를 명확히 함).
 	"$CLAUDE_BIN" -p "$processed_prompt" \
 		${model_override:+--model "$model_override"} \
 		${effort_override:+--effort "$effort_override"} \
 		--max-turns "$max_turns_override" \
 		--output-format text \
+		--permission-mode bypassPermissions \
 		--dangerously-skip-permissions \
 		2>&1 | tee "$log_file"
 
@@ -369,6 +376,7 @@ Execute these steps now."
 	"$CLAUDE_BIN" -p "$commit_prompt" \
 		--max-turns 10 \
 		--output-format text \
+		--permission-mode bypassPermissions \
 		--dangerously-skip-permissions \
 		2>&1 | tee "$log_file"
 

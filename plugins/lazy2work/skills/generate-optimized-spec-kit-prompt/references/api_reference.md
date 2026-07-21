@@ -283,6 +283,8 @@ Copy the skill's bundled `assets/speckit_pipeline.sh` verbatim to `<project-root
 
 It iterates the `NNN-<slug>` feature folders under `.speckit-prompts/{prd-name}/` and runs each stage via `claude -p` (slash commands aren't supported headless, so it feeds each prompt file's contents as the instruction).
 
+Every `claude -p` call runs unattended with `--permission-mode bypassPermissions --dangerously-skip-permissions` (no permission prompts, no first-run acceptance dialog). This refuses to run as root/sudo — run it as a normal user, ideally in an isolated environment (container/VM/dev container), since `bypassPermissions` offers no protection against prompt injection or unintended actions.
+
 ```bash
 # Run every feature under the PRD folder
 ./utilities/speckit_pipeline.sh .speckit-prompts/{prd-name}

@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.39.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.40.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.39.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
+| [**lazy2work**](plugins/lazy2work/) | 1.40.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
 
 ---
 
@@ -1229,6 +1229,11 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.40.0 (2026-07-21)
+
+- **generate-optimized-spec-kit-prompt: headless runner runs with explicit `bypassPermissions`** — every `claude -p` invocation in the bundled `assets/speckit_pipeline.sh` (both the 8-stage runner and the commit runner) now passes `--permission-mode bypassPermissions` alongside the existing `--dangerously-skip-permissions`, so all permission checks are skipped for fully unattended pipeline runs. The two flags are equivalent per the docs, but keeping both makes the bypass intent explicit while `--dangerously-skip-permissions` also clears the first-run acceptance dialog. Header comment and `references/api_reference.md` now document the behavior and its guardrails: the runner refuses to start as root/sudo and should run as a normal user in an isolated environment (container/VM/dev container), since `bypassPermissions` offers no protection against prompt injection or unintended actions. No change to the security posture — the runner already bypassed permissions via `--dangerously-skip-permissions`
+- **Version bump**: 1.39.0 → 1.40.0
 
 ### v1.39.0 (2026-07-21)
 
