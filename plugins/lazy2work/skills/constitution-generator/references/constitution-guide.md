@@ -1,51 +1,84 @@
 # Constitution Best Practices Reference
 
-## Required Sections (8)
+## Core Principle: Minimal but Enforceable
 
-| # | Section | What to include |
-|---|---------|----------------|
-| 1 | Project Identity | Name, one-line description, purpose |
-| 2 | Tech Stack (Locked) | Language + framework + DB + runtime **with versions** |
-| 3 | Architecture Principles | Project structure, layer separation, API patterns |
-| 4 | Coding Conventions | Formatter, linter, naming, docstring style |
-| 5 | Testing Requirements | Framework, coverage target, test types |
-| 6 | Security Principles | Auth, data protection, credential management |
-| 7 | Prohibitions | Explicit list of what AI must NOT do |
-| 8 | Deployment Target | Hosting, CDN, containerization |
+A constitution is the set of **non-negotiable guardrails** that hold for the whole project — "how we work", never "what we build". Its prompt density should be the **lowest** of all Spec Kit commands: detail belongs downstream (`/speckit.specify` for What/Why, `/speckit.plan` for How).
 
-## Optional Sections
+The **#1 trap is over-constraint**, not under-constraint (Martin Fowler, den.dev):
 
-- Performance Goals — when response time / throughput matters
-- Accessibility — WCAG compliance needed
-- Internationalization (i18n) — multi-language support
-- Dependency Management — package manager rules
-- Git Conventions — branch strategy, commit message format
-- Existing Code Reference — brownfield: existing pattern file paths
+- Dozens of rules → the agent follows them *too* eagerly, producing unnecessary artifacts ("illusion of work")
+- Rule-compliance consumes the agent's attention budget → **context drift**, value delivery suffers
+- Mitigation: **6–12 principles total** (hard cap 15) · require explicit justification before adding complexity · audit periodically and delete rules that stopped paying rent
+
+## Rationale — Attach One to Every Principle
+
+Agents comply better when they understand *why* a rule exists (den.dev, redreamality). Every principle gets a terse `(Rationale: …)`:
+
+```
+❌ Unit-test coverage must be at least 80%.
+✅ MUST keep unit-test coverage ≥ 80% on business logic (Rationale: regression safety).
+
+❌ Do not store secrets in settings.py.
+✅ NO credentials in settings.py; MUST load secrets from .env (Rationale: leak prevention, 12-factor).
+```
+
+## Section Menu (not a quota)
+
+Include a section **only when it carries a genuine non-negotiable**; omit empty sections — constitution.md is plain markdown, delete template boilerplate that doesn't apply.
+
+| Section | When to include | What to include |
+|---------|----------------|----------------|
+| Project Identity | always | Name, one-line description |
+| Tech Stack (Locked) | always | Language + framework + DB **with versions**, package manager |
+| Prohibitions | always | ≥ 3 explicit NO items |
+| Architecture Principles | if structure is non-negotiable | Project structure, layer separation |
+| Coding Conventions | if tooling is fixed | Formatter, linter, naming, type hints |
+| Testing Requirements | if a gate exists | Framework, **quantified** coverage threshold |
+| Security Principles | if handling real data | Credential management, data protection |
+| Deployment Target | **production stage only** | Hosting, containerization |
+
+**Optional extras:** Performance Goals (production, quantified: P95 < 200ms) · Accessibility (WCAG) · i18n · Git Conventions · Existing Code Reference (brownfield — file paths).
+
+## Prototype vs Production Stage
+
+Production rules strangle experiments (a known failure mode — practitioners demonstrably *delete* these articles at prototype stage):
+
+| Article type | Prototype | Production |
+|--------------|-----------|------------|
+| CI/CD, deployment | **omit** — say so explicitly in the prompt | include |
+| Performance budgets (P95, throughput) | **omit** | include, quantified |
+| Security gates | minimal (no-secrets-in-code only) | full (encryption, auth, compliance) |
+| Coverage thresholds | optional, low | enforced (e.g. ≥ 80%) |
+
+When a prototype graduates, revise the constitution — it is versioned, not immutable.
 
 ## Anti-Patterns
 
 | Anti-Pattern | Why Bad | Fix |
 |-------------|---------|-----|
-| Vague rules ("write quality code") | AI cannot verify | Make verifiable ("type hints required") |
+| Over-constraint (dozens of rules) | Agent over-complies: unnecessary artifacts, context drift | 6–12 principles; justify additions; audit periodically |
+| Principles without Rationale | Agent follows blindly, drops rule under pressure | Attach `(Rationale: …)` to every principle |
+| Vague rules ("write quality code") | AI cannot verify | MUST/NO + quantified ("coverage ≥ 80%") |
+| Production gates in a prototype | Perf/security gates block iteration | Strip CI/CD, deployment, perf budgets; state it in the prompt |
 | No tech stack versions | AI picks arbitrary versions | Lock with "Django 4.2.x" |
-| Missing Prohibitions | AI expands scope freely | List 3+ explicit prohibitions |
+| Missing Prohibitions | AI expands scope freely | List 3+ explicit NO items |
+| Leftover template boilerplate | Agent treats filler as rules | Delete non-applicable sections — it's plain markdown |
 | Too detailed implementation | AI over-interprets, creates duplicates | Keep principles only; details go in /plan |
 | Feature requirements included | Constitution ≠ Spec | Move to /specify |
-| Skipping constitution | All downstream decisions baseless | Always write constitution first |
-| Never updating | Stack evolves, constitution drifts | Review periodically |
+| Skipping constitution | Every spec re-litigates the same decisions | Always write constitution first |
+| Never updating | Stack evolves, constitution drifts | Review periodically; spec/constitution first, code second |
 | Copy-paste generic template | Ignores project specifics | Customize per project |
 
 ## Verifiable vs Non-Verifiable Rules
 
+Write every rule in enforceable **MUST / NO** language with a quantified threshold — if it cannot be checked against code or a metric, it is not a constitution rule.
+
 ```
-❌ "Write high-quality code"           → cannot check
-✅ "All functions must have type hints" → can check
-
-❌ "Use latest Django"                  → ambiguous version
-✅ "Django 4.2.x (LTS)"               → specific
-
-❌ "Good performance"                   → unmeasurable
-✅ "API responses follow JSON:API spec" → checkable
+❌ "Write high-quality code"      → ✅ "MUST: type hints on all functions (Rationale: mypy gate)"
+❌ "Be well-tested"                → ✅ "MUST: unit coverage ≥ 80% on business logic (Rationale: regression safety)"
+❌ "Be secure"                     → ✅ "NO PII stored unencrypted, at rest or in transit (Rationale: compliance)"
+❌ "Use latest Django"             → ✅ "MUST use Django 4.2.x (LTS) (Rationale: security-patch window)"
+❌ "Good performance"              → ✅ "MUST: API responses P95 < 200ms (Rationale: UX budget)"  [production only]
 ```
 
 ## Greenfield vs Brownfield Constitution
@@ -58,46 +91,42 @@
 | Prohibitions | General (no over-engineering) | Specific (no new apps, no breaking changes) |
 | Extra section | — | Existing Code Reference (file paths, patterns) |
 
-## Example: Brownfield Django Project
+## Example: Brownfield Django Project (production stage)
 
 ```
 /speckit.constitution
 
 Financial Automation Server — investment platform trade log extraction and withdrawal automation
 
-## Tech Stack (Do Not Change)
-- Python 3.11
-- Django 4.2.9 + DRF 3.14.0
-- SQLite (db.database_fin)
-- Selenium (existing) + Playwright (new)
-- Package manager: uv
+Create the project constitution from the non-negotiable principles below.
+- Attach a Rationale to every principle.
+- Use enforceable MUST/NO language; keep every article objectively verifiable.
+- Delete template sections that do not apply.
+
+## Tech Stack (Locked)
+- MUST use Python 3.11 + Django 4.2.9 + DRF 3.14.0 (Rationale: running production system, no migration budget)
+- MUST use SQLite (db.database_fin); package manager: uv
+- Selenium stays for existing flows; Playwright only for new flows (Rationale: rewrite risk outweighs benefit)
 
 ## Architecture Principles
-- Preserve existing app structure: banking_app, withdrawal_app, web_control_app
-- API routes: maintain /api/v1/ prefix
-- Business logic: separate into utils/ directory
+- MUST preserve existing app structure: banking_app, withdrawal_app, web_control_app (Rationale: stable integration points)
+- MUST keep /api/v1/ prefix; business logic lives in utils/ (Rationale: existing clients depend on it)
 
 ## Coding Conventions
-- Black (line-length 119)
-- isort (black profile)
-- Google style docstring
-- Type hints required
+- MUST format with Black (line-length 119) + isort (black profile) (Rationale: zero-diff reviews)
+- MUST use type hints + Google-style docstrings (Rationale: mypy gate, onboarding)
 
 ## Testing Requirements
-- pytest + pytest-django
-- Browser tests: mark with @pytest.mark.integration
+- MUST test with pytest + pytest-django; browser tests marked @pytest.mark.integration (Rationale: fast unit lane in CI)
 
 ## Security Principles
-- Manage credentials via environment variables (.env)
-- Include .env in .gitignore
-- Never hardcode secrets
+- NO credentials in code or settings.py; MUST load from .env (gitignored) (Rationale: financial credentials, leak prevention)
 
 ## Prohibitions
-- Do not create new Django apps
-- No breaking changes to existing APIs
-- Do not modify existing Selenium code
-- No Docker/containerization
-- No credentials in settings.py
+- NO new Django apps (Rationale: structure lock)
+- NO breaking changes to existing APIs (Rationale: live clients)
+- NO modifications to existing Selenium code (Rationale: fragile, verified flows)
+- NO Docker/containerization (Rationale: bare-metal deployment target)
 
 ## Existing Code Reference
 - View pattern: withdrawal_app/api/views.py
@@ -105,87 +134,76 @@ Financial Automation Server — investment platform trade log extraction and wit
 - Configuration: config/settings/base.py
 
 ## Deployment Target
-- Development: runserver (local)
-- Production: Gunicorn + Nginx
+- Development: runserver (local) / Production: Gunicorn + Nginx
 ```
 
-## Example: Greenfield React App
+## Example: Greenfield React App (production stage)
 
 ```
 /speckit.constitution
 
 Book Management SPA — personal reading log and search web app
 
-## Tech Stack
-- React 18 + TypeScript 5.x
-- Vite 6.x
-- TailwindCSS 4.x + shadcn/ui
-- React Router v7
-- Axios (HTTP)
+Create the project constitution from the non-negotiable principles below.
+- Attach a Rationale to every principle.
+- Use enforceable MUST/NO language; delete template sections that do not apply.
+
+## Tech Stack (Locked)
+- MUST use React 18 + TypeScript 5.x + Vite 6.x (Rationale: team baseline, ecosystem support window)
+- MUST use TailwindCSS 4.x + shadcn/ui; React Router v7; Axios (Rationale: one styling system, no CSS drift)
 
 ## Architecture Principles
-- Atomic Design (atoms/molecules/organisms/templates/pages)
-- Functional components + hooks only
-- API calls: abstract via hooks/useApi.ts custom hook
+- MUST use functional components + hooks only; API calls only via hooks/useApi.ts (Rationale: single seam for auth/errors/mocking)
 
 ## Coding Conventions
-- ESLint + Prettier (no semicolons, single quote, 2-space)
-- Components: PascalCase.tsx
-- Utils/hooks: camelCase.ts
-- Named exports only (no export default)
+- MUST pass ESLint + Prettier (no semicolons, single quote, 2-space) (Rationale: zero-diff formatting)
+- MUST use named exports only; components PascalCase.tsx, utils/hooks camelCase.ts (Rationale: grep-able imports)
 
 ## Testing Requirements
-- Vitest + React Testing Library
-- E2E: Playwright
+- MUST test with Vitest + React Testing Library; E2E with Playwright (Rationale: behavior-level regression safety)
 
 ## Security Principles
-- Manage API keys via .env
-- User input: sanitize with DOMPurify
+- NO API keys in source; MUST load via .env (Rationale: public repo)
+- MUST sanitize user input with DOMPurify (Rationale: XSS)
 
 ## Prohibitions
-- No class components
-- No Redux/MobX
-- No `any` type
-- No export default
-- No console.log in production
+- NO class components, NO Redux/MobX (Rationale: hooks + context suffice at this scale)
+- NO `any` type (Rationale: defeats the TS gate)
+- NO console.log in production builds (Rationale: log hygiene)
 
 ## Deployment Target
-- GitHub Pages (static)
-- CI/CD: GitHub Actions
+- GitHub Pages (static), CI/CD: GitHub Actions
 ```
 
-## Example: CLI Tool
+## Example: CLI Tool (prototype stage)
 
 ```
 /speckit.constitution
 
 Markdown Metadata Analysis CLI Tool
 
-## Tech Stack
-- Python 3.12
-- Typer (CLI)
-- python-frontmatter + python-markdown
-- Package manager: uv
+Create the project constitution from the non-negotiable principles below.
+- Attach a Rationale to every principle.
+- Use enforceable MUST/NO language; delete template sections that do not apply.
+
+## Tech Stack (Locked)
+- MUST use Python 3.12 + Typer (Rationale: stdlib-adjacent, minimal deps)
+- python-frontmatter + python-markdown; package manager: uv
 
 ## Architecture Principles
-- Single package: src/md_analyzer/
-- Entry: cli.py, Core: core.py
-- Output formats: JSON, CSV, Table (rich)
+- MUST keep single package src/md_analyzer/ — entry cli.py, core logic core.py (Rationale: trivially navigable)
 
 ## Coding Conventions
-- Ruff (format + lint)
-- Type hints required
-- Google style docstring
+- MUST format + lint with Ruff; type hints required (Rationale: one tool, one gate)
 
 ## Testing Requirements
-- pytest
-- Test data: tests/fixtures/
+- MUST test with pytest; fixtures under tests/fixtures/ (Rationale: reproducible sample docs)
 
 ## Prohibitions
-- No GUI (CLI only)
-- No external API calls
-- No database usage
+- NO GUI (Rationale: CLI-only scope)
+- NO external API calls (Rationale: offline tool)
+- NO database usage (Rationale: stateless by design)
 
-## Deployment Target
-- PyPI distribution (uv publish)
+This project is at prototype stage — do NOT include CI/CD, deployment,
+or performance-budget articles.
 ```

@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.36.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.37.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.36.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
+| [**lazy2work**](plugins/lazy2work/) | 1.37.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
 
 ---
 
@@ -50,7 +50,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 |-------|---------|-------------|
 | **up2date** | `/lazy2work:up2date` | Unified updater — checks and updates Homebrew packages, Claude Code skills/plugins, and SuperClaude commands in one go (`--brew` for Homebrew only, `--skill` for skills only). The `--skill` path also runs **`npx skills@latest update -g -y`** to refresh global agent skills (e.g. mattpocock/skills) and **prunes skills deleted upstream** by parsing the updater's warning and calling `npx skills remove` (opt out with `--no-skill-prune`) |
 | **analyze-arxiv** | `/lazy2work:analyze-arxiv` | Study arXiv papers — fetches paper content, generates structured summaries, and creates prerequisite knowledge documents for deeper understanding |
-| **constitution-generator** | `/lazy2work:constitution-generator` | Generate optimized `/speckit.constitution` prompts — gathers project info (tech stack, architecture, conventions), detects brownfield patterns, and outputs a verifiable constitution with validation checklist |
+| **constitution-generator** | `/lazy2work:constitution-generator` | Generate optimized `/speckit.constitution` prompts — gathers project info (tech stack, project stage, conventions), detects brownfield patterns, and outputs a **minimal-but-enforceable** constitution: 6–12 non-negotiable principles in MUST/NO language, each with a `(Rationale: …)`, prototype-stage gate stripping, and a validation checklist |
 | **generate-optimized-spec-kit-prompt** | `/lazy2work:generate-optimized-spec-kit-prompt` | Generate complete Spec Kit prompts (specify/clarify/plan/tasks/implement/commit) from a PRD + pre-sliced issue files — 1 issue = 1 feature (no re-slicing), 6-stage prompts per feature with Mermaid diagrams and auto-clarify/auto-commit steps. Also installs a headless runner at `utilities/speckit_pipeline.sh` to execute the generated prompts via `claude -p` |
 | **pyright-setup** | `/lazy2work:pyright-setup` | Auto-configure Pyright for Python projects — detects Python version from venv, adds `[tool.pyright]` to pyproject.toml, resolves "Import could not be resolved" LSP errors in Neovim/VS Code |
 | **apply-all-sc-save** | `/lazy2work:apply-all-sc-save` | Broadcast `/sc:save` to all Claude Code panes in the current tmux session — auto-detects Claude panes, excludes self, supports `--dry-run`, `--all-sessions`, and custom commands |
@@ -238,31 +238,31 @@ Prerequisites covered:
 
 Workflow:
 
-1. Gathers project info (name, tech stack, project type)
+1. Gathers project info (name, tech stack, project type, **project stage: prototype or production**)
 2. For brownfield: reads project structure and detects conventions
-3. Generates a complete `/speckit.constitution` prompt with:
+3. Generates a **minimal-but-enforceable** `/speckit.constitution` prompt — sections are a menu, not a quota (6–12 principles total, hard cap 15):
    - Tech Stack (locked with versions)
-   - Architecture Principles
-   - Coding Conventions
-   - Testing Requirements
-   - Security Principles
-   - Prohibitions (minimum 3 items)
-   - Deployment Target
-4. Validates against anti-patterns (vague rules, missing versions, etc.)
+   - Prohibitions (minimum 3 explicit NO items)
+   - Architecture / Coding Conventions / Testing / Security — only where a genuine non-negotiable exists
+   - Deployment Target — production stage only; prototypes explicitly exclude CI/CD, deployment, and performance-budget articles
+4. Validates against anti-patterns (over-constraint, missing Rationale, vague rules, missing versions, etc.)
 
-Output: A ready-to-use `/speckit.constitution` prompt text. Every rule is verifiable — no vague guidelines like "write good code."
+Output: A ready-to-use `/speckit.constitution` prompt text. Every principle is written in enforceable **MUST/NO** language with quantified thresholds (coverage ≥ 80%, P95 < 200ms) and carries a `(Rationale: …)` — agents follow rules better when they understand why.
 
 Validation checklist:
 
 ```
-| Check                                          | Pass? |
-|------------------------------------------------|-------|
-| All rules are verifiable                       |  ✅   |
-| Tech stack has specific versions               |  ✅   |
-| Prohibitions section exists and is non-empty   |  ✅   |
-| No feature requirements (belongs in /specify)  |  ✅   |
-| No implementation details (belongs in /plan)   |  ✅   |
-| Each section has 3-7 rules                     |  ✅   |
+| Check                                                    | Pass? |
+|----------------------------------------------------------|-------|
+| All rules verifiable, in MUST/NO language                |  ✅   |
+| Every principle carries a (Rationale: …)                 |  ✅   |
+| Thresholds quantified (≥ 80%, P95 < 200ms)               |  ✅   |
+| Total principles ≤ 12, all non-negotiable                |  ✅   |
+| Stage match: prototype has no CI/CD / perf-budget rules  |  ✅   |
+| Tech stack has specific versions                         |  ✅   |
+| Prohibitions section exists and has ≥ 3 items            |  ✅   |
+| No feature requirements (belongs in /specify)            |  ✅   |
+| No implementation details (belongs in /plan)             |  ✅   |
 ```
 
 </details>
@@ -1217,6 +1217,11 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.37.0 (2026-07-21)
+
+- **constitution-generator: "minimal but enforceable" rework** — the skill now follows the exhaustive Spec Kit prompting research (2026-07-21): constitutions carry **only non-negotiable guardrails** (6–12 principles, hard cap 15; sections are a menu, not a quota) because over-constraint is the #1 constitution trap (agent over-compliance → unnecessary artifacts, context drift — Martin Fowler / den.dev). Every principle is now written in enforceable **MUST/NO** language with quantified thresholds (coverage ≥ 80%, P95 < 200ms) and carries a mandatory **`(Rationale: …)`** (agents comply better when they understand why). New required intake question: **project stage** — prototype constitutions explicitly strip CI/CD, deployment, and performance-budget articles; production keeps them. Generated prompts also instruct the agent to delete non-applicable template sections instead of padding. `references/constitution-guide.md` rewritten to match: over-constraint trap section, Rationale how-to, prototype-vs-production table, section menu (replaces the old "Required Sections (8)"), expanded anti-pattern table, and all three examples updated to the new format
+- **Version bump**: 1.36.0 → 1.37.0
 
 ### v1.36.0 (2026-07-09)
 
