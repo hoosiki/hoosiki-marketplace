@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# wm_stage_runner.sh — workmux worktree 의 단일 pane 안에서 도는 스크립트.
+#
+# 브랜치 이름으로 phase / wave / feature 를 판별하고 speckit_pipeline.sh 를 호출한다.
+# tmux pane 은 드라이버의 환경변수를 상속한다는 보장이 없으므로, 브랜치 이름이 유일하게 확실한 채널이다.
+#
+#   spec/NNN-<slug>                → Phase 1: 01_specify + 02_clarify + commit
+#   build/<wave-name>/NNN-<slug>   → Phase 2: 03_plan ~ 08_converge + commit
+#
+# 완료되면 exit → pane 종료 → tmux 창/세션이 닫힘 → 드라이버의 -W/--max-concurrent 가 다음으로 진행한다.
+# ⚠️ pane 은 반드시 1개여야 한다. 2개면 둘 다 종료해야 창이 닫혀 드라이버가 영원히 멈춘다.
+#
+# 성공/실패는 exit code 가 아니라 상태 파일로 보고한다 (-W 는 exit code 를 전파하지 않는다).
+# 상태 파일은 worktree 가 지워져도 남도록 반드시 "메인 저장소"에 쓴다.
+#
+# Usage (보통 .workmux.yaml 의 layouts.speckit pane command 로 실행):
+#   bash utilities/wm_stage_runner.sh [PROMPTS_PATH]
+#
+#   PROMPTS_PATH 생략 시: 워크트리 → 메인 저장소 순서로 .speckit-prompts/*/waves.json 을 자동 탐지.
+set -uo pipefail
+
+WT_ROOT="$(git rev-parse --show-toplevel)"
+cd "$WT_ROOT"
+
+BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+PHASE="${BRANCH%%/*}"
+REST="${BRANCH#*/}"
+
+case "$PHASE" in
+spec)
+	WAVE=""
+	FEATURE="$REST"
+	;;
+build)
+	WAVE="${REST%%/*}"
+	FEATURE="${REST#*/}"
+	;;
+*)
+	echo "❌ 알 수 없는 브랜치 phase: '$BRANCH' (spec/… 또는 build/<wave>/… 이어야 함)"
+	sleep 5
+	exit 2
+	;;
+esac
+
+FNUM="${FEATURE%%-*}"
+
+# 메인 저장소 경로 — 로그·상태 파일은 여기에 쓴다 (worktree 는 병합 후 사라질 수 있다)
+MAIN_ROOT="${WM_PROJECT_ROOT:-$(git worktree list --porcelain | head -1 | sed 's/^worktree //')}"
+
+# 프롬프트 경로: 인자 → worktree → 메인 저장소 순
+PROMPTS_DIR="${1:-}"
+if [ -z "$PROMPTS_DIR" ]; then
+	for root in "$WT_ROOT" "$MAIN_ROOT"; do
+		candidate="$(find "$root/.speckit-prompts" -maxdepth 2 -name waves.json -type f 2>/dev/null | sort | head -1)"
+		if [ -n "$candidate" ]; then
+			PROMPTS_DIR="$(dirname "$candidate")"
+			break
+		fi
+	done
+fi
+if [ -z "$PROMPTS_DIR" ] || [ ! -d "$PROMPTS_DIR" ]; then
+	echo "❌ 프롬프트 디렉터리를 찾지 못했습니다 (.speckit-prompts/<project>/waves.json)"
+	sleep 5
+	exit 2
+fi
+PROMPTS_DIR="$(cd "$PROMPTS_DIR" && pwd)"
+
+if [ ! -d "$PROMPTS_DIR/$FEATURE" ]; then
+	echo "❌ feature 프롬프트 폴더가 없습니다: $PROMPTS_DIR/$FEATURE"
+	sleep 5
+	exit 2
+fi
+
+# 상태·로그 (메인 저장소)
+if [ "$PHASE" = "spec" ]; then
+	RUN_DIR="$MAIN_ROOT/.speckit-logs/parallel/spec"
+else
+	RUN_DIR="$MAIN_ROOT/.speckit-logs/parallel/build/$WAVE"
+fi
+mkdir -p "$RUN_DIR"
+STATUS_FILE="$RUN_DIR/$FEATURE.status"
+echo "RUNNING" >"$STATUS_FILE"
+
+echo "▶ [$FEATURE] phase=$PHASE${WAVE:+ wave=$WAVE} branch=$BRANCH"
+echo "  worktree: $WT_ROOT"
+echo "  prompts:  $PROMPTS_DIR"
+echo "  status:   $STATUS_FILE"
+echo ""
+
+# speckit_pipeline.sh 에 위임한다 (단계 정의·모델/effort·프리앰블의 단일 출처).
+#   SPECKIT_WORKTREE_MODE=1 → 프롬프트에 worktree 격리 가드레일이 추가된다
+#   SPECKIT_LOG_ROOT        → 로그를 메인 저장소에 남긴다
+#   </dev/null              → 실패 시 대화형 프롬프트로 멈추지 않고 즉시 중단시킨다 (pane 은 tty 다)
+SPECKIT_WORKTREE_MODE=1 \
+SPECKIT_LOG_ROOT="$RUN_DIR/logs" \
+	bash "$WT_ROOT/utilities/speckit_pipeline.sh" "$PROMPTS_DIR" \
+	--phase "$PHASE" \
+	--only "$FNUM" \
+	</dev/null
+rc=$?
+
+if [ $rc -ne 0 ]; then
+	echo "FAIL" >"$STATUS_FILE"
+	echo "❌ [$FEATURE] $PHASE 실패 (exit $rc) — 로그: $RUN_DIR/logs/"
+	sleep 5 # 창이 닫히기 전 눈으로 확인할 여유
+	exit $rc
+fi
+
+# 파이프라인이 커밋을 남기지 못한 경우를 대비한 안전망 (병합할 것이 있어야 한다)
+git add -A -- ':!.speckit-logs' ':!.env' ':!.workmux' >/dev/null 2>&1 || true
+if ! git diff --cached --quiet; then
+	git commit -q -m "$(printf 'chore(%s): speckit %s%s\n\nAutomated via workmux + wm_stage_runner.sh\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>' \
+		"${FEATURE#*-}" "$PHASE" "${WAVE:+ ($WAVE)}")" || true
+fi
+
+echo "OK" >"$STATUS_FILE"
+echo "✅ [$FEATURE] $PHASE 완료"
+# exit → pane 종료 → 창이 닫힘 → 드라이버의 -W 반환

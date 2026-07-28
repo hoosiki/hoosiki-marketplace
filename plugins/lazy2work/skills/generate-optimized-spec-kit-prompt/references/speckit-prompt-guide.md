@@ -8,11 +8,11 @@ Applies the exhaustive Spec Kit prompting research (`research_speckit_command_op
 |---|-------|------|-------------|-----------------|
 | 1 | `/speckit.specify` | **What + Why** | Features, users, scenarios, constraints | Tech stack, architecture, code |
 | 2 | `/speckit.clarify` | **Refine** | `auto-accept all recommended options` — resolve spec ambiguities | Manual intervention |
-| 3 | `/speckit.plan` | **How** | Tech stack, architecture, file paths, stop-guard | Feature requirements; starting tasks/code |
+| 3 | `/speckit.plan` | **How** | Upstream context, tech stack, architecture, file paths, stop-guard | Feature requirements; starting tasks/code |
 | 4 | `/speckit.checklist` | **Requirements QA** | `auto-accept all recommended options` — completeness/clarity/consistency | Implementation detail |
 | 5 | `/speckit.tasks` | **Order (generated)** | Command only — derive tasks from spec+plan | Hand-authored `T001…`; tech decisions |
 | 6 | `/speckit.analyze` | **Cross-check** | `auto-accept all recommended options` — 4-way consistency, fix at correct layer | Hand-editing tasks.md |
-| 7 | `/speckit.implement` | **Rules** | Scope (all tasks, one pass), commit, failure behavior | Design changes |
+| 7 | `/speckit.implement` | **Rules** | Shared-file ownership, scope (all tasks, one pass), commit, failure behavior | Design changes |
 | 8 | `/speckit.converge` | **Close gaps** | `auto-accept` loop — converge → implement → converge until done | Manual gap triage |
 | — | `/sc:git commit` | **Commit** | Final commit after convergence | Design changes, new features |
 
@@ -51,15 +51,18 @@ Aligned with the official spec-template mandatory sections:
 
 ## /speckit.plan — Required Fields (research §4)
 
-1. Tech stack — language, framework, DB with versions
-2. Architecture pattern — structural decisions
-3. Existing code references — brownfield: **exact file paths + function signatures + API contracts** (ambiguity here causes the "duplicate-file" disaster where the agent creates new files instead of editing existing ones)
-4. Non-functional requirements — performance (quantified), security, deployment
-5. Explicit exclusions — things NOT to do
-6. Test strategy — framework, scope
-7. **Stop-guard** — "generate `plan.md` only; do not start tasks or write code" (research trap #1011: some agents auto-start coding at plan)
+1. **Upstream Context** — per effective blocker, the concrete artifacts it provides (module path, symbol, signature, endpoint, model fields) with an explicit "do NOT rebuild". Required whenever the feature has blockers.
+2. Tech stack — language, framework, DB with versions
+3. Architecture pattern — structural decisions
+4. Existing code references — brownfield: **exact file paths + function signatures + API contracts** (ambiguity here causes the "duplicate-file" disaster where the agent creates new files instead of editing existing ones)
+5. Non-functional requirements — performance (quantified), security, deployment
+6. Explicit exclusions — things NOT to do
+7. Test strategy — framework, scope
+8. **Stop-guard** — "generate `plan.md` only; do not start tasks or write code" (research trap #1011: some agents auto-start coding at plan)
 
 **Rules**: No feature requirements (already in spec). Reference specific file paths, not vague "follow existing patterns." Distinguish existing vs new code explicitly.
+
+**Why Upstream Context is mandatory**: `plan` is the only stage that reads the codebase — which is exactly why it is the parallel safety boundary. In a parallel wave the prior feature's code is not on disk yet, so everything `plan` would normally verify against it (integration points, idle stubs, signature agreement, model field gaps) is unavailable. Hardcoding the upstream contract preserves the *design intent*; what stays lost is *verification*, so the section has to be accurate. See [parallel-execution-guide.md](parallel-execution-guide.md) §1, §6.
 
 ## /speckit.checklist — Requirements-Quality Gate (research §5)
 
@@ -94,13 +97,16 @@ Runs **after tasks, before implement**. Cross-checks `constitution ↔ spec ↔ 
 
 ## /speckit.implement — Required Fields (research §8)
 
-1. Scope — implement all tasks in one pass (no `--tasks N-M` slicing)
-2. Commit strategy — per-task commit (Commit Regularly)
-3. Code style — formatter, docstring, type hints
-4. Verification — test after each task (Verify Frequently)
-5. Failure behavior — stop and report on test failure
+1. **Shared Infrastructure** — per hotspot file the feature touches: the owning feature and the idempotent form of the edit. Required whenever another feature also writes that file.
+2. Scope — implement all tasks in one pass (no `--tasks N-M` slicing)
+3. Commit strategy — per-task commit (Commit Regularly)
+4. Code style — formatter, docstring, type hints
+5. Verification — test after each task (Verify Frequently)
+6. Failure behavior — stop and report on test failure
 
 **Rules**: Implement the entire task list at once. Go back to `/speckit.plan` if a design change is needed — never redesign inside implement.
+
+**Why Shared Infrastructure is mandatory**: settings/installed-apps modules, API routers, and dependency manifests are written by nearly every feature. Idempotent edits are what let waves merge cleanly — and they only hold if merges are sequential. State both the owner and the idempotent form; "append if absent" is a rule, "add the app" is not.
 
 ## /speckit.converge — Close Gaps in a Loop (research §9)
 
@@ -123,8 +129,14 @@ Final commit after convergence completes. Fixed prompt — no per-feature custom
 
 - Features arrive as issue files (`NN-slug.md`), one vertical slice each — do NOT re-split or merge them
 - The first issue (e.g. `00-env-*`) is the environment/prefactor setup slice; treat it as a normal feature
-- Use each issue's "Blocked by" for implementation order and task dependency context
+- Use each issue's "Blocked by" for implementation order and task dependency context — but **the declared graph is not the real graph**. Extract hidden dependencies from the acceptance criteria too, and record declared vs effective separately (see [parallel-execution-guide.md](parallel-execution-guide.md) §3)
 - Map issue acceptance criteria → measurable success criteria (specify); tasks are then generated, not transcribed
+
+## Cross-Feature Conventions Belong in the Constitution
+
+`/speckit.clarify` runs per feature. Whether features run in parallel or stage-major, N features resolve the same ambiguity independently — and `/speckit.analyze` only checks a feature against *its own* constitution↔spec↔plan↔tasks, so two features that adopted opposite conventions **both pass every gate**. The contradiction surfaces at implement.
+
+Pin these globally before any `specify` runs: timezone handling, recurrence semantics, error format / failure policy, auth and authorization, logging and observability, test strategy. `analyze` reads the constitution, so anything pinned there *is* caught.
 
 ## Mermaid Diagram Placement
 
@@ -172,3 +184,7 @@ Final commit after convergence completes. Fixed prompt — no per-feature custom
 | Vague success criteria ("fast") | Measurable ("< 1 second") |
 | Missing Out of Scope | Always specify to prevent AI scope creep |
 | Re-slicing pre-sliced issues | Keep 1 issue file = 1 feature |
+| plan prompt with no Upstream Context | List every effective blocker's artifacts + "do NOT rebuild" |
+| Trusting the declared `Blocked by` graph | Extract hidden dependencies from the acceptance criteria |
+| Leaving a global convention to `clarify` | Pin it in `constitution.md` — `analyze` cannot see sibling features |
+| implement prompt with no shared-file ownership | Name the owner and the idempotent form of each hotspot edit |

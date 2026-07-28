@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.40.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.41.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.40.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
+| [**lazy2work**](plugins/lazy2work/) | 1.41.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
 
 ---
 
@@ -44,6 +44,10 @@ claude plugin install lazy2work@hoosiki-marketplace
 - Python 3.10+ (for skills scripts and webhook hooks)
 - Node.js 18+ (for MCP setup commands that use `npx`)
 
+Optional, per skill:
+
+- [`workmux`](https://github.com/raine/workmux) 0.1.224+ and `tmux` — only for `generate-optimized-spec-kit-prompt`'s parallel execution path (`utilities/speckit_parallel.sh`). The sequential runner needs neither. Install with `brew install raine/workmux/workmux`.
+
 ### Skills (12)
 
 | Skill | Command | Description |
@@ -51,7 +55,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 | **up2date** | `/lazy2work:up2date` | Unified updater — checks and updates Homebrew packages, Claude Code skills/plugins, and SuperClaude commands in one go (`--brew` for Homebrew only, `--skill` for skills only). The `--skill` path also runs **`npx skills@latest update -g -y`** to refresh global agent skills (e.g. mattpocock/skills) and **prunes skills deleted upstream** by parsing the updater's warning and calling `npx skills remove` (opt out with `--no-skill-prune`) |
 | **analyze-arxiv** | `/lazy2work:analyze-arxiv` | Study arXiv papers — fetches paper content, generates structured summaries, and creates prerequisite knowledge documents for deeper understanding |
 | **constitution-generator** | `/lazy2work:constitution-generator` | Generate optimized `/speckit.constitution` prompts — gathers project info (tech stack, project stage, conventions), detects brownfield patterns, and outputs a **minimal-but-enforceable** constitution: 6–12 non-negotiable principles in MUST/NO language, each with a `(Rationale: …)`, prototype-stage gate stripping, and a validation checklist |
-| **generate-optimized-spec-kit-prompt** | `/lazy2work:generate-optimized-spec-kit-prompt` | Generate complete Spec Kit prompts for the full 8-stage flow (specify → clarify → plan → checklist → tasks → analyze → implement → converge, + commit) from a PRD + pre-sliced issue files — 1 issue = 1 feature (no re-slicing), Mermaid diagrams, `/speckit.tasks` command-only (no hand-authored tasks), and auto-accept prompts for clarify/checklist/analyze/converge. Also installs a headless runner at `utilities/speckit_pipeline.sh` to execute the generated prompts via `claude -p` |
+| **generate-optimized-spec-kit-prompt** | `/lazy2work:generate-optimized-spec-kit-prompt` | Generate complete Spec Kit prompts for the full 8-stage flow (specify → clarify → plan → checklist → tasks → analyze → implement → converge, + commit) from a PRD + pre-sliced issue files — 1 issue = 1 feature (no re-slicing), Mermaid diagrams, `/speckit.tasks` command-only (no hand-authored tasks), and auto-accept prompts for clarify/checklist/analyze/converge. Also plans the run for **maximum parallelism**: a dependency DAG (`DEPENDENCIES.md` with a Mermaid diagram), named waves (`waves.json`), a workmux runbook (`PARALLEL_EXECUTION.md`), and 4 runner scripts for two-phase execution — all features in parallel through specify+clarify, then wave-by-wave through plan…converge |
 | **pyright-setup** | `/lazy2work:pyright-setup` | Auto-configure Pyright for Python projects — detects Python version from venv, adds `[tool.pyright]` to pyproject.toml, resolves "Import could not be resolved" LSP errors in Neovim/VS Code |
 | **apply-all-sc-save** | `/lazy2work:apply-all-sc-save` | Broadcast `/sc:save` to all Claude Code panes in the current tmux session — auto-detects Claude panes, excludes self, supports `--dry-run`, `--all-sessions`, and custom commands |
 | **fix-mermaid** | `/lazy2work:fix-mermaid` | Fix Markdown rendering issues that break Mermaid diagrams or pandoc PDF conversion — Mermaid v11 syntax (reserved words, Unicode/Langium issues, message escaping) **and** pandoc PDF pitfalls (blank-line compliance before lists/tables/fences as auto-fixed errors, long-mixed-cell overflow as warnings, always-on Unicode glyph map covering U+2212/U+2717/U+2718, **currency-dollar auto-escape** for `$100`/`$76.4억` that prevents `Bad math environment delimiter` errors, **unsafe-inline-code warnings** for `` `pass^k` ``-style content that collides with the `\seqsplit` wrapper and causes `Missing number, treated as zero`, **closing-dollar-trailing-space auto-fix** for `$\mathcal{H}_1 = $ rest` patterns that violate pandoc's `tex_math_dollars` rule and cause `\symcal allowed only in math mode`, plus opt-in **`--latin1-normalize`** for Latin-1 Supplement diacritics like `á é ñ ü ß`). Three bundled Python scripts (`fix_mermaid.py`, `fix_pandoc_blanks.py`, `validate_mermaid.py`) with lint / `--fix` / `--json` modes, plus optional **`--with-mmdc` feedback loop** that renders each diagram with Mermaid CLI and iterates targeted fixes until clean |
@@ -285,9 +289,33 @@ Workflow:
 
 1. Reads the PRD and every issue file — **1 issue file = 1 feature**, never merged or re-split
 2. Extracts Mermaid diagrams and classifies them by stage placement
-3. Generates 8 stage prompts (+ commit) per feature following strict stage separation (specify ← issue scope + acceptance criteria + referenced PRD user stories; plan ← PRD decisions + issue tech details). `/speckit.tasks` is command-only — tasks are generated from spec + plan, never hand-authored; clarify/checklist/analyze/converge lead with `auto-accept all recommended options`
-4. Writes output to `.speckit-prompts/{prd-name}/{NNN}-{slug}/` folders — the parent folder name is derived from the PRD (short kebab-case project name), the issue number is zero-padded to 3 digits
-5. Installs the bundled headless runner at `<project>/utilities/speckit_pipeline.sh` (copied verbatim + `chmod +x`) — runs each feature through `01_specify → … → 08_converge → commit` via `claude -p` with per-stage model/effort, `--dry-run`, `--only`, `--from`, and `--resume`
+3. Builds the **dependency DAG** — declared `Blocked by` plus hidden dependencies extracted from the acceptance criteria — and groups features into **named waves** by longest-path depth
+4. Generates 8 stage prompts (+ commit) per feature following strict stage separation (specify ← issue scope + acceptance criteria + referenced PRD user stories; plan ← PRD decisions + issue tech details + **Upstream Context** from the DAG; implement ← rules + **shared-file ownership**). `/speckit.tasks` is command-only — tasks are generated from spec + plan, never hand-authored; clarify/checklist/analyze/converge lead with `auto-accept all recommended options`
+5. Writes output to `.speckit-prompts/{prd-name}/{NNN}-{slug}/` folders — the parent folder name is derived from the PRD (short kebab-case project name), the issue number is zero-padded to 3 digits — plus `DEPENDENCIES.md` (Mermaid DAG + waves + hotspots), `PARALLEL_EXECUTION.md` (workmux runbook), and `waves.json` at the parent folder
+6. Installs 4 runner scripts into `<project>/utilities/` (copied verbatim + `chmod +x`) and renders `.workmux.yaml`
+
+#### Two-Phase Parallel Execution
+
+The parallel safety boundary is `/speckit.plan` — it is the only stage that reads the codebase, so a parallel worktree can't verify against a prior feature's code.
+
+| Phase | Stages | Parallelism | Branch |
+|-------|--------|-------------|--------|
+| 1 — spec | `01_specify` → `02_clarify` → commit | **all features at once** | `spec/{NNN}-{slug}` |
+| 2 — build | `03_plan` → … → `08_converge` → commit | **one wave at a time** | `build/{wave}/{NNN}-{slug}` |
+
+```bash
+# Sequential (single process, no worktrees)
+./utilities/speckit_pipeline.sh .speckit-prompts/japanese-tutor
+./utilities/speckit_pipeline.sh .speckit-prompts/japanese-tutor --phase build --wave w1-core-domain
+
+# Parallel (workmux git worktrees + tmux)
+./utilities/speckit_parallel.sh waves            # show the wave plan
+./utilities/speckit_parallel.sh spec --dry-run   # Phase 1 preview
+./utilities/speckit_parallel.sh spec             # Phase 1 — every feature in parallel, then sequential merge
+./utilities/speckit_parallel.sh build            # Phase 2 — wave by wave, merge barrier between waves
+```
+
+A `pre_merge` gate blocks any merge whose `spec.md` still has `[NEEDS CLARIFICATION]` markers (Phase 1) or whose `tasks.md` still has unchecked tasks / failing tests (Phase 2). Requires `workmux` + `tmux`; the driver refuses to start until `.specify/feature.json` is untracked (otherwise every worktree merge conflicts) and enforces `create-new-feature.sh --number NNN` so parallel worktrees don't all claim the same feature number.
 
 #### 8-Stage Role Separation (+ commit)
 
@@ -297,11 +325,11 @@ Based on the exhaustive Spec Kit prompting research (2026-07-21). Think in detai
 |-------|------|-------------|-----------------|
 | `/speckit.specify` | **What + Why** | Features, users, scenarios, constraints | Tech stack, architecture, code |
 | `/speckit.clarify` | **Refine** | `auto-accept all recommended options` — resolve spec ambiguities | Manual intervention |
-| `/speckit.plan` | **How** | Tech stack, architecture, file paths, stop-guard | Feature requirements; starting tasks/code |
+| `/speckit.plan` | **How** | Upstream context, tech stack, architecture, file paths, stop-guard | Feature requirements; starting tasks/code |
 | `/speckit.checklist` | **Requirements QA** | `auto-accept` — completeness/clarity/consistency | Implementation detail |
 | `/speckit.tasks` | **Order (generated)** | Command only — derive tasks from spec + plan | Hand-authored `T001…`; tech decisions |
 | `/speckit.analyze` | **Cross-check** | `auto-accept` — 4-way consistency, fix at correct layer | Hand-editing tasks.md |
-| `/speckit.implement` | **Rules** | All tasks in one pass, per-task commit, failure behavior | Design changes |
+| `/speckit.implement` | **Rules** | Shared-file ownership, all tasks in one pass, per-task commit, failure behavior | Design changes |
 | `/speckit.converge` | **Close gaps** | `auto-accept` loop — converge → implement → converge | Manual gap triage |
 | `/sc:git commit` | **Commit** | Final commit after convergence | Design changes, new features |
 
@@ -1161,8 +1189,9 @@ hoosiki-marketplace/
 │       │   │   └── references/
 │       │   ├── generate-optimized-spec-kit-prompt/
 │       │   │   ├── SKILL.md
-│       │   │   ├── references/
-│       │   │   └── assets/               ← speckit_pipeline.sh (headless runner, copied into user projects)
+│       │   │   ├── references/           ← prompt guide, parallel-execution guide, output format
+│       │   │   └── assets/               ← speckit_pipeline.sh, speckit_parallel.sh, wm_stage_runner.sh,
+│       │   │                                wm_pre_merge_gate.sh, workmux.yaml.template (copied into user projects)
 │       │   ├── pyright-setup/
 │       │   │   ├── SKILL.md
 │       │   │   └── scripts/
@@ -1229,6 +1258,14 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.41.0 (2026-07-28)
+
+- **generate-optimized-spec-kit-prompt: dependency DAG + named waves + two-phase parallel execution** — the skill now plans the whole project for maximum parallelism instead of emitting a purely sequential run. Before generating prompts it builds a dependency DAG from the issues (declared `Blocked by` **plus hidden dependencies extracted from the acceptance criteria**, since the declared graph is routinely incomplete) and groups features into **named waves** by longest-path depth (`w0-foundation`, `w1-core-domain`, …, each with a human title and a rationale). Three new artifacts land in `.speckit-prompts/{prd-name}/`: **`DEPENDENCIES.md`** (Mermaid DAG with wave subgraphs, declared-vs-effective table, shared-infrastructure ownership, and the cross-feature conventions that must be pinned in `constitution.md`), **`waves.json`** (machine-readable wave plan consumed by the runners), and **`PARALLEL_EXECUTION.md`** (the wave-by-wave workmux runbook). Applies the 2026-07-28 exhaustive research on per-command parallel safety boundaries
+- **generate-optimized-spec-kit-prompt: `speckit_pipeline.sh` is phase- and wave-aware** — new `--phase spec|build|all` and `--wave NAME` options. `spec` runs `01_specify → 02_clarify → commit`, `build` runs `03_plan → … → 08_converge → commit`, `all` keeps the previous end-to-end behavior. The runner also injects a **parallel-safety preamble** at `01_specify` forcing `create-new-feature.sh --number NNN` — without it every worktree branching from the same base claims the same feature number, and even sequential runs drift `+1` from the prompt numbering. New env hooks: `SPECKIT_LOG_ROOT` (keep logs in the main repo when running inside a worktree) and `SPECKIT_WORKTREE_MODE=1` (adds worktree isolation guardrails to the prompt)
+- **generate-optimized-spec-kit-prompt: 3 new runner assets + `.workmux.yaml` template** — `assets/speckit_parallel.sh` (workmux driver: `waves` / `spec` / `build [--wave|--from-wave]` / `merge`, with `--max-concurrent` throttling, `--dry-run`, and always-sequential `--rebase` merges), `assets/wm_stage_runner.sh` (single-pane in-worktree script that derives phase/wave/feature from the branch name and delegates to `speckit_pipeline.sh`), `assets/wm_pre_merge_gate.sh` (merge gate: `spec.md` free of `[NEEDS CLARIFICATION]` for Phase 1; `plan.md`+`tasks.md` present, zero unchecked tasks, and the project verify command passing for Phase 2), and `assets/workmux.yaml.template`. All scripts are bash 3.2 compatible (stock macOS) and verified against workmux 0.1.224
+- **generate-optimized-spec-kit-prompt: prompts now carry the context parallelism removes** — `03_plan.md` gains a mandatory **`## Upstream Context`** section listing each effective blocker's concrete artifacts with "do NOT rebuild" (a parallel `plan` cannot read that code), and `07_implement.md` gains a mandatory **`## Shared Infrastructure`** section naming the owner and idempotent form of every hotspot edit. New reference `references/parallel-execution-guide.md` documents the safety boundary per command, the wave algorithm, and the workmux mechanics
+- **Version bump**: 1.40.0 → 1.41.0
 
 ### v1.40.0 (2026-07-21)
 
