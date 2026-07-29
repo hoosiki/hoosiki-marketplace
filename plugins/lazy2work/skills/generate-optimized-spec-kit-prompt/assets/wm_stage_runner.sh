@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 # wm_stage_runner.sh — workmux worktree 의 단일 pane 안에서 도는 스크립트.
 #
-# 브랜치 이름으로 phase / wave / feature 를 판별하고 speckit_pipeline.sh 를 호출한다.
+# 브랜치 이름으로 웨이브를 판별하고 speckit_pipeline.sh 를 호출한다.
 # tmux pane 은 드라이버의 환경변수를 상속한다는 보장이 없으므로, 브랜치 이름이 유일하게 확실한 채널이다.
 #
-#   spec/NNN-<slug>                → Phase 1: 01_specify + 02_clarify + commit
-#   build/<wave-name>/NNN-<slug>   → Phase 2: 03_plan ~ 08_converge + commit
+#   build/<wave-name>   → Phase 2: 그 웨이브의 feature 들을 waves.json 순서대로 03_plan ~ 08_converge
+#
+# 웨이브는 의존성 "체인"이다 — 웨이브 안은 순차 실행이고, 앞 feature 의 코드가 같은 워킹트리에
+# 이미 커밋돼 있으므로 뒤 feature 의 plan 은 그것을 실제로 읽을 수 있다.
+#
+# Phase 1(spec) 은 worktree 를 쓰지 않는다 — 드라이버가 메인 워킹트리에서 백그라운드 병렬로 돌린다.
 #
 # 완료되면 exit → pane 종료 → tmux 창/세션이 닫힘 → 드라이버의 -W/--max-concurrent 가 다음으로 진행한다.
 # ⚠️ pane 은 반드시 1개여야 한다. 2개면 둘 다 종료해야 창이 닫혀 드라이버가 영원히 멈춘다.
@@ -24,25 +28,28 @@ cd "$WT_ROOT"
 
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 PHASE="${BRANCH%%/*}"
-REST="${BRANCH#*/}"
+WAVE="${BRANCH#*/}"
 
 case "$PHASE" in
-spec)
-	WAVE=""
-	FEATURE="$REST"
-	;;
 build)
-	WAVE="${REST%%/*}"
-	FEATURE="${REST#*/}"
+	if [ -z "$WAVE" ] || [ "$WAVE" = "$BRANCH" ]; then
+		echo "❌ 웨이브 이름이 없는 브랜치입니다: '$BRANCH' (build/<wave-name> 이어야 함)"
+		sleep 5
+		exit 2
+	fi
+	;;
+spec)
+	echo "❌ Phase 1(spec) 은 worktree 를 쓰지 않습니다 — 드라이버가 메인 워킹트리에서 직접 돌립니다."
+	echo "   './utilities/speckit_parallel.sh spec' 을 쓰세요. (구버전 브랜치 스킴: '$BRANCH')"
+	sleep 5
+	exit 2
 	;;
 *)
-	echo "❌ 알 수 없는 브랜치 phase: '$BRANCH' (spec/… 또는 build/<wave>/… 이어야 함)"
+	echo "❌ 알 수 없는 브랜치 phase: '$BRANCH' (build/<wave-name> 이어야 함)"
 	sleep 5
 	exit 2
 	;;
 esac
-
-FNUM="${FEATURE%%-*}"
 
 # 메인 저장소 경로 — 로그·상태 파일은 여기에 쓴다 (worktree 는 병합 후 사라질 수 있다)
 MAIN_ROOT="${WM_PROJECT_ROOT:-$(git worktree list --porcelain | head -1 | sed 's/^worktree //')}"
@@ -65,54 +72,47 @@ if [ -z "$PROMPTS_DIR" ] || [ ! -d "$PROMPTS_DIR" ]; then
 fi
 PROMPTS_DIR="$(cd "$PROMPTS_DIR" && pwd)"
 
-if [ ! -d "$PROMPTS_DIR/$FEATURE" ]; then
-	echo "❌ feature 프롬프트 폴더가 없습니다: $PROMPTS_DIR/$FEATURE"
-	sleep 5
-	exit 2
-fi
-
 # 상태·로그 (메인 저장소)
-if [ "$PHASE" = "spec" ]; then
-	RUN_DIR="$MAIN_ROOT/.speckit-logs/parallel/spec"
-else
-	RUN_DIR="$MAIN_ROOT/.speckit-logs/parallel/build/$WAVE"
-fi
+RUN_DIR="$MAIN_ROOT/.speckit-logs/parallel/build"
 mkdir -p "$RUN_DIR"
-STATUS_FILE="$RUN_DIR/$FEATURE.status"
+STATUS_FILE="$RUN_DIR/$WAVE.status"
 echo "RUNNING" >"$STATUS_FILE"
 
-echo "▶ [$FEATURE] phase=$PHASE${WAVE:+ wave=$WAVE} branch=$BRANCH"
+echo "▶ [$WAVE] phase=build branch=$BRANCH"
 echo "  worktree: $WT_ROOT"
 echo "  prompts:  $PROMPTS_DIR"
 echo "  status:   $STATUS_FILE"
 echo ""
 
 # speckit_pipeline.sh 에 위임한다 (단계 정의·모델/effort·프리앰블의 단일 출처).
+#   --wave                  → waves.json 의 features 순서대로 순차 실행 (체인 순서)
 #   SPECKIT_WORKTREE_MODE=1 → 프롬프트에 worktree 격리 가드레일이 추가된다
 #   SPECKIT_LOG_ROOT        → 로그를 메인 저장소에 남긴다
 #   </dev/null              → 실패 시 대화형 프롬프트로 멈추지 않고 즉시 중단시킨다 (pane 은 tty 다)
 SPECKIT_WORKTREE_MODE=1 \
-SPECKIT_LOG_ROOT="$RUN_DIR/logs" \
+SPECKIT_LOG_ROOT="$RUN_DIR/$WAVE-logs" \
 	bash "$WT_ROOT/utilities/speckit_pipeline.sh" "$PROMPTS_DIR" \
-	--phase "$PHASE" \
-	--only "$FNUM" \
+	--phase build \
+	--wave "$WAVE" \
 	</dev/null
 rc=$?
 
 if [ $rc -ne 0 ]; then
 	echo "FAIL" >"$STATUS_FILE"
-	echo "❌ [$FEATURE] $PHASE 실패 (exit $rc) — 로그: $RUN_DIR/logs/"
+	echo "❌ [$WAVE] build 실패 (exit $rc) — 로그: $RUN_DIR/$WAVE-logs/"
 	sleep 5 # 창이 닫히기 전 눈으로 확인할 여유
 	exit $rc
 fi
 
-# 파이프라인이 커밋을 남기지 못한 경우를 대비한 안전망 (병합할 것이 있어야 한다)
-git add -A -- ':!.speckit-logs' ':!.env' ':!.workmux' >/dev/null 2>&1 || true
+# 파이프라인이 커밋을 남기지 못한 경우를 대비한 안전망 (병합할 것이 있어야 한다).
+# 제외는 .gitignore 에 맡긴다 — `git add -- ':!<ignored path>'` 는 경고와 함께 exit 1 을 내므로
+# 추적 중일 수 있는 경로만 사후에 unstage 한다.
+git add -A >/dev/null 2>&1 || true
+git reset -q -- .speckit-logs .env .workmux >/dev/null 2>&1 || true
 if ! git diff --cached --quiet; then
-	git commit -q -m "$(printf 'chore(%s): speckit %s%s\n\nAutomated via workmux + wm_stage_runner.sh\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>' \
-		"${FEATURE#*-}" "$PHASE" "${WAVE:+ ($WAVE)}")" || true
+	git commit -q -m "$(printf 'chore(%s): speckit build wave\n\nAutomated via workmux + wm_stage_runner.sh\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>' "$WAVE")" || true
 fi
 
 echo "OK" >"$STATUS_FILE"
-echo "✅ [$FEATURE] $PHASE 완료"
+echo "✅ [$WAVE] build 완료"
 # exit → pane 종료 → 창이 닫힘 → 드라이버의 -W 반환

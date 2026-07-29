@@ -1,30 +1,34 @@
 ---
 name: generate-optimized-spec-kit-prompt
-description: Generate optimized GitHub Spec Kit prompts for the full 8-stage flow (/speckit.specify → clarify → plan → checklist → tasks → analyze → implement → converge) for all pre-sliced feature issues of a project, organized for maximum parallel execution — a dependency DAG with a Mermaid diagram, named waves, and a two-phase workmux runbook. Use when user provides a PRD file plus an issues directory (vertically sliced features, one file per feature) via @ file paths and wants complete Spec Kit prompts generated. Triggers on "speckit prompts", "generate spec kit", "specify plan tasks implement", "SDD prompts", "speckit 병렬", "wave 병렬 실행", "workmux speckit", or when user provides a PRD + issues folder and wants full spec-driven development prompts. Assumes constitution already exists and features are already decomposed.
+description: Generate optimized GitHub Spec Kit prompts for the full 8-stage flow (/speckit.specify → clarify → plan → checklist → tasks → analyze → implement → converge) for all pre-sliced feature issues of a project, organized for maximum parallel execution — a dependency DAG with a Mermaid diagram, vertical waves (one wave = one dependency chain), and a two-phase runbook: Phase 1 runs every feature as background processes in one working tree, Phase 2 runs the trunk chain then the branch chains in parallel workmux worktrees. Use when user provides a PRD file plus an issues directory (vertically sliced features, one file per feature) via @ file paths and wants complete Spec Kit prompts generated. Triggers on "speckit prompts", "generate spec kit", "specify plan tasks implement", "SDD prompts", "speckit 병렬", "wave 병렬 실행", "수직 웨이브", "백그라운드 병렬 specify", "workmux speckit", or when user provides a PRD + issues folder and wants full spec-driven development prompts. Assumes constitution already exists and features are already decomposed.
 ---
 
 # Generate Optimized Spec Kit Prompts
 
 Generate optimized prompts for the full **8-stage** GitHub Spec Kit flow — `/speckit.specify` → `/speckit.clarify` → `/speckit.plan` → `/speckit.checklist` → `/speckit.tasks` → `/speckit.analyze` → `/speckit.implement` → `/speckit.converge` — plus a final `/sc:git commit`, for each pre-sliced feature issue. Features arrive already decomposed (vertical slices in an issues directory); this skill does NOT re-split them. Each issue gets its own folder with 9 individual prompt files (8 stages + commit).
 
-It additionally plans the run for **maximum parallelism**: it derives a dependency DAG from the issues, groups them into named waves, and emits the documents and scripts needed to execute the whole project in **two phases** — all features in parallel through `specify`+`clarify`, then wave-by-wave through `plan`…`converge` — driven by `workmux` git worktrees.
+It additionally plans the run for **maximum parallelism** and emits the documents and scripts to execute it in **two phases**:
+
+- **Phase 1 — spec**: every feature at once as **background processes in one working tree**. No worktrees, no branches, no merges — `specify`/`clarify` only write to `specs/{NNN}-{slug}/`, and a per-process `SPECIFY_FEATURE_DIRECTORY` keeps those disjoint.
+- **Phase 2 — build**: a dependency DAG grouped into **vertical waves** — one wave is one dependency *chain*, run sequentially in its own `workmux` git worktree, with waves running concurrently. The trunk chain runs first and auto-merges into `main`; the branch chains then run in parallel off that `main`.
 
 ## Design Basis
 
-Two research bodies shape this skill.
+Two research bodies plus the Spec Kit source shape this skill.
 
 **Prompting rules** (`research_speckit_command_optimal_prompting_bestpractices_cautions_exhaustive_20260721`):
 
 - **Tasks are generated, never hand-authored** (§6). `/speckit.tasks` scans `spec.md` + `plan.md` and produces `tasks.md` itself. The prompt must NOT enumerate `T001…` tasks — that hand-writes what the command should derive, and hand-editing `tasks.md` breaks downstream consistency. If tasks are wrong, fix `plan.md` and regenerate.
 - **The refine/verify gates run non-interactively via auto-accept** (§3, §5, §7, §9). `/speckit.clarify`, `/speckit.checklist`, `/speckit.analyze`, and `/speckit.converge` each lead with `auto-accept all recommended options` — with one guardrail: `/speckit.analyze` applies fixes at the correct layer (amend plan/spec and regenerate tasks, never hand-edit `tasks.md`, §7).
 
-**Parallel safety boundary** (`research_speckit_pipeline_parallel_safety_boundary_by_command_exhaustive_20260728`):
+**Isolation boundary** (`research_speckit_pipeline_parallel_safety_boundary_by_command_exhaustive_20260728`, corrected against Spec Kit 0.12 source):
 
-- **The boundary is `/speckit.plan`**, because `plan` is the only stage that reads the codebase. `specify` and `clarify` are unconditionally parallel-safe; everything from `plan` onward must run in dependency waves with a merge barrier between them.
+- **The boundary is `/speckit.plan`**, because `plan` is the first stage that reads and writes the codebase. Before it, isolation is a single environment variable; after it, isolation costs a worktree.
+- **Spec Kit 0.12+ resolves the active feature from `SPECIFY_FEATURE_DIRECTORY` → `.specify/feature.json`, not from the git branch**, and core `/speckit.specify` creates no branch at all (that moved to the optional git extension). This is what makes the Phase 1 fan-out safe in one working tree.
 - **`/speckit.analyze` does not catch cross-feature contradictions** — it only reads its own feature's four artifacts. Global conventions must be pinned in `constitution.md` before Phase 1.
-- **Two mechanical failures must be prevented up front**: feature-number auto-assignment collisions (`--number NNN`) and `.specify/feature.json` merge conflicts.
+- **Vertical waves remove the "plan is blind" problem.** Every effective blocker's code is physically on disk when `plan` runs: earlier stages are merged into `main`, and earlier features in the same wave are already committed in the same worktree.
 
-Read [references/parallel-execution-guide.md](references/parallel-execution-guide.md) for the full boundary table, wave algorithm, and workmux mechanics.
+Read [references/parallel-execution-guide.md](references/parallel-execution-guide.md) for the full boundary table, the spine-decomposition wave algorithm, and workmux mechanics.
 
 ## Input
 
@@ -75,23 +79,36 @@ From either input, collect Mermaid diagrams — classify each diagram for stage 
 | Deployment structure (Docker, cloud) | **plan** | HOW — infrastructure |
 | Task dependency (gantt) | **tasks** | ORDER — rarely used, text preferred |
 
-### 2. Build the Dependency DAG and Plan the Waves
+### 2. Build the Dependency DAG and Plan the Vertical Waves
 
 This step runs **before** prompt generation, because the wave plan feeds the prompts (upstream context, shared-file ownership).
 
 Follow [references/parallel-execution-guide.md](references/parallel-execution-guide.md) §3–§4. In short:
 
-1. **Effective dependencies** — for each issue, union of (a) the declared `Blocked by`, (b) **hidden dependencies extracted from the acceptance criteria**, and (c) dependencies implied by artifacts the issue references but another issue creates. Never trust the declared graph alone; an unreported hidden dependency produces a `plan.md` that references code that does not exist.
-2. **Waves by longest-path depth** — `depth(f) = 0` if no blockers, else `1 + max(depth(blockers))`. Adjust for non-idempotent shared-file collisions.
-3. **Name each wave** — `w{N}-{kebab-theme}` plus a human title and a one-sentence rationale (e.g. `w0-foundation` "Foundation", `w2-channels` "Delivery channels"). The theme comes from what the wave's features have in common.
-4. **Collect the shared-infrastructure hotspots** — files more than one feature will touch, with an owner and an idempotency rule.
+1. **Effective dependencies** — for each issue, union of (a) the declared `Blocked by`, (b) **hidden dependencies extracted from the acceptance criteria**, and (c) dependencies implied by artifacts the issue references but another issue creates. Never trust the declared graph alone; a missed dependency can place two features in sibling waves that cannot actually run concurrently.
+2. **Spine decomposition, not depth levels.** A wave is a dependency *chain* (vertical), not a set of same-depth features (horizontal):
+   - **Spine** = features comparable to every other feature (every other feature is its ancestor or its descendant). These cannot be parallelized with anything.
+   - Consecutive spine features → one **trunk wave** (`kind: "trunk"`), run sequentially and merged before anything else starts.
+   - Non-spine features sit in the gaps between spine features; each **weakly-connected component** of a gap → one **branch wave** (`kind: "branch"`), ordered topologically inside.
+   - Trunk waves and gap groups alternate into **stages**; a merge barrier separates stages, and all waves inside a branch stage run concurrently.
+
+   ```
+   000 → 001 → 003 ┬→ 004 → 005 → 006     stage 0 (trunk):  w0 = 000 001 003
+                   ├→ 007 → 008 → 009     stage 1 (branch): w1 = 004 005 006
+                   └→ 010 → 011 → 012                       w2 = 007 008 009
+                                                            w3 = 010 011 012
+   ```
+
+   **No edge may cross sibling waves.** If one does, merge those waves into one — never run them anyway.
+3. **Name each wave** — `w{N}-{kebab-theme}` plus a human title and a one-sentence rationale (e.g. `w0-foundation` "Foundation", `w2-channels` "Delivery channels"). The theme comes from what the *chain* delivers end to end.
+4. **Collect the shared-infrastructure hotspots** — files more than one feature will touch, with an owner, the owner's wave, and an idempotency rule. Push ownership into the trunk wherever possible: a branch wave lands a whole chain of commits at one barrier, so cross-wave collisions all arrive together.
 5. **Collect cross-feature convention candidates** — ambiguities that N concurrent `clarify` runs could resolve differently (timezone, recurrence semantics, error format, auth, logging, test strategy). These belong in `constitution.md`, not `clarify`.
 
 Emit this analysis as three artifacts (templates in [references/api_reference.md](references/api_reference.md)):
 
-- `DEPENDENCIES.md` — the human-readable DAG document with a **Mermaid diagram** (wave subgraphs), declared-vs-effective table, hidden-dependency callouts, hotspot ownership, and constitution candidates
-- `waves.json` — the machine-readable wave plan consumed by the runner scripts
-- `PARALLEL_EXECUTION.md` — the wave-by-wave workmux runbook (see step 5)
+- `DEPENDENCIES.md` — the human-readable DAG document with a **Mermaid diagram** (one subgraph per wave, chains drawn left to right), the stage/wave table, declared-vs-effective table, hidden-dependency callouts, hotspot ownership, and constitution candidates
+- `waves.json` — the machine-readable stage/wave plan consumed by the runner scripts (`waves[].features` order **is** the execution order)
+- `PARALLEL_EXECUTION.md` — the two-phase runbook (see step 5)
 
 ### 3. Generate 8-Stage Prompts (+ commit) per Feature
 
@@ -112,11 +129,11 @@ For each issue file (in issue-number order), generate all 9 prompts following st
 
 - `/speckit.specify` — WHAT + WHY only. Zero tech references. Official spec-template structure (prioritized user stories with Independent Test, Given/When/Then scenarios, `FR-NNN`/`SC-NNN`); mark unknowns `[NEEDS CLARIFICATION]` — no trailing questions.
 - `/speckit.clarify` — Lead with `auto-accept all recommended options`. Resolves spec ambiguities non-interactively before planning.
-- `/speckit.plan` — HOW only. Tech stack, architecture, file paths. No feature requirements. **MUST carry an `## Upstream Context` section** listing, per effective blocker, the concrete artifacts it provides (module paths, signatures, endpoints, model fields) with "do NOT rebuild" — a parallel plan cannot read that code, so the prompt has to supply it. End with a stop-guard: generate `plan.md` only, do not start tasks or code (research trap #1011).
+- `/speckit.plan` — HOW only. Tech stack, architecture, file paths. No feature requirements. **MUST carry an `## Upstream Context` section** listing, per effective blocker, the concrete artifacts it provides (module paths, signatures, endpoints, model fields), where it now lives (merged into `main` from an earlier stage, or committed earlier in this wave), and an instruction to **read those files** rather than guess. Add: if a listed file is genuinely absent, STOP and report — that means the wave plan is wrong, so never build a replacement. End with a stop-guard: generate `plan.md` only, do not start tasks or code (research trap #1011).
 - `/speckit.checklist` — Lead with `auto-accept all recommended options`. Unit-tests the requirements (completeness / clarity / consistency) after plan, before tasks.
 - `/speckit.tasks` — Command only. Do NOT enumerate `T001…` tasks in the prompt; `/speckit.tasks` generates `tasks.md` from spec + plan. Never hand-edit `tasks.md`; fix `plan.md` and regenerate.
 - `/speckit.analyze` — Lead with `auto-accept all recommended options`, but apply every fix at the correct layer: amend plan/spec and regenerate tasks — never hand-edit `tasks.md`. Runs before implement so gaps are caught while plan/tasks are still adjustable.
-- `/speckit.implement` — RULES only. Run **all tasks in one pass**, per-task verify + commit, stop-and-report on failure. No design changes. **MUST carry a `## Shared Infrastructure` section** for every hotspot the feature touches: the owner and the idempotent form of the edit.
+- `/speckit.implement` — RULES only. Run **all tasks in one pass**, per-task verify + commit, stop-and-report on failure. No design changes. **MUST carry a `## Shared Infrastructure` section** for every hotspot the feature touches: the owner, the owner's wave, and the idempotent form of the edit — plus "do not reorder or restructure" for non-owners, since sibling waves merge whole chains into the same file.
 - `/speckit.converge` — Lead with `auto-accept all recommended options`. Verify planned work is complete; if gaps surface as new tasks, run implement then converge again, looping until it reports "converged".
 - `/sc:git commit` — Final commit after convergence completes.
 
@@ -140,9 +157,9 @@ Create output directory and write files. See [references/api_reference.md](refer
 ```
 .speckit-prompts/
 └── japanese-tutor/              ← parent name derived from the PRD
-    ├── DEPENDENCIES.md          ← DAG (Mermaid) + waves + hidden deps + hotspots
-    ├── PARALLEL_EXECUTION.md    ← two-phase workmux runbook
-    ├── waves.json               ← machine-readable wave plan (read by the scripts)
+    ├── DEPENDENCIES.md          ← DAG (Mermaid) + stages/waves + hidden deps + hotspots
+    ├── PARALLEL_EXECUTION.md    ← two-phase runbook (background fan-out + wave worktrees)
+    ├── waves.json               ← machine-readable stage/wave plan (read by the scripts)
     ├── 000-env-compat-gate/
     │   ├── 01_specify.md
     │   ├── 02_clarify.md
@@ -171,7 +188,7 @@ Create output directory and write files. See [references/api_reference.md](refer
 | 6 | `06_analyze.md` | `/speckit.analyze` (auto-accept) | 2 (build) |
 | 7 | `07_implement.md` | `/speckit.implement` | 2 (build) |
 | 8 | `08_converge.md` | `/speckit.converge` (auto-accept loop) | 2 (build) |
-| 9 | `09_commit.md` | `/sc:git commit` | both (end of phase) |
+| 9 | `09_commit.md` | `/sc:git commit` | end of a build feature (Phase 1 commits once, from the driver) |
 
 **Folder naming**: `{prd-name}/{NNN}-{kebab-case-name}`
 
@@ -191,10 +208,10 @@ After writing the prompts, install the bundled execution assets so the user can 
 
 | Asset | Destination | Role |
 |-------|-------------|------|
-| `assets/speckit_pipeline.sh` | `<project>/utilities/speckit_pipeline.sh` | headless stage runner (phase/wave aware) — single source of stage/model/effort logic |
-| `assets/speckit_parallel.sh` | `<project>/utilities/speckit_parallel.sh` | workmux driver — two-phase, wave-by-wave, sequential merge |
-| `assets/wm_stage_runner.sh` | `<project>/utilities/wm_stage_runner.sh` | in-worktree pane script — derives phase/wave/feature from the branch name |
-| `assets/wm_pre_merge_gate.sh` | `<project>/utilities/wm_pre_merge_gate.sh` | `pre_merge` quality gate |
+| `assets/speckit_pipeline.sh` | `<project>/utilities/speckit_pipeline.sh` | headless stage runner (phase/wave aware) — single source of stage/model/effort logic and of the feature-directory pin |
+| `assets/speckit_parallel.sh` | `<project>/utilities/speckit_parallel.sh` | driver — Phase 1 background fan-out, Phase 2 stage-by-stage workmux waves |
+| `assets/wm_stage_runner.sh` | `<project>/utilities/wm_stage_runner.sh` | in-worktree pane script — derives the wave from the branch name |
+| `assets/wm_pre_merge_gate.sh` | `<project>/utilities/wm_pre_merge_gate.sh` | quality gate — `pre_merge` hook for build, direct call for the Phase 1 spec gate |
 
 **Fill in and write** `assets/workmux.yaml.template` → `<project>/.workmux.yaml`, replacing:
 
@@ -216,14 +233,17 @@ echo '.speckit-logs/' >> .gitignore
 ```bash
 # Sequential (single process, no worktrees) — unchanged from before
 ./utilities/speckit_pipeline.sh .speckit-prompts/{prd-name}
-./utilities/speckit_pipeline.sh .speckit-prompts/{prd-name} --phase build --wave w1-core-domain
+./utilities/speckit_pipeline.sh .speckit-prompts/{prd-name} --phase build --wave w1-scheduling
 
-# Parallel (workmux)
-./utilities/speckit_parallel.sh waves            # show the wave plan
+# Parallel
+./utilities/speckit_parallel.sh waves            # show the stage/wave plan
 ./utilities/speckit_parallel.sh spec --dry-run   # Phase 1 preview
-./utilities/speckit_parallel.sh spec             # Phase 1 — all features in parallel
-./utilities/speckit_parallel.sh build            # Phase 2 — wave by wave
+./utilities/speckit_parallel.sh spec             # Phase 1 — all features, background, one working tree
+./utilities/speckit_parallel.sh build            # Phase 2 — trunk stage, merge, then branch waves in parallel
+./utilities/speckit_parallel.sh build --from-stage 1   # resume after fixing a stage
 ```
+
+Phase 1 needs neither workmux nor tmux — only Phase 2 does.
 
 Per-stage model/effort defaults are Opus for the reasoning stages (specify, clarify, plan, checklist, analyze, converge) and Sonnet for the execution stages (tasks, implement), overridable via env vars. `MAX_TURNS` defaults to 1000.
 
@@ -265,17 +285,22 @@ After generating everything, verify against:
 
 | Check | Rule |
 |-------|------|
-| `DEPENDENCIES.md` exists with a Mermaid DAG | Wave subgraphs, edges = effective dependencies |
+| `DEPENDENCIES.md` exists with a Mermaid DAG | One subgraph per wave, chains drawn left to right, edges = effective dependencies |
 | Hidden dependencies extracted from ACs | Declared-vs-effective differences called out explicitly |
-| Waves computed by longest-path depth | Every blocker sits in a strictly earlier wave |
-| Every wave has a name, title, and rationale | `w{N}-{kebab-theme}` + human title + why-these-together |
-| `waves.json` matches the folder names | `features[].id` and `waves[].features` are exactly the feature folder names |
-| Hotspot table has an owner + idempotency rule | Per shared file touched by more than one feature |
+| **Waves are chains, not depth levels** | Spine → trunk wave; each gap component → one branch wave; features ordered topologically inside |
+| **No edge crosses sibling waves** | A blocker is earlier in the same wave or in an earlier stage — otherwise merge the two waves |
+| Stages alternate trunk and branch groups | `stages[]` ordered; a trunk stage holds exactly one wave |
+| Every wave has a name, title, kind, and rationale | `w{N}-{kebab-theme}` + human title + `trunk`/`branch` + what the chain delivers |
+| `waves.json` matches the folder names | `features[].id`, `waves[].features`, and `specs/` directory names are all identical |
+| `waves[].features` is in execution order | The runner follows the array, not the folder numbering |
+| Hotspot table has owner + owner wave + idempotency rule | Ownership pushed into the trunk where possible |
 | Constitution candidates listed | Cross-feature conventions that `clarify` must not decide independently |
-| `PARALLEL_EXECUTION.md` exists | Pre-flight, phase commands per wave, monitoring, failure recovery |
+| `PARALLEL_EXECUTION.md` exists | Pre-flight, both phase commands, monitoring, failure recovery, merge-conflict guidance |
 | 4 scripts installed + `chmod +x` | pipeline, parallel, stage runner, pre-merge gate |
 | `.workmux.yaml` has a **single-pane** `speckit` layout | Two panes deadlock `-W`/`--max-concurrent` |
-| Pre-flight actions reported to the user | `.specify/feature.json` untracked + `.speckit-logs/` ignored |
+| The pane command **ends with `; exit`** | The command runs in a shell; without it the shell survives the script and the window never closes |
+| `.workmux.yaml` uses `merge_strategy: merge` | A wave carries a chain of commits; rebase replays each through the same conflict |
+| Pre-flight actions reported to the user | `.specify/feature.json` untracked + `.speckit-logs/` ignored + no `before_specify` git hook |
 
 ## References
 

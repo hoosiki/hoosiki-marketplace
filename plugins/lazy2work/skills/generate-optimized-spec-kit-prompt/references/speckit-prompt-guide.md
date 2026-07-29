@@ -51,7 +51,7 @@ Aligned with the official spec-template mandatory sections:
 
 ## /speckit.plan — Required Fields (research §4)
 
-1. **Upstream Context** — per effective blocker, the concrete artifacts it provides (module path, symbol, signature, endpoint, model fields) with an explicit "do NOT rebuild". Required whenever the feature has blockers.
+1. **Upstream Context** — per effective blocker, the concrete artifacts it provides (module path, symbol, signature, endpoint, model fields), where it now lives (merged into `main` from an earlier stage, or committed earlier in this wave), an instruction to **read those files**, and "do NOT rebuild". Required whenever the feature has blockers.
 2. Tech stack — language, framework, DB with versions
 3. Architecture pattern — structural decisions
 4. Existing code references — brownfield: **exact file paths + function signatures + API contracts** (ambiguity here causes the "duplicate-file" disaster where the agent creates new files instead of editing existing ones)
@@ -62,7 +62,7 @@ Aligned with the official spec-template mandatory sections:
 
 **Rules**: No feature requirements (already in spec). Reference specific file paths, not vague "follow existing patterns." Distinguish existing vs new code explicitly.
 
-**Why Upstream Context is mandatory**: `plan` is the only stage that reads the codebase — which is exactly why it is the parallel safety boundary. In a parallel wave the prior feature's code is not on disk yet, so everything `plan` would normally verify against it (integration points, idle stubs, signature agreement, model field gaps) is unavailable. Hardcoding the upstream contract preserves the *design intent*; what stays lost is *verification*, so the section has to be accurate. See [parallel-execution-guide.md](parallel-execution-guide.md) §1, §6.
+**Why Upstream Context is mandatory**: `plan` is the first stage that reads the codebase, which is why it is the isolation boundary. With **vertical waves** the blocker's code *is* on disk when `plan` runs — merged into `main` from an earlier stage, or committed earlier in the same wave's worktree — so this section is not a substitute for missing code. Its job is to point `plan` at the right files so it reads them instead of inventing a parallel implementation, and to make absence *loud*: a listed file that genuinely does not exist means the wave partition is wrong, so the prompt must say **STOP and report**, never "create it". See [parallel-execution-guide.md](parallel-execution-guide.md) §1, §4, §7.
 
 ## /speckit.checklist — Requirements-Quality Gate (research §5)
 
@@ -106,7 +106,7 @@ Runs **after tasks, before implement**. Cross-checks `constitution ↔ spec ↔ 
 
 **Rules**: Implement the entire task list at once. Go back to `/speckit.plan` if a design change is needed — never redesign inside implement.
 
-**Why Shared Infrastructure is mandatory**: settings/installed-apps modules, API routers, and dependency manifests are written by nearly every feature. Idempotent edits are what let waves merge cleanly — and they only hold if merges are sequential. State both the owner and the idempotent form; "append if absent" is a rule, "add the app" is not.
+**Why Shared Infrastructure is mandatory**: settings/installed-apps modules, API routers, and dependency manifests are written by nearly every feature. A vertical wave lands a whole chain of commits at one merge barrier, so sibling waves' hotspot edits all collide at once. Idempotent edits are what let waves merge cleanly — and they only hold if merges are sequential. State the owner, the owner's wave, and the idempotent form; "append if absent" is a rule, "add the app" is not. Non-owners must also be told not to reorder or restructure the file.
 
 ## /speckit.converge — Close Gaps in a Loop (research §9)
 
@@ -184,7 +184,11 @@ Pin these globally before any `specify` runs: timezone handling, recurrence sema
 | Vague success criteria ("fast") | Measurable ("< 1 second") |
 | Missing Out of Scope | Always specify to prevent AI scope creep |
 | Re-slicing pre-sliced issues | Keep 1 issue file = 1 feature |
-| plan prompt with no Upstream Context | List every effective blocker's artifacts + "do NOT rebuild" |
+| plan prompt with no Upstream Context | List every effective blocker's artifacts, where they live, and "read them, do NOT rebuild" |
+| "If the file is missing, create it" in a plan prompt | STOP and report — a missing upstream file means the wave partition is wrong |
 | Trusting the declared `Blocked by` graph | Extract hidden dependencies from the acceptance criteria |
+| Grouping waves by depth level | Group by dependency *chain* — sequential inside a wave, parallel across waves |
+| A dependency edge between sibling waves | Merge those two waves into one; never run them concurrently anyway |
 | Leaving a global convention to `clarify` | Pin it in `constitution.md` — `analyze` cannot see sibling features |
-| implement prompt with no shared-file ownership | Name the owner and the idempotent form of each hotspot edit |
+| implement prompt with no shared-file ownership | Name the owner, the owner's wave, and the idempotent form of each hotspot edit |
+| Writing a feature number or `create-new-feature.sh` into a prompt | The runner pins `SPECIFY_FEATURE_DIRECTORY`; a hardcoded number fights it |

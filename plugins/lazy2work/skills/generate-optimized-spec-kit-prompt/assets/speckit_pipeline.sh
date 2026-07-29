@@ -5,7 +5,7 @@
 #   ./utilities/speckit_pipeline.sh <PROMPTS_PATH>                      # 전체 feature × 전체 단계 순차 실행
 #   ./utilities/speckit_pipeline.sh <PROMPTS_PATH> --phase spec         # Phase 1: 01_specify + 02_clarify (+commit)
 #   ./utilities/speckit_pipeline.sh <PROMPTS_PATH> --phase build        # Phase 2: 03_plan ~ 08_converge (+commit)
-#   ./utilities/speckit_pipeline.sh <PROMPTS_PATH> --wave w1-core-domain  # waves.json의 해당 웨이브 feature만
+#   ./utilities/speckit_pipeline.sh <PROMPTS_PATH> --wave w1-scheduling  # waves.json의 해당 웨이브 feature만
 #   ./utilities/speckit_pipeline.sh <PROMPTS_PATH> --from 003           # 003 feature부터 실행 (해당 feature 포함, 이후 전부)
 #   ./utilities/speckit_pipeline.sh <PROMPTS_PATH> --from 003/06        # 003 feature의 06_analyze 단계부터 실행
 #   ./utilities/speckit_pipeline.sh <PROMPTS_PATH> --only 002           # 002 feature만 실행
@@ -20,14 +20,18 @@
 #                   생략 시 기본값은 <project>/.speckit-prompts.
 #   --from 값: feature 번호(3, 03, 003 모두 동일하게 인식) 또는 'NNN/SS' (SS = 단계 번호, 예 003/06).
 #
-# 2-Phase 모델 (병렬 안전 경계선 = /speckit.plan):
-#   Phase 1 (spec)  : 01_specify → 02_clarify → commit        ✅ 전 feature 병렬 안전
+# 2-Phase 모델 (격리 경계선 = /speckit.plan):
+#   Phase 1 (spec)  : 01_specify → 02_clarify                 ✅ 한 워킹트리에서 전 feature 동시 실행
 #   Phase 2 (build) : 03_plan → 04_checklist → 05_tasks →
-#                     06_analyze → 07_implement → 08_converge → commit   🔴 웨이브별로만 병렬
+#                     06_analyze → 07_implement → 08_converge → commit   🔴 웨이브 단위 worktree
 #   --phase all(기본): 01~08 전부 순차 (단일 프로세스 실행용)
 #
-#   근거: plan만이 코드베이스를 읽는다. 병렬 worktree에는 선행 feature의 코드가 없으므로
-#         plan~converge는 반드시 웨이브(의존성 depth) 단위로 묶고 웨이브 사이에 병합 배리어를 둔다.
+#   근거: plan부터가 코드베이스를 읽고 쓴다. specify/clarify는 specs/<feature>/ 안에만 쓰므로
+#         worktree 없이 프로세스별 SPECIFY_FEATURE_DIRECTORY 만으로 완전히 격리된다.
+#
+# 웨이브 = 의존성 "체인"(수직)이지 depth 레벨(수평)이 아니다.
+#   한 웨이브 안의 feature 들은 순차 실행되고(같은 worktree), 웨이브끼리 병렬로 돈다.
+#   → --wave 지정 시 실행 순서는 폴더 이름 순이 아니라 waves.json 의 features 배열 순서다.
 #
 # Feature 폴더 구조 (각 feature 아래 8개 단계 파일 + commit):
 #   NNN-<slug>/{01_specify,02_clarify,03_plan,04_checklist,05_tasks,06_analyze,07_implement,08_converge,09_commit}.md
@@ -39,9 +43,12 @@
 #   env로 override: SPECIFY_MODEL/SPECIFY_EFFORT, CLARIFY_*, PLAN_*, CHECKLIST_*, TASKS_*, ANALYZE_*, IMPLEMENT_*, CONVERGE_* (예: PLAN_EFFORT=max ...).
 #   ⚠️ xhigh는 Opus 4.7/4.8·Fable5·Mythos5만 정식 지원 — Sonnet 5+xhigh는 high로 폴백될 수 있음.
 #
-# 병렬 안전 프리앰블: 01_specify 실행 시 'create-new-feature.sh --number NNN'을 강제한다.
-#   자동 번호 할당은 specs/ 스캔+1이라, 같은 base에서 분기한 worktree들이 전부 같은 번호를 받는다.
-#   (순차 실행에서도 프롬프트 번호와 specs/ 번호가 +1씩 어긋나는 것을 함께 막아준다.)
+# Feature 디렉터리 고정 (병렬 안전의 핵심):
+#   모든 단계 실행 시 SPECIFY_FEATURE_DIRECTORY=specs/NNN-<slug> / SPECIFY_FEATURE=NNN-<slug> 를 export 한다.
+#   Spec Kit 0.12+ 의 get_feature_paths()는 이 env 를 .specify/feature.json 보다 먼저 읽으므로,
+#   같은 워킹트리에서 N개를 동시에 돌려도 서로의 feature 를 침범하지 않는다.
+#   이것이 없으면 각 프로세스가 specs/ 를 스캔해 max+1 을 계산하므로 전부 같은 번호를 집는다.
+#   (레거시 ≤0.11 호환: 프리앰블이 create-new-feature.sh --number/--short-name 도 함께 지시한다.)
 #
 # 주의: claude -p는 슬래시 명령(/speckit.implement 등)을 지원하지 않으므로,
 # 프롬프트 파일 내용을 직접 지시사항으로 전달합니다.
@@ -173,10 +180,11 @@ while [[ $# -gt 0 ]]; do
 
 			Options:
 			  --phase PHASE    spec | build | all (기본: all)
-			                     spec  = 01_specify → 02_clarify → commit          (전 feature 병렬 안전)
-			                     build = 03_plan → … → 08_converge → commit        (웨이브별로만 병렬)
+			                     spec  = 01_specify → 02_clarify → commit          (한 워킹트리에서 동시 실행 가능)
+			                     build = 03_plan → … → 08_converge → commit        (웨이브 worktree 단위)
 			                     all   = 01 → … → 08 → commit                      (단일 프로세스 순차)
-			  --wave NAME      waves.json의 해당 웨이브에 속한 feature만 실행 (예: w1-core-domain)
+			  --wave NAME      waves.json의 해당 웨이브를 실행 (예: w1-scheduling)
+			                   웨이브는 의존성 "체인"이라 waves.json features 배열 순서 = 실행 순서
 			  --from NNN       NNN feature부터 실행 (해당 feature 포함, 이후 전부). 3/03/003 동일 인식.
 			  --from NNN/SS    NNN feature의 SS 단계부터 실행 (예: 003/06)
 			  --only NNN       NNN feature만 실행
@@ -197,7 +205,7 @@ while [[ $# -gt 0 ]]; do
 
 			Examples:
 			  ./utilities/speckit_pipeline.sh /abs/.speckit-prompts/japanese-tutor --phase spec
-			  ./utilities/speckit_pipeline.sh /abs/.speckit-prompts/japanese-tutor --phase build --wave w1-core-domain
+			  ./utilities/speckit_pipeline.sh /abs/.speckit-prompts/japanese-tutor --phase build --wave w1-scheduling
 			  ./utilities/speckit_pipeline.sh /abs/.speckit-prompts/japanese-tutor --only 000
 			  ./utilities/speckit_pipeline.sh /abs/.speckit-prompts/japanese-tutor --from 002/06
 			  ./utilities/speckit_pipeline.sh /abs/.speckit-prompts/japanese-tutor --resume
@@ -332,28 +340,34 @@ fi
 # ──────────────────────────────────────────────
 # Claude Headless Execution
 # ──────────────────────────────────────────────
-# 병렬 안전 프리앰블 — feature 번호 자동 할당을 무력화한다.
-# create-new-feature.sh는 specs/ 를 스캔해 max+1을 쓰므로, 같은 base에서 분기한
-# worktree들이 전부 같은 번호를 받는다. 순차 실행에서도 프롬프트 번호와 +1 어긋난다.
-parallel_safety_preamble() {
-	local step="$1"
-	local feature_num="$2"
+# 프롬프트 프리앰블 — feature 디렉터리를 고정하고 워킹트리 격리 규칙을 붙인다.
+#
+# SPECIFY_FEATURE_DIRECTORY 는 env 로도 넘기지만(권위 있는 채널: Spec Kit 0.12+ 의 get_feature_paths()가
+# .specify/feature.json 보다 먼저 읽는다), 에이전트가 env 를 조회하지 않을 수 있어 프롬프트에도 같은 값을 명시한다.
+# 이것이 없으면 각 프로세스가 specs/ 를 스캔해 max+1 을 계산하므로 동시 실행 시 전부 같은 번호를 집는다.
+speckit_preamble() {
+	local feature_num="$1"
+	local feature_name="$2"
+	local spec_dir="$3"
 	local out=""
 
-	if [[ "$step" == "01_specify" ]]; then
-		out="🔴 FEATURE NUMBER PIN — 번호를 절대 자동 할당하지 마라:
-- '.specify/scripts/bash/create-new-feature.sh'를 실행할 때 반드시 \`--number ${feature_num}\`을 넘겨라.
-  (자동 감지는 specs/ 스캔 + 1이라 프롬프트 번호와 어긋나고, 병렬 실행에서는 전부 같은 번호를 받는다.)
-- 이미 'specs/${feature_num}-*/'가 존재하면 \`--allow-existing-branch\`도 함께 넘겨라."
-	fi
+	out="🔴 FEATURE DIRECTORY PIN — 이 실행의 feature 디렉터리는 '${spec_dir}' 로 고정되어 있다:
+- 환경변수 SPECIFY_FEATURE_DIRECTORY='${spec_dir}' / SPECIFY_FEATURE='${feature_name}' 가 이미 설정돼 있다.
+  번호를 새로 매기거나 specs/ 를 스캔해 다음 번호를 계산하지 마라.
+- 산출물(spec.md, plan.md, tasks.md, research.md, contracts/ …)은 전부 '${spec_dir}/' 아래에만 써라.
+  다른 feature 의 specs/ 디렉터리는 읽기만 하고 절대 수정하지 마라.
+- git 브랜치를 새로 만들거나 체크아웃하지 마라. 브랜치는 이 파이프라인이 관리한다.
+- 레거시 Spec Kit(≤0.11)이라 '.specify/scripts/bash/create-new-feature.sh' 를 직접 실행해야 한다면
+  반드시 \`--number ${feature_num} --short-name '${feature_name#*-}' --allow-existing-branch\` 를 넘겨라."
 
 	if [[ "$WORKTREE_MODE" == "1" ]]; then
-		out="${out}${out:+
-}🔴 PARALLEL WORKTREE — 격리 규칙:
-- 새 git 브랜치를 만들지 마라. 이미 이 feature 전용 worktree 브랜치 위에 있다.
-- 산출물은 'specs/${feature_num}-<slug>/' 아래에만 써라. 다른 feature의 specs/ 디렉터리를 수정하지 마라.
-- 다른 feature의 소스 코드는 아직 존재하지 않을 수 있다. 프롬프트의 'Upstream Context' 섹션에
-  적힌 내용을 사실로 간주하고, 없다고 해서 직접 만들어 넣지 마라."
+		out="${out}
+🔴 PARALLEL WAVE WORKTREE — 격리 규칙:
+- 이미 이 웨이브 전용 worktree 브랜치 위에 있다. 새 브랜치를 만들지 마라.
+- 선행 웨이브의 코드와 이 웨이브에서 앞서 끝난 feature 의 코드는 '실제로 이 워킹트리에 존재한다'.
+  프롬프트의 'Upstream Context' 에 적힌 파일을 추측하지 말고 먼저 읽어라.
+- Upstream Context 에 적힌 파일이 정말로 없다면 대체 구현을 만들지 말고 즉시 중단하고 보고하라
+  — 웨이브 계획이 잘못됐다는 신호다."
 	fi
 
 	echo "$out"
@@ -367,6 +381,8 @@ run_claude_headless() {
 	local model_override="${5:-}"
 	local effort_override="${6:-}"
 	local feature_num="${7:-}"
+	local feature_name="${8:-}"
+	local spec_dir="${9:-}"
 
 	if $DRY_RUN; then
 		echo "  [DRY-RUN] Would execute: claude -p ${model_override:+--model $model_override }${effort_override:+--effort $effort_override }'${prompt_content:0:80}...'"
@@ -387,7 +403,7 @@ run_claude_headless() {
 	fi
 
 	local safety
-	safety="$(parallel_safety_preamble "$step_name" "$feature_num")"
+	safety="$(speckit_preamble "$feature_num" "$feature_name" "$spec_dir")"
 
 	local processed_prompt
 	processed_prompt="You are working on the project in the current directory.
@@ -412,7 +428,12 @@ IMPORTANT:
 
 	# bypassPermissions: 모든 권한 확인을 생략(헤드리스 무인 실행). --permission-mode로 모드를 명시하고,
 	# --dangerously-skip-permissions로 최초 1회 책임수용 다이얼로그까지 건너뛴다(둘은 동등하나 함께 두어 의도를 명확히 함).
-	"$CLAUDE_BIN" -p "$processed_prompt" \
+	#
+	# SPECIFY_FEATURE_DIRECTORY / SPECIFY_FEATURE: Spec Kit 의 feature 해석 채널.
+	# 이 두 개가 프로세스마다 다르기 때문에 같은 워킹트리에서 N개를 동시에 돌려도 서로를 침범하지 않는다.
+	SPECIFY_FEATURE_DIRECTORY="$spec_dir" \
+		SPECIFY_FEATURE="$feature_name" \
+		"$CLAUDE_BIN" -p "$processed_prompt" \
 		${model_override:+--model "$model_override"} \
 		${effort_override:+--effort "$effort_override"} \
 		--max-turns "$max_turns_override" \
@@ -475,19 +496,32 @@ Execute these steps now."
 
 	log_step "Committing changes..."
 
+	# ⚠️ set -e + pipefail 아래에서 `claude | tee` 가 실패하면 exit_code 를 읽기도 전에
+	#    스크립트가 죽는다. 웨이브 실행에서는 그 한 번이 체인의 나머지 feature 를 통째로 날린다.
+	#    커밋 실패는 치명적이지 않다(웨이브 러너에 안전망 커밋이 있다) → 직접 처리한다.
+	set +e
 	"$CLAUDE_BIN" -p "$commit_prompt" \
 		--max-turns 10 \
 		--output-format text \
 		--permission-mode bypassPermissions \
 		--dangerously-skip-permissions \
 		2>&1 | tee "$log_file"
-
 	local exit_code=${PIPESTATUS[0]}
+	set -e
 
 	if [ $exit_code -ne 0 ]; then
 		log_warn "Auto-commit may have failed, attempting fallback..."
-		git add -A -- ':!.speckit-logs' ':!.env' ':!*.mmdb' ':!experiments/'
-		git commit -m "$(
+		# ⚠️ `git add -A -- ':!<path>'` 는 그 경로가 .gitignore 에도 있으면 "무시된 경로" 경고와 함께 exit 1 을 낸다.
+		#    set -e 아래에서는 그 한 번의 exit 1 이 파이프라인 전체를 죽인다 — 웨이브 실행에서는
+		#    첫 feature 커밋 직후 체인의 나머지가 통째로 날아간다.
+		#    → 제외는 .gitignore 에 맡기고, 추적 중일 수 있는 민감 경로만 사후에 unstage 한다.
+		git add -A >/dev/null 2>&1 || true
+		git reset -q -- .speckit-logs .env experiments >/dev/null 2>&1 || true
+		if git diff --cached --quiet; then
+			log_warn "Nothing to commit (fallback)"
+			return 0
+		fi
+		git commit -q -m "$(
 			cat <<EOF
 feat($feature_short): $commit_scope $feature_name
 
@@ -495,7 +529,10 @@ Automated commit via speckit_pipeline.sh
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 EOF
-		)" || log_warn "Nothing to commit (fallback)"
+		)" || {
+			log_warn "Fallback commit failed — 커밋 없이 계속합니다"
+			return 0
+		}
 	fi
 
 	log_ok "Committed"
@@ -615,20 +652,31 @@ if [ -n "$WAVE" ]; then
 		log_fail "웨이브 '$WAVE' 에 feature 가 없습니다"
 		exit 1
 	fi
+	# ⚠️ 순서가 중요하다. 웨이브는 의존성 "체인"이므로 waves.json 의 features 배열 순서가
+	#    곧 실행 순서다. 폴더 이름(숫자) 순으로 정렬하면 체인 순서가 깨질 수 있다.
 	filtered=""
-	for feature_dir in $FEATURES; do
-		fname=$(basename "$feature_dir")
-		if grep -qxF "$fname" <<<"$WAVE_MEMBERS"; then
-			filtered="${filtered}${feature_dir}"$'\n'
+	while IFS= read -r member; do
+		[ -n "$member" ] || continue
+		match=""
+		for feature_dir in $FEATURES; do
+			if [ "$(basename "$feature_dir")" = "$member" ]; then
+				match="$feature_dir"
+				break
+			fi
+		done
+		if [ -z "$match" ]; then
+			log_fail "웨이브 '$WAVE' 의 feature 폴더가 $PROMPTS_DIR 에 없습니다: $member"
+			log_warn "waves.json 의 feature id 와 폴더명이 정확히 일치해야 합니다"
+			exit 1
 		fi
-	done
+		filtered="${filtered}${match}"$'\n'
+	done <<<"$WAVE_MEMBERS"
 	FEATURES="$(echo "$filtered" | grep -v '^$' || true)"
 	if [ -z "$FEATURES" ]; then
 		log_fail "웨이브 '$WAVE' 의 feature 폴더를 $PROMPTS_DIR 에서 찾지 못했습니다"
-		log_warn "waves.json 의 feature id 와 폴더명이 일치해야 합니다: $(echo "$WAVE_MEMBERS" | tr '\n' ' ')"
 		exit 1
 	fi
-	log_info "Wave '$WAVE' features: $(echo "$WAVE_MEMBERS" | tr '\n' ' ')"
+	log_info "Wave '$WAVE' 실행 순서: $(echo "$WAVE_MEMBERS" | tr '\n' ' ')"
 	echo ""
 fi
 
@@ -710,6 +758,9 @@ for feature_dir in $FEATURES; do
 	feature_name=$(basename "$feature_dir")
 	feature_num=$(extract_feature_num "$feature_dir")
 	feature_short=$(extract_feature_short_name "$feature_dir")
+	# feature id = 'NNN-<slug>' (레거시 'feature-' 접두 제거). specs/ 디렉터리 이름과 동일하게 유지한다.
+	feature_id="${feature_name#feature-}"
+	spec_dir_rel="specs/${feature_id}"
 
 	if $skip_mode; then
 		if feature_num_eq "$feature_num" "$FROM_FEATURE"; then
@@ -771,7 +822,7 @@ for feature_dir in $FEATURES; do
 		step_model=$(get_model_for_step "$step")
 		step_effort=$(get_effort_for_step "$step")
 
-		if run_claude_headless "$prompt_content" "$log_file" "$step" "$step_turns" "$step_model" "$step_effort" "$feature_num"; then
+		if run_claude_headless "$prompt_content" "$log_file" "$step" "$step_turns" "$step_model" "$step_effort" "$feature_num" "$feature_id" "$spec_dir_rel"; then
 			step_end=$(date +%s)
 			step_duration=$((step_end - step_start))
 			log_ok "$step (${step_duration}s)"
@@ -802,7 +853,9 @@ for feature_dir in $FEATURES; do
 	# Commit after the phase's final stage
 	if ! $feature_failed; then
 		commit_log="$LOG_DIR/${feature_name}_09_commit.log"
-		do_git_commit "$feature_name" "$feature_short" "$commit_log" "$COMMIT_SCOPE"
+		# 커밋 실패가 웨이브 체인을 끊지 않게 한다 — 다음 feature 는 계속 진행돼야 한다.
+		do_git_commit "$feature_name" "$feature_short" "$commit_log" "$COMMIT_SCOPE" \
+			|| log_warn "commit 단계 실패 — 커밋 없이 다음 단계로 진행합니다"
 		RESULTS+=("OK: $feature_name")
 		PASSED_FEATURES=$((PASSED_FEATURES + 1))
 		# Clear checkpoint on success
