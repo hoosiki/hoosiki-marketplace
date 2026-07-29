@@ -366,6 +366,9 @@ Placement test: "Does this diagram remain valid if the tech stack changes?" — 
 <project-root>/
 ├── .speckit-prompts/
 │   └── japanese-tutor/              ← parent name derived from the PRD
+│       ├── DEPENDENCIES.md          ← Mermaid DAG + stage/wave table + hidden deps + hotspot ownership
+│       ├── PARALLEL_EXECUTION.md    ← two-phase runbook (pre-flight, monitoring, failure recovery)
+│       ├── waves.json               ← machine-readable stage/wave plan, read by the runners
 │       ├── 000-env-compat-gate/
 │       │   ├── 01_specify.md
 │       │   ├── 02_clarify.md
@@ -380,18 +383,35 @@ Placement test: "Does this diagram remain valid if the tech stack changes?" — 
 │       │   └── ... (same 9 files)
 │       └── 002-persistence-auth/
 │           └── ... (same 9 files)
-└── utilities/
-    └── speckit_pipeline.sh         ← headless runner (copied from skill assets, chmod +x)
+├── utilities/                       ← copied verbatim from skill assets, chmod +x
+│   ├── speckit_pipeline.sh          ← headless stage runner (phase/wave aware, pins the feature dir)
+│   ├── speckit_parallel.sh          ← driver: Phase 1 fan-out, Phase 2 wave worktrees
+│   ├── wm_stage_runner.sh           ← in-worktree pane script (one per wave)
+│   └── wm_pre_merge_gate.sh         ← quality gate (pre_merge hook + Phase 1 spec gate)
+└── .workmux.yaml                    ← single-pane `speckit` layout + pre_merge hook
 ```
 
-Folder naming: `{prd-name}/{NNN}-{kebab-case-name}` — `{prd-name}` is a short kebab-case project name derived from the PRD title/product name (e.g. "일본어 학습 튜터 챗봇" → `japanese-tutor`), `{NNN}` is the source issue number zero-padded to 3 digits (`00-env-compat-gate.md` → `{prd-name}/000-env-compat-gate/`).
+Folder naming: `{prd-name}/{NNN}-{kebab-case-name}` — `{prd-name}` is a short kebab-case project name derived from the PRD title/product name (e.g. "일본어 학습 튜터 챗봇" → `japanese-tutor`), `{NNN}` is the source issue number zero-padded to 3 digits (`00-env-compat-gate.md` → `{prd-name}/000-env-compat-gate/`). The folder name **is** the feature id — it matches `waves.json`, the `specs/` directory, and the status file names exactly.
 
-Run the generated prompts headlessly with the installed runner:
+Run the generated prompts headlessly, sequentially or in parallel:
 
 ```bash
+# Sequential — one process, no worktrees
 ./utilities/speckit_pipeline.sh .speckit-prompts/japanese-tutor            # all features
 ./utilities/speckit_pipeline.sh .speckit-prompts/japanese-tutor --dry-run  # preview plan
 ./utilities/speckit_pipeline.sh .speckit-prompts/japanese-tutor --only 002 # one feature
+
+# Parallel — see "Two-Phase Parallel Execution" above
+./utilities/speckit_parallel.sh waves
+./utilities/speckit_parallel.sh spec
+./utilities/speckit_parallel.sh build
+```
+
+Two pre-flight actions the skill reports (mechanical failures, not suggestions):
+
+```bash
+git rm --cached .specify/feature.json 2>/dev/null; echo '.specify/feature.json' >> .gitignore
+echo '.speckit-logs/' >> .gitignore
 ```
 
 #### Quality Checklist
@@ -409,18 +429,42 @@ Every generated feature is verified against:
 | /speckit.specify uses official spec-template structure | Prioritized user stories + Given/When/Then + FR-NNN/SC-NNN; no trailing questions |
 | /speckit.specify has Out of Scope section | Prevents AI scope creep |
 | /speckit.specify Mermaid has no tech terms | No Django, PostgreSQL, etc. in nodes |
+| /speckit.specify has no hardcoded feature number | The runner pins `SPECIFY_FEATURE_DIRECTORY`; a number in the prompt fights it |
 | /speckit.clarify leads with auto-accept | `auto-accept all recommended options` |
 | /speckit.plan references specific file paths | Not vague "follow patterns" |
+| **/speckit.plan has Upstream Context** | Per effective blocker: artifacts, where they live, "read them", and STOP-and-report if absent |
 | /speckit.plan has architecture + API sequence diagrams | Mermaid with explanation text |
 | /speckit.plan has explicit exclusions + stop-guard | Prevents Docker/CI/CD creep; "generate plan.md only" |
 | /speckit.checklist leads with auto-accept | Requirements-quality gate, non-interactive |
 | /speckit.tasks is command-only | No hand-authored `T001…`; derived from spec+plan, never hand-edited |
 | /speckit.analyze leads with auto-accept + layer guard | Fix plan/spec then regenerate tasks — never edit tasks.md |
 | /speckit.implement runs all tasks in one pass | Execute the whole task list at once, per-task verify+commit |
+| **/speckit.implement has Shared Infrastructure rules** | Owner + owner's wave + idempotent form; non-owners must not reorder or restructure |
 | /speckit.implement has failure behavior | Stop and report on failure |
 | /speckit.converge leads with auto-accept loop | converge → implement → converge until "converged" |
 | Each Mermaid block = one concern | No combined architecture + ERD blocks |
 | Success criteria are measurable | "< 1s" not "fast" |
+
+And the parallel plan itself is verified against:
+
+| Check | Rule |
+|-------|------|
+| `DEPENDENCIES.md` exists with a Mermaid DAG | One subgraph per wave, chains left to right, edges = effective dependencies |
+| Hidden dependencies extracted from ACs | Declared-vs-effective differences called out explicitly |
+| **Waves are chains, not depth levels** | Spine → trunk wave; each gap component → one branch wave; topological order inside |
+| **No edge crosses sibling waves** | A blocker is earlier in the same wave or in an earlier stage — otherwise merge the waves |
+| Stages alternate trunk and branch groups | `stages[]` ordered; a trunk stage holds exactly one wave |
+| Every wave has a name, title, kind, and rationale | `w{N}-{kebab-theme}` + human title + `trunk`/`branch` + what the chain delivers |
+| `waves.json` matches the folder names | `features[].id`, `waves[].features`, and `specs/` directory names are identical |
+| `waves[].features` is in execution order | The runner follows the array, not the folder numbering |
+| Hotspot table has owner + owner wave + idempotency rule | Ownership pushed into the trunk where possible |
+| Constitution candidates listed | Cross-feature conventions that `clarify` must not decide independently |
+| `PARALLEL_EXECUTION.md` exists | Pre-flight, both phase commands, monitoring, failure recovery, merge-conflict guidance |
+| 4 scripts installed + `chmod +x` | pipeline, parallel, stage runner, pre-merge gate |
+| `.workmux.yaml` has a **single-pane** `speckit` layout | Two panes deadlock `-W`/`--max-concurrent` |
+| The pane command **ends with `; exit`** | The command runs in a shell; without it the shell outlives the script and the window never closes |
+| `.workmux.yaml` uses `merge_strategy: merge` | A wave carries a chain of commits; rebase replays each through the same conflict |
+| Pre-flight actions reported to the user | `.specify/feature.json` untracked + `.speckit-logs/` ignored + no `before_specify` git hook |
 
 </details>
 
