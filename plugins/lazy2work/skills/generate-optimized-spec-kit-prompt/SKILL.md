@@ -247,6 +247,8 @@ Phase 1 needs neither workmux nor tmux — only Phase 2 does.
 
 Per-stage model/effort defaults are Opus for the reasoning stages (specify, clarify, plan, checklist, analyze, converge) and Sonnet for the execution stages (tasks, implement), overridable via env vars. `MAX_TURNS` defaults to 1000.
 
+**Models are never pinned to a version.** At run start the pipeline resolves "the newest Opus / Sonnet available right now" once and holds it for the whole run — `SPECKIT_OPUS_MODEL`/`SPECKIT_SONNET_MODEL` if pinned, else the Models API (`GET /v1/models`, newest by `created_at`, needs `ANTHROPIC_API_KEY`), else the CLI aliases `opus`/`sonnet` which `claude --model` resolves to the latest on its own. Resolving once rather than per call keeps a model released mid-run from splitting a project across two models; the resolved IDs are logged. Do not write a concrete model ID into the generated prompts or scripts.
+
 > Note: the pipeline's headless preamble tells Claude to use `uv run` for Python commands. If the target project does not use `uv`, tell the user to adjust that line (or set it via the project's `CLAUDE.md`).
 
 ## Quality Checklist
@@ -297,6 +299,7 @@ After generating everything, verify against:
 | Constitution candidates listed | Cross-feature conventions that `clarify` must not decide independently |
 | `PARALLEL_EXECUTION.md` exists | Pre-flight, both phase commands, monitoring, failure recovery, merge-conflict guidance |
 | 4 scripts installed + `chmod +x` | pipeline, parallel, stage runner, pre-merge gate |
+| No hardcoded model version anywhere | Prompts and scripts name no concrete model ID; the runner resolves the latest Opus/Sonnet at run start |
 | `.workmux.yaml` has a **single-pane** `speckit` layout | Two panes deadlock `-W`/`--max-concurrent` |
 | The pane command **ends with `; exit`** | The command runs in a shell; without it the shell survives the script and the window never closes |
 | `.workmux.yaml` uses `merge_strategy: merge` | A wave carries a chain of commits; rebase replays each through the same conflict |

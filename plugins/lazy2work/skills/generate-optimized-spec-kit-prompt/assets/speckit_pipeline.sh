@@ -39,9 +39,12 @@
 # 웨이브 정의: <PROMPTS_PATH>/waves.json (스킬이 의존성 DAG에서 생성). --wave 사용 시 필요.
 #
 # 단계별 모델·effort (토큰 최적화 — 추론군=Opus+고effort, 실행군=Sonnet):
-#   specify/clarify/checklist=opus-4-8/high · plan/analyze/converge=opus-4-8/xhigh · tasks/implement=sonnet-5/xhigh · commit=기본값.
+#   specify/clarify/checklist=opus/high · plan/analyze/converge=opus/xhigh · tasks/implement=sonnet/xhigh · commit=기본값.
+#   ★ 모델은 버전을 고정하지 않는다. 실행 시작 시 "지금 가장 최신의 opus / sonnet"을 1회 해석해 런 전체에 고정한다.
+#     해석 순서: SPECKIT_OPUS_MODEL/SPECKIT_SONNET_MODEL → Models API(/v1/models) 최신 → CLI 별칭 'opus'/'sonnet'.
+#     SPECKIT_SKIP_MODEL_RESOLVE=1 로 API 조회를 끄고 별칭만 쓸 수 있다.
 #   env로 override: SPECIFY_MODEL/SPECIFY_EFFORT, CLARIFY_*, PLAN_*, CHECKLIST_*, TASKS_*, ANALYZE_*, IMPLEMENT_*, CONVERGE_* (예: PLAN_EFFORT=max ...).
-#   ⚠️ xhigh는 Opus 4.7/4.8·Fable5·Mythos5만 정식 지원 — Sonnet 5+xhigh는 high로 폴백될 수 있음.
+#   ⚠️ xhigh는 최신 Opus 계열·Sonnet 5 이상에서 지원 — 구형 모델로 해석되면 high로 폴백될 수 있음.
 #
 # Feature 디렉터리 고정 (병렬 안전의 핵심):
 #   모든 단계 실행 시 SPECIFY_FEATURE_DIRECTORY=specs/NNN-<slug> / SPECIFY_FEATURE=NNN-<slug> 를 export 한다.
@@ -74,28 +77,24 @@ MAX_TURNS=1000
 CLAUDE_BIN="${CLAUDE_BIN:-claude}"
 # worktree 병렬 실행 중이면 1 — 프리앰블에 worktree 가드레일이 추가된다
 WORKTREE_MODE="${SPECKIT_WORKTREE_MODE:-0}"
-# 단계별 모델·effort (토큰 최적화: 추론군=Opus+고effort·소출력 / 실행군=Sonnet·대출력).
+# 단계별 effort (토큰 최적화: 추론군=Opus+고effort·소출력 / 실행군=Sonnet·대출력).
 # 근거: 추론군(specify/clarify/plan/checklist/analyze/converge)은 Opus+높은 effort로 설계·검증 품질을 확보하고,
 #       실행군(tasks/implement)은 Sonnet+큰 출력으로 토큰/속도를 최적화한다.
 #       converge는 gap 검증+재구현 판단이 품질에 직결되므로 Opus로 둔다.
-# ⚠️ xhigh는 Opus 4.7/4.8·Fable5·Mythos5만 정식 지원 — Sonnet 5+xhigh는 high로 폴백될 수 있음.
+# ⚠️ xhigh는 최신 Opus 계열·Sonnet 5 이상에서 지원 — 구형 모델로 해석되면 high로 폴백될 수 있음.
 # 각 값은 env로 override 가능. commit(do_git_commit)은 기본값 유지.
-SPECIFY_MODEL="${SPECIFY_MODEL:-claude-opus-4-8}"
+# 모델 자체는 버전 고정하지 않고 실행 시작 시 해석한다 — 아래 "Model Resolution" 참조.
 SPECIFY_EFFORT="${SPECIFY_EFFORT:-high}"
-CLARIFY_MODEL="${CLARIFY_MODEL:-claude-opus-4-8}"
 CLARIFY_EFFORT="${CLARIFY_EFFORT:-high}"
-PLAN_MODEL="${PLAN_MODEL:-claude-opus-4-8}"
 PLAN_EFFORT="${PLAN_EFFORT:-xhigh}"
-CHECKLIST_MODEL="${CHECKLIST_MODEL:-claude-opus-4-8}"
 CHECKLIST_EFFORT="${CHECKLIST_EFFORT:-high}"
-TASKS_MODEL="${TASKS_MODEL:-claude-sonnet-5}"
 TASKS_EFFORT="${TASKS_EFFORT:-xhigh}"
-ANALYZE_MODEL="${ANALYZE_MODEL:-claude-opus-4-8}"
 ANALYZE_EFFORT="${ANALYZE_EFFORT:-xhigh}"
-IMPLEMENT_MODEL="${IMPLEMENT_MODEL:-claude-sonnet-5}"
 IMPLEMENT_EFFORT="${IMPLEMENT_EFFORT:-xhigh}"
-CONVERGE_MODEL="${CONVERGE_MODEL:-claude-opus-4-8}"
 CONVERGE_EFFORT="${CONVERGE_EFFORT:-xhigh}"
+
+# 커밋 트레일러 — 모델 버전을 박지 않는다 (모델이 바뀌어도 낡지 않도록)
+COAUTHOR_TRAILER="Co-Authored-By: Claude <noreply@anthropic.com>"
 
 # Colors
 RED='\033[0;31m'
@@ -197,8 +196,9 @@ while [[ $# -gt 0 ]]; do
 			  (env) SPECKIT_LOG_ROOT     로그/체크포인트 루트 (기본: <project>/.speckit-logs)
 			  (env) SPECKIT_WORKTREE_MODE=1  worktree 병렬 실행 — 프리앰블에 격리 가드레일 추가
 			  (env) 단계별 모델/effort override: SPECIFY_MODEL/SPECIFY_EFFORT, CLARIFY_*, PLAN_*, CHECKLIST_*, TASKS_*, ANALYZE_*, IMPLEMENT_*, CONVERGE_*
-			        기본: specify·clarify·checklist=opus-4-8/high, plan·analyze·converge=opus-4-8/xhigh, tasks·implement=sonnet-5/xhigh
-			        ⚠️ xhigh는 Opus 4.7/4.8 계열만 정식 지원 — Sonnet 5+xhigh는 high로 폴백 가능
+			        기본: specify·clarify·checklist=opus/high, plan·analyze·converge=opus/xhigh, tasks·implement=sonnet/xhigh
+			        모델은 실행 시작 시 최신 opus/sonnet 으로 1회 해석됨 (SPECKIT_OPUS_MODEL/SPECKIT_SONNET_MODEL 로 고정,
+		                                             SPECKIT_SKIP_MODEL_RESOLVE=1 로 API 조회 끄기)
 
 			Feature 폴더: NNN-<slug>/{01_specify..09_commit}.md
 			웨이브 정의:  <PROMPTS_PATH>/waves.json
@@ -230,6 +230,82 @@ done
 
 # --from 의 단계 부분 정규화 (06 또는 06_analyze 모두 허용 → 06)
 [ -n "$FROM_STEP" ] && FROM_STEP="${FROM_STEP%%_*}"
+
+# ──────────────────────────────────────────────
+# Model Resolution — 버전을 고정하지 않고 "지금 가장 최신의 opus / sonnet"을 쓴다
+# ──────────────────────────────────────────────
+# 해석 순서 (family = opus | sonnet):
+#   1) SPECKIT_OPUS_MODEL / SPECKIT_SONNET_MODEL   — 명시 고정(재현성이 필요할 때)
+#   2) Models API (GET /v1/models) 에서 'claude-<family>-*' 중 created_at 최신
+#      — ANTHROPIC_API_KEY 가 있을 때만. 실패하면 조용히 3)으로 떨어진다.
+#   3) 별칭 'opus' / 'sonnet' — claude CLI 가 스스로 최신 모델로 해석한다 (API 키 불필요)
+#        `claude --help` → "Provide an alias for the latest model (e.g. 'fable', 'opus', or 'sonnet')"
+#
+# ★ 실행 시작 시 한 번만 해석하고 런 전체에 고정한다.
+#   매 단계 별칭을 넘기면 실행 도중 새 모델이 나왔을 때 feature 마다 다른 모델로 갈릴 수 있다.
+#   한 번 고정하면 그 런의 모든 feature 가 동일 모델로 처리되고, 로그에 무엇이 쓰였는지 남는다.
+#
+# 해석을 끄려면: SPECKIT_SKIP_MODEL_RESOLVE=1 (별칭만 사용 → CLI 가 매 호출마다 해석)
+_detect_latest_model() {
+	python3 - "$1" <<-'PYEOF'
+		import json, os, sys, urllib.request
+
+		family = sys.argv[1]
+		base = os.environ.get("ANTHROPIC_BASE_URL") or "https://api.anthropic.com"
+		req = urllib.request.Request(
+		    base.rstrip("/") + "/v1/models?limit=100",
+		    headers={
+		        "x-api-key": os.environ["ANTHROPIC_API_KEY"],
+		        "anthropic-version": "2023-06-01",
+		    },
+		)
+		with urllib.request.urlopen(req, timeout=5) as fh:
+		    payload = json.load(fh)
+
+		prefix = "claude-" + family + "-"
+		found = [m for m in payload.get("data", []) if str(m.get("id", "")).startswith(prefix)]
+		if found:
+		    found.sort(key=lambda m: str(m.get("created_at", "")), reverse=True)
+		    print(found[0]["id"])
+	PYEOF
+}
+
+# family, 명시 고정값 → 해석된 모델 ID(또는 별칭)
+resolve_family_model() {
+	local family="$1"
+	local pinned="$2"
+	local detected=""
+
+	if [ -n "$pinned" ]; then
+		echo "$pinned"
+		return 0
+	fi
+
+	if [ "${SPECKIT_SKIP_MODEL_RESOLVE:-0}" != "1" ] \
+		&& [ -n "${ANTHROPIC_API_KEY:-}" ] \
+		&& command -v python3 >/dev/null 2>&1; then
+		detected="$(_detect_latest_model "$family" 2>/dev/null || true)"
+	fi
+
+	if [ -n "$detected" ]; then
+		echo "$detected"
+	else
+		echo "$family" # 별칭 폴백 — CLI 가 최신으로 해석
+	fi
+}
+
+OPUS_MODEL="$(resolve_family_model opus "${SPECKIT_OPUS_MODEL:-}")"
+SONNET_MODEL="$(resolve_family_model sonnet "${SPECKIT_SONNET_MODEL:-}")"
+
+# 단계별 모델 — 개별 env override 가 최우선
+SPECIFY_MODEL="${SPECIFY_MODEL:-$OPUS_MODEL}"
+CLARIFY_MODEL="${CLARIFY_MODEL:-$OPUS_MODEL}"
+PLAN_MODEL="${PLAN_MODEL:-$OPUS_MODEL}"
+CHECKLIST_MODEL="${CHECKLIST_MODEL:-$OPUS_MODEL}"
+TASKS_MODEL="${TASKS_MODEL:-$SONNET_MODEL}"
+ANALYZE_MODEL="${ANALYZE_MODEL:-$OPUS_MODEL}"
+IMPLEMENT_MODEL="${IMPLEMENT_MODEL:-$SONNET_MODEL}"
+CONVERGE_MODEL="${CONVERGE_MODEL:-$OPUS_MODEL}"
 
 # Phase → 실행 단계 목록
 case "$PHASE" in
@@ -489,7 +565,7 @@ Steps:
    feat($feature_short): $commit_scope $feature_name
 
    Include a brief body describing the key changes (2-3 bullet points).
-   End with: Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+   End with: ${COAUTHOR_TRAILER}
 5. Do NOT push to remote
 
 Execute these steps now."
@@ -527,7 +603,7 @@ feat($feature_short): $commit_scope $feature_name
 
 Automated commit via speckit_pipeline.sh
 
-Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+${COAUTHOR_TRAILER}
 EOF
 		)" || {
 			log_warn "Fallback commit failed — 커밋 없이 계속합니다"
@@ -609,6 +685,7 @@ log_info "Claude:    $($CLAUDE_BIN --version 2>/dev/null || echo 'unknown')"
 log_info "Steps:     ${STEPS[*]}"
 log_info "Max Turns: $MAX_TURNS (plan/tasks/implement/converge), others vary per step"
 [ "$WORKTREE_MODE" == "1" ] && log_info "Mode:      parallel worktree (isolation guardrails ON)"
+log_info "Models:    opus -> $OPUS_MODEL   sonnet -> $SONNET_MODEL"
 log_info "Per-step model/effort (토큰 최적화):"
 log_info "  specify=$SPECIFY_MODEL/$SPECIFY_EFFORT  clarify=$CLARIFY_MODEL/$CLARIFY_EFFORT  plan=$PLAN_MODEL/$PLAN_EFFORT  checklist=$CHECKLIST_MODEL/$CHECKLIST_EFFORT"
 log_info "  tasks=$TASKS_MODEL/$TASKS_EFFORT  analyze=$ANALYZE_MODEL/$ANALYZE_EFFORT  implement=$IMPLEMENT_MODEL/$IMPLEMENT_EFFORT  converge=$CONVERGE_MODEL/$CONVERGE_EFFORT  (commit=default)"

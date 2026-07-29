@@ -632,19 +632,29 @@ Every `claude -p` call runs unattended with `--permission-mode bypassPermissions
 
 The runner **pins the feature directory** on every stage: it exports `SPECIFY_FEATURE_DIRECTORY=specs/{NNN}-{slug}` and `SPECIFY_FEATURE={NNN}-{slug}`, and restates both in the prompt preamble. Spec Kit 0.12+ reads that variable ahead of `.specify/feature.json`, which is what makes N concurrent `specify` runs in one working tree safe — without it every process scans `specs/` and computes the same `max+1`. The preamble also forbids branch creation and, for legacy Spec Kit (≤0.11), spells out `create-new-feature.sh --number NNN --short-name {slug} --allow-existing-branch`.
 
-Per-stage defaults (override via env vars `SPECIFY_MODEL`/`SPECIFY_EFFORT`, `CLARIFY_*`, `PLAN_*`, `CHECKLIST_*`, `TASKS_*`, `ANALYZE_*`, `IMPLEMENT_*`, `CONVERGE_*`) — reasoning group = Opus (incl. converge), execution group = Sonnet. `MAX_TURNS` defaults to 1000 (override with `--max-turns`):
+**Models are resolved at run start, never pinned to a version.** The runner asks "what is the newest Opus / Sonnet right now?" once, then holds that answer for the whole run:
+
+1. `SPECKIT_OPUS_MODEL` / `SPECKIT_SONNET_MODEL` — explicit pin, for reproducible re-runs.
+2. **Models API** (`GET /v1/models`) — newest `claude-opus-*` / `claude-sonnet-*` by `created_at`. Used only when `ANTHROPIC_API_KEY` is set; any failure falls through silently (5s timeout). Honors `ANTHROPIC_BASE_URL`.
+3. **CLI alias** `opus` / `sonnet` — `claude --model` resolves an alias to the latest model itself, so this works with no API key.
+
+Resolving **once** matters: passing the bare alias on every call would let a model released mid-run split a project across two models. One resolution per run keeps every feature on the same model and records which one in the log (`Models: opus -> … sonnet -> …`). Set `SPECKIT_SKIP_MODEL_RESOLVE=1` to skip the API lookup and use aliases only.
+
+Per-stage defaults (override via env vars `SPECIFY_MODEL`/`SPECIFY_EFFORT`, `CLARIFY_*`, `PLAN_*`, `CHECKLIST_*`, `TASKS_*`, `ANALYZE_*`, `IMPLEMENT_*`, `CONVERGE_*` — a per-stage `*_MODEL` wins over the resolved family) — reasoning group = Opus (incl. converge), execution group = Sonnet. `MAX_TURNS` defaults to 1000 (override with `--max-turns`):
 
 | Stage | Model | Effort | Max turns |
 |-------|-------|--------|-----------|
-| 01_specify | `claude-opus-4-8` | high | 30 |
-| 02_clarify | `claude-opus-4-8` | high | 50 |
-| 03_plan | `claude-opus-4-8` | xhigh | 1000 |
-| 04_checklist | `claude-opus-4-8` | high | 50 |
-| 05_tasks | `claude-sonnet-5` | xhigh | 1000 |
-| 06_analyze | `claude-opus-4-8` | xhigh | 50 |
-| 07_implement | `claude-sonnet-5` | xhigh | 1000 |
-| 08_converge | `claude-opus-4-8` | xhigh | 1000 |
+| 01_specify | latest Opus | high | 30 |
+| 02_clarify | latest Opus | high | 50 |
+| 03_plan | latest Opus | xhigh | 1000 |
+| 04_checklist | latest Opus | high | 50 |
+| 05_tasks | latest Sonnet | xhigh | 1000 |
+| 06_analyze | latest Opus | xhigh | 50 |
+| 07_implement | latest Sonnet | xhigh | 1000 |
+| 08_converge | latest Opus | xhigh | 1000 |
 | commit | session default | — | 10 |
+
+`xhigh` needs a recent Opus or Sonnet 5+; if resolution lands on an older model the API falls back to `high`.
 
 Logs land in `$SPECKIT_LOG_ROOT/<timestamp>/`; a checkpoint file enables `--resume`.
 

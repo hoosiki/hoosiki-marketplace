@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.42.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.43.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.42.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
+| [**lazy2work**](plugins/lazy2work/) | 1.43.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
 
 ---
 
@@ -1313,6 +1313,15 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.43.0 (2026-07-29)
+
+- **generate-optimized-spec-kit-prompt: models are resolved at run start instead of pinned to a version** — the headless runner hardcoded `claude-opus-4-8` and `claude-sonnet-5` as per-stage defaults, which go stale on every model release (they already had: Opus 5 and Sonnet 5 are current). `assets/speckit_pipeline.sh` now asks "what is the newest Opus / Sonnet right now?" once at startup and holds that answer for the whole run, through a three-step ladder: an explicit `SPECKIT_OPUS_MODEL` / `SPECKIT_SONNET_MODEL` pin → the **Models API** (`GET /v1/models`, newest `claude-opus-*` / `claude-sonnet-*` by `created_at`, used only when `ANTHROPIC_API_KEY` is set, 5s timeout, honors `ANTHROPIC_BASE_URL`) → the **CLI aliases** `opus` / `sonnet`, which `claude --model` resolves to the latest on its own with no API key. Any failure falls through silently to the next step, so a missing key or an offline run still works
+- **generate-optimized-spec-kit-prompt: resolved once per run, not per call** — passing the bare alias on every `claude -p` call would let a model released mid-run split one project across two models. Resolving once keeps every feature on the same model and records which one (`Models: opus -> … sonnet -> …` in the run header). Per-stage `SPECIFY_MODEL` / `PLAN_MODEL` / … overrides still win over the resolved family, and `SPECKIT_SKIP_MODEL_RESOLVE=1` skips the API lookup entirely
+- **generate-optimized-spec-kit-prompt: commit trailers no longer name a model version** — `Co-Authored-By: Claude Opus 4.8 (1M context)` became a plain `Co-Authored-By: Claude` across the pipeline, parallel driver, and stage runner, so generated commits don't record a version that may not be what actually ran
+- Docs updated to match: the per-stage table in `references/api_reference.md` now reads "latest Opus" / "latest Sonnet" rather than fixed IDs, SKILL.md documents the resolution ladder, and a Quality Checklist row bars hardcoded model IDs in generated prompts and scripts
+- Verified with 6 tests covering every branch of the ladder, including a local mock `/v1/models` server confirming the newest Opus and Sonnet are selected by `created_at` while `claude-fable-5` and `claude-haiku-4-5` are correctly excluded
+- **Version bump**: 1.42.0 → 1.43.0
 
 ### v1.42.0 (2026-07-29)
 

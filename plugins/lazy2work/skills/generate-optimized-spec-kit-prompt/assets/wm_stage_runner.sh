@@ -110,7 +110,7 @@ fi
 git add -A >/dev/null 2>&1 || true
 git reset -q -- .speckit-logs .env .workmux >/dev/null 2>&1 || true
 if ! git diff --cached --quiet; then
-	git commit -q -m "$(printf 'chore(%s): speckit build wave\n\nAutomated via workmux + wm_stage_runner.sh\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>' "$WAVE")" || true
+	git commit -q -m "$(printf 'chore(%s): speckit build wave\n\nAutomated via workmux + wm_stage_runner.sh\n\nCo-Authored-By: Claude <noreply@anthropic.com>' "$WAVE")" || true
 fi
 
 echo "OK" >"$STATUS_FILE"
