@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.43.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.44.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.43.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
+| [**lazy2work**](plugins/lazy2work/) | 1.44.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
 
 ---
 
@@ -292,7 +292,7 @@ Workflow:
 3. Builds the **dependency DAG** — declared `Blocked by` plus hidden dependencies extracted from the acceptance criteria — and partitions it into **vertical waves**: one wave is one dependency *chain*, grouped into stages by spine decomposition
 4. Generates 8 stage prompts (+ commit) per feature following strict stage separation (specify ← issue scope + acceptance criteria + referenced PRD user stories; plan ← PRD decisions + issue tech details + **Upstream Context** from the DAG; implement ← rules + **shared-file ownership**). `/speckit.tasks` is command-only — tasks are generated from spec + plan, never hand-authored; clarify/checklist/analyze/converge lead with `auto-accept all recommended options`
 5. Writes output to `.speckit-prompts/{prd-name}/{NNN}-{slug}/` folders — the parent folder name is derived from the PRD (short kebab-case project name), the issue number is zero-padded to 3 digits — plus `DEPENDENCIES.md` (Mermaid DAG + stages/waves + hotspots), `PARALLEL_EXECUTION.md` (two-phase runbook), and `waves.json` at the parent folder
-6. Installs 4 runner scripts into `<project>/utilities/` (copied verbatim + `chmod +x`) and renders `.workmux.yaml`
+6. Installs 4 runner scripts into `<project>/utilities/` (copied verbatim + `chmod +x`) and renders `.workmux.yaml` — including `{{ VERIFY_CMD }}`, the build gate's verification command, which is measured against the repo's baseline exit code before being written
 
 #### Two-Phase Parallel Execution
 
@@ -326,7 +326,7 @@ Two barriers instead of four, wall-clock equal to the longest chain — and noth
 ./utilities/speckit_parallel.sh build            # Phase 2 — trunk stage → merge → branch waves in parallel
 ```
 
-Phase 1 needs neither `workmux` nor `tmux` — it launches one background `claude -p` per feature in the main working tree, each pinned to its own `specs/{NNN}-{slug}/` via `SPECIFY_FEATURE_DIRECTORY`, with agents barred from touching git; the driver runs a spec gate and makes a single commit. Phase 2's `pre_merge` gate blocks any wave merge whose `tasks.md` still has unchecked tasks or whose tests fail. The driver refuses to start until `.specify/feature.json` is untracked, and warns if a `before_specify` git hook would create branches during the fan-out.
+Phase 1 needs neither `workmux` nor `tmux` — it launches one background `claude -p` per feature in the main working tree, each pinned to its own `specs/{NNN}-{slug}/` via `SPECIFY_FEATURE_DIRECTORY`, with agents barred from touching git; the driver runs a spec gate and makes a single commit. Phase 2's `pre_merge` gate blocks any wave merge whose `tasks.md` still has unchecked tasks or whose verification command fails — and that command must be set explicitly as `env SPECKIT_VERIFY_CMD="…"` in `.workmux.yaml`, measured green against the repo's untouched baseline, or a brownfield repo that already exits non-zero will block every wave merge forever. The driver refuses to start until `.specify/feature.json` is untracked, and warns if a `before_specify` git hook would create branches during the fan-out.
 
 #### 8-Stage Role Separation (+ commit)
 
@@ -462,6 +462,8 @@ And the parallel plan itself is verified against:
 | `PARALLEL_EXECUTION.md` exists | Pre-flight, both phase commands, monitoring, failure recovery, merge-conflict guidance |
 | 4 scripts installed + `chmod +x` | pipeline, parallel, stage runner, pre-merge gate |
 | `.workmux.yaml` has a **single-pane** `speckit` layout | Two panes deadlock `-W`/`--max-concurrent` |
+| `pre_merge` passes an explicit `SPECKIT_VERIFY_CMD` | Verified green against the untouched baseline; no `&&`-chained lint/type checks |
+| That env var is passed via `env VAR=...`, not `VAR=...` | `VAR=value cmd` is shell syntax and dies if the hook is exec'd without a shell |
 | The pane command **ends with `; exit`** | The command runs in a shell; without it the shell outlives the script and the window never closes |
 | `.workmux.yaml` uses `merge_strategy: merge` | A wave carries a chain of commits; rebase replays each through the same conflict |
 | Pre-flight actions reported to the user | `.specify/feature.json` untracked + `.speckit-logs/` ignored + no `before_specify` git hook |
@@ -1313,6 +1315,14 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.44.0 (2026-08-27)
+
+- **generate-optimized-spec-kit-prompt: the `pre_merge` gate no longer silently adopts a verify command that can never pass** — with `SPECKIT_VERIFY_CMD` unset the gate auto-detects `uv run pytest -q` / `npm test` and reads any non-zero exit as a merge failure. In a brownfield repo whose baseline *already* exits non-zero — integration tests that need a live server, known xfails, environment-gated suites — that silently blocks **every** wave merge forever, and the only thing the driver said was "conflict or gate". The gate now prints a loud warning naming the command it fell back to and what that will cost, `assets/workmux.yaml.template` templates a mandatory `{{ VERIFY_CMD }}` instead of calling the gate bare, and SKILL.md instructs the generator to **measure the baseline exit code first** — narrowing with `--deselect` / `--ignore` / `-m 'not integration'` until the command is green on an untouched tree, recording which paths were excluded and why, or writing `skip` when the project has no runnable check. Lint and type checks must never be `&&`-chained onto it: they carry their own baselines and fail for exactly the same reason
+- **generate-optimized-spec-kit-prompt: hook environment variables are now passed through `env`** — `.workmux.yaml`'s `pre_merge` reads `env SPECKIT_VERIFY_CMD="…" bash utilities/wm_pre_merge_gate.sh`. `VAR=value cmd` is *shell syntax*; when workmux exec's a hook via argv without a shell, `VAR=…` is taken as the program name and the hook dies before the gate ever runs — a failure mode indistinguishable from a gate rejection. `env` is a real binary, so it works whether or not a shell is involved
+- **generate-optimized-spec-kit-prompt: merge failures now name their cause** — `assets/speckit_parallel.sh` replaced the single "병합 실패 (충돌 또는 pre_merge 게이트)" line with a three-way diagnosis, each carrying the command that confirms it: a git conflict (`git merge-tree --write-tree <base> build/<wave>`), a gate rejection (`WM_BRANCH_NAME=build/<wave> bash utilities/wm_pre_merge_gate.sh`, run in the worktree), or a hook that never executed at all. `references/parallel-execution-guide.md` gains rows 7 and 8 in its guaranteed-failure table, and two Quality Checklist rows now bar both traps at generation time
+- **generate-optimized-spec-kit-prompt: turn budgets raised for the review and build stages** — `02_clarify`, `04_checklist`, and `06_analyze` go 50 → 500, and the shared `MAX_TURNS` inherited by `03_plan` / `05_tasks` / `07_implement` / `08_converge` goes 1000 → 2000, so a long feature no longer hits the turn cap mid-stage. The light `01_specify` (30) and `commit` (10) budgets are unchanged; override with `--max-turns N`. SKILL.md, the per-stage table in `references/api_reference.md`, and the inline `--max-turns` help all updated to match
+- **Version bump**: 1.43.0 → 1.44.0
 
 ### v1.43.0 (2026-07-29)
 

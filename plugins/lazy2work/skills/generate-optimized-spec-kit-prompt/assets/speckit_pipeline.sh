@@ -73,7 +73,7 @@ LOG_DIR="$LOG_ROOT/$TIMESTAMP"
 RESUME_FILE="$LOG_ROOT/.last_checkpoint"
 STEPS_SPEC=("01_specify" "02_clarify")
 STEPS_BUILD=("03_plan" "04_checklist" "05_tasks" "06_analyze" "07_implement" "08_converge")
-MAX_TURNS=1000
+MAX_TURNS=2000
 CLAUDE_BIN="${CLAUDE_BIN:-claude}"
 # worktree 병렬 실행 중이면 1 — 프리앰블에 worktree 가드레일이 추가된다
 WORKTREE_MODE="${SPECKIT_WORKTREE_MODE:-0}"
@@ -192,7 +192,7 @@ while [[ $# -gt 0 ]]; do
 			  --no-commit      단계 완료 후 커밋 생략
 			  --skip-clarify   02_clarify 건너뛰기
 			  --resume         마지막 실패/중단 지점부터 재개
-			  --max-turns N    Claude 최대 턴 수 (기본: 1000)
+			  --max-turns N    Claude 최대 턴 수 (기본: 2000)
 			  (env) SPECKIT_LOG_ROOT     로그/체크포인트 루트 (기본: <project>/.speckit-logs)
 			  (env) SPECKIT_WORKTREE_MODE=1  worktree 병렬 실행 — 프리앰블에 격리 가드레일 추가
 			  (env) 단계별 모델/effort override: SPECIFY_MODEL/SPECIFY_EFFORT, CLARIFY_*, PLAN_*, CHECKLIST_*, TASKS_*, ANALYZE_*, IMPLEMENT_*, CONVERGE_*
@@ -622,11 +622,11 @@ get_max_turns_for_step() {
 	local step="$1"
 	case "$step" in
 	01_specify) echo 30 ;;
-	02_clarify) echo 50 ;;
+	02_clarify) echo 500 ;;
 	03_plan) echo "$MAX_TURNS" ;;
-	04_checklist) echo 50 ;;
+	04_checklist) echo 500 ;;
 	05_tasks) echo "$MAX_TURNS" ;;
-	06_analyze) echo 50 ;;
+	06_analyze) echo 500 ;;
 	07_implement) echo "$MAX_TURNS" ;;
 	08_converge) echo "$MAX_TURNS" ;;
 	*) echo "$MAX_TURNS" ;;

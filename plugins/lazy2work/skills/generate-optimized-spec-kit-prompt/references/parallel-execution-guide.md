@@ -220,6 +220,8 @@ These are not quality concerns. They are guaranteed failures.
 | 4 | Every worktree needs a unique branch name. | The `build/{wave}` template guarantees it. |
 | 5 | `workmux add --base` defaults to the *current* branch, not `main`. | Set `base_branch` in `.workmux.yaml` **and** pass `--base` explicitly. |
 | 6 | `.speckit-logs/` committed into feature branches makes every merge conflict. | `.gitignore` it. |
+| 7 | The `pre_merge` gate falls back to `uv run pytest -q` / `npm test` when `SPECKIT_VERIFY_CMD` is unset, and reads any non-zero exit as failure. A repo whose baseline already exits non-zero therefore fails **every** wave merge, and the driver only reports "conflict or gate". | Set it explicitly in `.workmux.yaml`, narrowed until it is green on the untouched baseline. Never `&&` lint/type checks onto it — they carry their own baselines. |
+| 8 | `VAR=value cmd` in a hook is **shell syntax**. If workmux exec's the hook without a shell, `VAR=...` is taken as the program name and the hook dies before the gate runs — which looks identical to a gate rejection. | Write `env VAR=value cmd`. `env` is a real binary, so it works whether or not a shell is involved. |
 
 ## 7. What the generated prompts must carry
 

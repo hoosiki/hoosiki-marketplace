@@ -13,9 +13,15 @@
 #   build 단계: 각 feature 의 plan.md·tasks.md 존재 + 미완료 태스크 0건,
 #               그리고 마지막에 프로젝트 검증 명령 1회 통과
 #
-# 검증 명령은 프로젝트마다 다르므로 env 로 지정한다 (미지정 시 자동 감지):
-#   SPECKIT_VERIFY_CMD="uv run pytest -q && uv run ruff check ."
+# 검증 명령은 프로젝트마다 다르므로 env 로 지정한다. **명시를 강력히 권장한다** —
+# 미지정 시 자동 감지(`uv run pytest -q` / `npm test`)로 폴백하는데, 기존 실패가 있는
+# 저장소에서는 종료 코드가 항상 ≠ 0 이라 모든 병합이 영구히 막힌다.
+#   SPECKIT_VERIFY_CMD="uv run pytest -q"
+#   SPECKIT_VERIFY_CMD="uv run pytest -q --deselect path/to/known_failing.py"   # 기준선 제외
 #   SPECKIT_VERIFY_CMD=skip     → build 단계 검증을 건너뛴다 (권장하지 않음)
+#
+# ⚠️ 린트·타입 검사를 `&&` 로 이어 붙이지 말 것 — ruff/mypy/eslint 에 기존 기준선이 있으면
+#   같은 이유로 항상 실패한다. 기준선 '증가' 는 종료 코드로 표현되지 않으므로 별도 수단이 필요하다.
 #
 # Usage:
 #   bash utilities/wm_pre_merge_gate.sh                          # workmux pre_merge 훅
@@ -163,12 +169,21 @@ done <<<"$FEATURES"
 # ──────────────────────────────────────────────
 if [ "$PHASE" = "build" ]; then
 	verify="${SPECKIT_VERIFY_CMD:-}"
+	autodetected=false
 	if [ -z "$verify" ]; then
 		if [ -f pyproject.toml ] && command -v uv >/dev/null 2>&1; then
-			verify="uv run pytest -q"
+			verify="uv run pytest -q"; autodetected=true
 		elif [ -f package.json ] && grep -q '"test"' package.json; then
-			verify="npm test --silent"
+			verify="npm test --silent"; autodetected=true
 		fi
+	fi
+
+	# 자동 감지는 "테스트가 전부 통과한다"를 전제한다. 그 전제가 틀린 저장소에서는
+	# 모든 웨이브의 병합이 영구히 막히므로, 폴백했다는 사실을 크게 알린다.
+	if $autodetected; then
+		echo "⚠️  SPECKIT_VERIFY_CMD 미지정 — '$verify' 로 자동 감지했습니다."
+		echo "    이 명령이 기존에도 종료 코드 ≠ 0 이라면 모든 병합이 계속 막힙니다."
+		echo "    → .workmux.yaml 의 pre_merge 에 env SPECKIT_VERIFY_CMD=\"...\" 를 명시하세요."
 	fi
 
 	if [ "$verify" = "skip" ]; then

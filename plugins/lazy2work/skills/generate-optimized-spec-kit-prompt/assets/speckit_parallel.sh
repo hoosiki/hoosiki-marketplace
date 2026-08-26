@@ -43,6 +43,9 @@
 #   git rm --cached .specify/feature.json 2>/dev/null; echo '.specify/feature.json' >> .gitignore
 #   echo '.speckit-logs/' >> .gitignore
 #   .workmux.yaml 에 layouts.speckit (단일 pane) + base_branch 명시
+#   .workmux.yaml 의 pre_merge 에 env SPECKIT_VERIFY_CMD="..." 명시 — 미지정 시 게이트가
+#     `uv run pytest -q` 로 폴백하고 종료 코드 ≠ 0 을 전부 실패로 본다. 기존 실패가 있는
+#     저장소는 이것 때문에 모든 웨이브 병합이 영구히 막힌다.
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -433,7 +436,14 @@ merge_waves() {
 			continue
 		fi
 		if ! workmux merge "build/$w" ${merge_flags[@]+"${merge_flags[@]}"}; then
-			warn "[$w] 병합 실패 (충돌 또는 pre_merge 게이트) — worktree 보존"
+			warn "[$w] 병합 실패 — worktree 보존. 원인은 셋 중 하나입니다:"
+			warn "    1) git 충돌 — 확인: git merge-tree --write-tree $BASE_BRANCH build/$w"
+			warn "    2) pre_merge 게이트 거부 — 미완료 태스크 또는 검증 명령 실패."
+			warn "       워크트리에서 직접: WM_BRANCH_NAME=build/$w bash utilities/wm_pre_merge_gate.sh"
+			warn "    3) 훅 자체가 실행되지 못함 — .workmux.yaml 의 pre_merge 가 'VAR=... cmd' 형태면"
+			warn "       셸 없이 exec 될 때 죽습니다. 'env VAR=... cmd' 로 쓰세요."
+			warn "    검증 명령이 원인이면 SPECKIT_VERIFY_CMD 가 이 저장소의 기준선에 맞는지 보세요"
+			warn "    (기존에도 종료 코드 ≠ 0 이면 모든 웨이브가 영구히 막힙니다)"
 			bad+=("$w")
 		fi
 	done

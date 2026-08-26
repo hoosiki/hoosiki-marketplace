@@ -218,6 +218,7 @@ After writing the prompts, install the bundled execution assets so the user can 
 - `{{ MAIN_BRANCH }}` — resolve from the repo (`git symbolic-ref --short HEAD` on a clean main, or the repo's default branch)
 - `{{ PROMPTS_PATH }}` — `.speckit-prompts/{prd-name}`
 - `{{ FILES_COPY }}` / `{{ POST_CREATE }}` — derive from the PRD's tech stack (e.g. `- .env` and `- 'uv sync --frozen'` for a uv-based Python project; `- 'npm ci'` for Node). If nothing applies, write `[]` for `files.copy` and drop the `post_create` key.
+- `{{ VERIFY_CMD }}` — the project's own verification command for the build gate. **Measure the baseline before writing it**: run the project's test command once and look at the *exit code*, not just the summary. A brownfield repo very often exits non-zero on a clean tree (integration tests that need a live server, known xfails, environment-gated suites), and the gate treats any non-zero exit as a merge failure — so an unmeasured value blocks every wave forever while the driver reports only "conflict or gate". Narrow the command until it is green on the untouched baseline (`--deselect`/`--ignore` the known-failing paths, `-m 'not integration'`, and so on) and say in the file which paths you excluded and why. Do **not** chain lint or type checks with `&&`: those carry their own baselines and fail for the same reason. If the project genuinely has no runnable check, write `skip` and tell the user the gate is disabled.
 
 If any destination already exists, do not clobber it silently — diff and ask the user before overwriting. For an existing `.workmux.yaml`, merge in `layouts.speckit` and `pre_merge` rather than replacing the file.
 
@@ -245,7 +246,7 @@ echo '.speckit-logs/' >> .gitignore
 
 Phase 1 needs neither workmux nor tmux — only Phase 2 does.
 
-Per-stage model/effort defaults are Opus for the reasoning stages (specify, clarify, plan, checklist, analyze, converge) and Sonnet for the execution stages (tasks, implement), overridable via env vars. `MAX_TURNS` defaults to 1000.
+Per-stage model/effort defaults are Opus for the reasoning stages (specify, clarify, plan, checklist, analyze, converge) and Sonnet for the execution stages (tasks, implement), overridable via env vars. `MAX_TURNS` defaults to 2000.
 
 **Models are never pinned to a version.** At run start the pipeline resolves "the newest Opus / Sonnet available right now" once and holds it for the whole run — `SPECKIT_OPUS_MODEL`/`SPECKIT_SONNET_MODEL` if pinned, else the Models API (`GET /v1/models`, newest by `created_at`, needs `ANTHROPIC_API_KEY`), else the CLI aliases `opus`/`sonnet` which `claude --model` resolves to the latest on its own. Resolving once rather than per call keeps a model released mid-run from splitting a project across two models; the resolved IDs are logged. Do not write a concrete model ID into the generated prompts or scripts.
 
@@ -301,6 +302,8 @@ After generating everything, verify against:
 | 4 scripts installed + `chmod +x` | pipeline, parallel, stage runner, pre-merge gate |
 | No hardcoded model version anywhere | Prompts and scripts name no concrete model ID; the runner resolves the latest Opus/Sonnet at run start |
 | `.workmux.yaml` has a **single-pane** `speckit` layout | Two panes deadlock `-W`/`--max-concurrent` |
+| `pre_merge` passes an explicit `SPECKIT_VERIFY_CMD` | Verified green against the untouched baseline; no `&&`-chained lint/type checks |
+| That env var is passed via `env VAR=...`, not `VAR=...` | `VAR=value cmd` is shell syntax and dies if the hook is exec'd without a shell |
 | The pane command **ends with `; exit`** | The command runs in a shell; without it the shell survives the script and the window never closes |
 | `.workmux.yaml` uses `merge_strategy: merge` | A wave carries a chain of commits; rebase replays each through the same conflict |
 | Pre-flight actions reported to the user | `.specify/feature.json` untracked + `.speckit-logs/` ignored + no `before_specify` git hook |

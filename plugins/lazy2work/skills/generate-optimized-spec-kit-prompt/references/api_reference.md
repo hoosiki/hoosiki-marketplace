@@ -260,6 +260,9 @@ chmod +x utilities/speckit_pipeline.sh utilities/speckit_parallel.sh \
 ```
 
 Confirm `constitution.md` pins the cross-feature conventions listed in DEPENDENCIES.md **before** Phase 1.
+Confirm `.workmux.yaml`'s `pre_merge` passes an explicit `env SPECKIT_VERIFY_CMD="..."` that is green
+on the untouched baseline — unset, the gate falls back to the project's test command and reads any
+non-zero exit as a merge failure, which blocks every wave.
 If `.specify/extensions.yml` registers a `before_specify` hook (the git extension), disable it — it
 creates a branch per `specify`, which collides with the single-working-tree fan-out.
 
@@ -640,18 +643,18 @@ The runner **pins the feature directory** on every stage: it exports `SPECIFY_FE
 
 Resolving **once** matters: passing the bare alias on every call would let a model released mid-run split a project across two models. One resolution per run keeps every feature on the same model and records which one in the log (`Models: opus -> … sonnet -> …`). Set `SPECKIT_SKIP_MODEL_RESOLVE=1` to skip the API lookup and use aliases only.
 
-Per-stage defaults (override via env vars `SPECIFY_MODEL`/`SPECIFY_EFFORT`, `CLARIFY_*`, `PLAN_*`, `CHECKLIST_*`, `TASKS_*`, `ANALYZE_*`, `IMPLEMENT_*`, `CONVERGE_*` — a per-stage `*_MODEL` wins over the resolved family) — reasoning group = Opus (incl. converge), execution group = Sonnet. `MAX_TURNS` defaults to 1000 (override with `--max-turns`):
+Per-stage defaults (override via env vars `SPECIFY_MODEL`/`SPECIFY_EFFORT`, `CLARIFY_*`, `PLAN_*`, `CHECKLIST_*`, `TASKS_*`, `ANALYZE_*`, `IMPLEMENT_*`, `CONVERGE_*` — a per-stage `*_MODEL` wins over the resolved family) — reasoning group = Opus (incl. converge), execution group = Sonnet. `MAX_TURNS` defaults to 2000 (override with `--max-turns`):
 
 | Stage | Model | Effort | Max turns |
 |-------|-------|--------|-----------|
 | 01_specify | latest Opus | high | 30 |
-| 02_clarify | latest Opus | high | 50 |
-| 03_plan | latest Opus | xhigh | 1000 |
-| 04_checklist | latest Opus | high | 50 |
-| 05_tasks | latest Sonnet | xhigh | 1000 |
-| 06_analyze | latest Opus | xhigh | 50 |
-| 07_implement | latest Sonnet | xhigh | 1000 |
-| 08_converge | latest Opus | xhigh | 1000 |
+| 02_clarify | latest Opus | high | 500 |
+| 03_plan | latest Opus | xhigh | 2000 |
+| 04_checklist | latest Opus | high | 500 |
+| 05_tasks | latest Sonnet | xhigh | 2000 |
+| 06_analyze | latest Opus | xhigh | 500 |
+| 07_implement | latest Sonnet | xhigh | 2000 |
+| 08_converge | latest Opus | xhigh | 2000 |
 | commit | session default | — | 10 |
 
 `xhigh` needs a recent Opus or Sonnet 5+; if resolution lands on an older model the API falls back to `high`.
@@ -719,6 +722,7 @@ Rendered from `assets/workmux.yaml.template`. Phase 2 only — Phase 1 never tou
 - The pane command **must end with `; exit`**. A pane `command:` is a line handed to a shell, so when the script finishes the shell returns to its prompt and the window never closes: the wave completes, writes `OK`, and the driver hangs anyway. This does not reproduce under `--dry-run` — only in a real run.
 - `base_branch` set explicitly. Its default is the *current* branch, not `main`.
 - `merge_strategy: merge`, **not** `rebase`. A wave carries a whole chain of commits; rebasing replays each one through the same hotspot conflict.
+- `pre_merge` passes **an explicit `SPECKIT_VERIFY_CMD`, wrapped in `env`**. Left unset, the gate silently falls back to `uv run pytest -q` / `npm test` and treats any non-zero exit as a merge failure, so a repo with an existing non-zero baseline never merges a single wave. Wrapped as `VAR=... cmd` instead of `env VAR=... cmd`, the hook dies before the gate even runs if workmux exec's it without a shell. Both failures surface as the same "conflict or gate" message.
 - `merge_keep: true` so a bad automated run leaves evidence behind.
 - `pre_merge` wired to `wm_pre_merge_gate.sh`.
 - Never `copy`/`symlink` a virtualenv (`.venv`, `node_modules`) — absolute paths inside make worktrees clobber each other. Recreate them in `post_create`.
