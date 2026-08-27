@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.45.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.46.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -25,11 +25,22 @@ claude plugin marketplace add hoosiki/hoosiki-marketplace
 claude plugin install lazy2work@hoosiki-marketplace
 ```
 
+**Updating to a newer version:**
+
+```bash
+claude plugin marketplace update hoosiki-marketplace
+claude plugin update lazy2work@hoosiki-marketplace --scope user --yes
+```
+
+`--yes` is required whenever stdin/stdout is not a TTY. Neither command touches the
+running session — **restart Claude Code** to load the new version. `/lazy2work:up2date --skill`
+runs both of these for you across every installed plugin.
+
 ## Available Plugins
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.45.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
+| [**lazy2work**](plugins/lazy2work/) | 1.46.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
 
 ---
 
@@ -52,7 +63,7 @@ Optional, per skill:
 
 | Skill | Command | Description |
 |-------|---------|-------------|
-| **up2date** | `/lazy2work:up2date` | Unified updater — checks and updates Homebrew packages, Claude Code skills/plugins, and SuperClaude commands in one go (`--brew` for Homebrew only, `--skill` for skills only). Plugin updates are delegated to Claude Code's own CLI (**`claude plugin marketplace update`** → **`claude plugin update <p> --scope <scope> --yes`**), so the plugin cache and registry are never hand-edited. The `--skill` path also runs **`npx skills@latest update -g -y`** to refresh global agent skills (e.g. mattpocock/skills) and **prunes skills deleted upstream** by parsing the updater's warning and calling `npx skills remove` (opt out with `--no-skill-prune`). The `--brew` path adds `brew autoremove` and a **Caskroom `.pkg` sweep** for the installers `brew cleanup` leaves behind |
+| **up2date** | `/lazy2work:up2date` | Unified updater — checks and updates Homebrew packages, Claude Code skills/plugins, and SuperClaude commands in one go (`--brew` for Homebrew only, `--skill` for skills only). Plugin updates are delegated to Claude Code's own CLI (**`claude plugin marketplace update`** → **`claude plugin update <p> --scope <scope> --yes`**), so the plugin cache and registry are never hand-edited. The `--skill` path also runs **`npx skills@latest update -g -y`** to refresh global agent skills (e.g. mattpocock/skills) and **prunes skills deleted upstream** by parsing the updater's warning and calling `npx skills remove` (opt out with `--no-skill-prune`). The `--brew` path adds `brew autoremove` and a **Caskroom `.pkg` sweep** for the installers `brew cleanup` leaves behind. The skill inventory reads both `<installPath>/skills/` and `<installPath>/.claude/skills/`, and names any plugin it had to skip |
 | **analyze-arxiv** | `/lazy2work:analyze-arxiv` | Study arXiv papers — fetches paper content, generates structured summaries, and creates prerequisite knowledge documents for deeper understanding |
 | **constitution-generator** | `/lazy2work:constitution-generator` | Generate optimized `/speckit.constitution` prompts — gathers project info (tech stack, project stage, conventions), detects brownfield patterns, and outputs a **minimal-but-enforceable** constitution: 6–12 non-negotiable principles in MUST/NO language, each with a `(Rationale: …)`, prototype-stage gate stripping, and a validation checklist |
 | **generate-optimized-spec-kit-prompt** | `/lazy2work:generate-optimized-spec-kit-prompt` | Generate complete Spec Kit prompts for the full 8-stage flow (specify → clarify → plan → checklist → tasks → analyze → implement → converge, + commit) from a PRD + pre-sliced issue files — 1 issue = 1 feature (no re-slicing), Mermaid diagrams, `/speckit.tasks` command-only (no hand-authored tasks), and auto-accept prompts for clarify/checklist/analyze/converge. Also plans the run for **maximum parallelism**: a dependency DAG (`DEPENDENCIES.md` with a Mermaid diagram), **vertical waves** (`waves.json` — one wave = one dependency chain), a two-phase runbook (`PARALLEL_EXECUTION.md`), and 4 runner scripts — Phase 1 runs every feature as background processes in one working tree, Phase 2 runs the trunk chain then the branch chains in parallel workmux worktrees |
@@ -86,18 +97,24 @@ Optional, per skill:
 /lazy2work:up2date --skill
 ```
 
+**Keep globally deleted skills instead of pruning them:**
+
+```
+/lazy2work:up2date --skill --no-skill-prune
+```
+
 Expected output:
 
 ```
 ============================================================
-  up2date  (2026-03-14 15:30:00)
+  up2date  (2026-08-27 09:56:22)
 ============================================================
 
 ============================================================
   Homebrew Package Check
 ============================================================
 
-  Homebrew: Homebrew 4.5.0
+  Homebrew: Homebrew 6.0.19
   Installed Formulae: 142
   Installed Casks:    38
   Total:              180
@@ -116,43 +133,115 @@ Expected output:
   ...
 
 ============================================================
+  Update & Upgrade
+============================================================
+
+  Formula upgrade:
+    ==> Upgrading 2 outdated packages:
+    ...
+
+  Cleanup:
+    ==> Autoremove 1 unneeded formula
+    Caskroom: removed 7 leftover .pkg (10.2 GB)
+
+============================================================
+  Brew Summary
+============================================================
+
+  Upgraded: 2
+  All packages are up to date.
+
+============================================================
   User Skills
 ============================================================
 
-  [Registered] analyze-arxiv
-    Path: /Users/you/.claude/skills/analyze-arxiv
-    Description: Analyze arXiv papers by fetching HTML content
-    Resources: references
+  Found 43 user skill(s):
 
-  [Registered] up2date
+  [user] up2date
     Path: /Users/you/.claude/skills/up2date
     Description: Unified update skill for Homebrew packages
     Resources: scripts, references
+
+  ...
+
+============================================================
+  Global Agent Skills (npx skills)
+============================================================
+
+  Updated: 3 skill(s)
+  Deleted upstream (2):
+    - zoom-out
+    - caveman
+  Removed 2 dead skill(s).
+
+============================================================
+  Plugin Skills
+============================================================
+
+  Found 46 skill(s) from 4 plugin(s):
+
+  --- lazy2work@hoosiki-marketplace (1.46.0) ---
+
+  [plugin] up2date
+    Path: /Users/you/.claude/plugins/cache/hoosiki-marketplace/lazy2work/1.46.0/skills/up2date
+    Plugin: lazy2work@hoosiki-marketplace (1.46.0)
+    Description: Unified update skill for Homebrew packages
+    Resources: scripts, references
+
+  --- ui-ux-pro-max@ui-ux-pro-max-skill (2.13.0) ---
+
+  ...
+
+  Skipped 1 plugin(s) — no skills dir (skills/, .claude/skills/):
+    example@some-marketplace (0.1.0) at /Users/you/.claude/plugins/cache/some-marketplace/example/0.1.0
 
 ============================================================
   Plugins
 ============================================================
 
-  Installed plugins: 1
+  Installed plugins: 4
 
     lazy2work@hoosiki-marketplace
-      Version: a1b2c3d
+      Version: 1.46.0
       Scope: user
-      Installed: 2026-03-14
+      Installed: 2026-08-27
 
-  Marketplaces: all up to date
+  ...
+
+  Marketplaces: 6
+    - hoosiki-marketplace (hoosiki/hoosiki-marketplace)
+      Latest local: 4058ca9 feat(up2date): delegate plugin updates to the official claude CLI
+
+  Updates available:
+    - hoosiki-marketplace: 3 commits behind
+
+============================================================
+  Plugin Update
+============================================================
+
+  Updating hoosiki-marketplace marketplace...
+    Updated
+  Updating lazy2work@hoosiki-marketplace (scope: user)...
+    Updated
+
+  Restart Claude Code to load the updated plugins.
 
 ============================================================
   SuperClaude
 ============================================================
 
   Status: Installed
-  Commands: 28
+  Commands: 31
 
 ============================================================
   Update Complete
 ============================================================
 ```
+
+The **Plugin Skills** section reads each plugin's skills from `<installPath>/skills/`,
+falling back to `<installPath>/.claude/skills/` for plugins that nest them there
+(`ui-ux-pro-max` is one). A plugin with neither layout is named on the `Skipped …`
+line rather than disappearing from the count.
 
 </details>
 
@@ -1296,7 +1385,8 @@ hoosiki-marketplace/
 │       │   └── notify_waiting.py
 │       └── LICENSE
 ├── tests/
-│   └── test_log_prompt.py
+│   ├── test_log_prompt.py
+│   └── test_up2date.py            ← 85 tests (run from the repo root)
 └── README.md
 ```
 
@@ -1315,6 +1405,16 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.46.0 (2026-08-27)
+
+- **up2date: the plugin skill inventory no longer silently drops plugins that nest their skills** — `check_plugin_skills()` looked only at `<installPath>/skills/` and `continue`d without a word when that directory was absent. `ui-ux-pro-max` ships its seven skills (`ui-ux-pro-max`, `design`, `design-system`, `banner-design`, `brand`, `slides`, `ui-styling`) at `<installPath>/.claude/skills/` instead, so a real run reported "39 skill(s) from **3** plugin(s)" while four plugins were installed and all seven of those skills were loaded and usable in the session. The report was wrong in the direction that hides the problem: nothing said a plugin had been skipped
+- **up2date: two layouts are now searched, first match wins** — the new `_plugin_skills_dir()` helper walks `_PLUGIN_SKILL_DIRS = ("skills", ".claude/skills")` and returns the first directory that exists, so a plugin carrying both is read once rather than double-counted, and a *file* named `skills` is not mistaken for the directory (`is_dir()`, not `exists()`). Measured on the same machine after the fix: **46 skills from 4 plugins**, with ui-ux-pro-max's seven matching exactly the set the session had loaded
+- **up2date: skipped plugins are reported instead of vanishing** — `check_plugin_skills()` now returns `{"skills": [...], "skipped": [...]}` rather than a bare list, and the `--skill` report ends the Plugin Skills section with a `Skipped N plugin(s) — no skills dir (skills/, .claude/skills/):` line naming each plugin, its version, and its install path. A future plugin using a third layout will announce itself rather than quietly shrinking the count
+- **up2date: 12 new tests** — `TestPluginSkillsDir` covers the missing / plain / nested / both-present / file-not-directory cases; `TestCheckPluginSkills` covers no-plugins, plain-layout metadata, nested-layout collection, skipped reporting, the `unknown` version fallback, a mixed three-plugin pass, and loose files inside a skills directory. Suite: **73 → 85 tests passing**; doctest failures held at the pre-existing baseline of 9 (the new `_plugin_skills_dir()` example passes, taking doctests to 18 passed)
+- **up2date: the README's sample output matched a version of the script that no longer exists** — it showed `Homebrew 4.5.0`, `Commands: 28`, a plugin `Version: a1b2c3d`, and jumped straight from **User Skills** to **Plugins**, omitting the **Global Agent Skills**, **Plugin Skills**, **Plugin Update**, **Update & Upgrade**, and **Brew Summary** sections that a real run prints. It has been regenerated against the actual `print_section()` call sites and a live run: correct Homebrew/SuperClaude versions, semver plugin versions, the Caskroom `.pkg` sweep line, the `Restart Claude Code` notice, and the new Plugin Skills section including its `Skipped …` line. A `--no-skill-prune` usage example was added alongside it
+- **README: an "Updating to a newer version" block in Quick Start** — the README explained how to *install* the plugin but never how to pull a newer one, which matters here because a commit to `main` is a release. Quick Start now carries the `claude plugin marketplace update` → `claude plugin update … --scope user --yes` pair, the `--yes`/TTY caveat, and the restart requirement. The Repository Structure tree also gained the previously unlisted `tests/test_up2date.py`
+- **Version bump**: 1.45.0 → 1.46.0
 
 ### v1.45.0 (2026-08-27)
 

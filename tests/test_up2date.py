@@ -683,3 +683,186 @@ class TestUpdateGlobalSkills:
         assert result["dead"] == []
         assert result["removed"] == []
         assert mrun.call_count == 1
+
+
+# ── _plugin_skills_dir() / check_plugin_skills() ─────────────────
+
+
+def _write_installed(path: Path, entries: dict) -> None:
+    """Write an installed_plugins.json holding the given plugin entries."""
+    path.write_text(json.dumps({"version": 2, "plugins": entries}), encoding="utf-8")
+
+
+def _make_skill(skills_dir: Path, name: str, description: str = "A test skill") -> None:
+    """Create a minimal skill directory with a SKILL.md carrying a description."""
+    d = skills_dir / name
+    d.mkdir(parents=True)
+    (d / "SKILL.md").write_text(
+        f"---\nname: {name}\ndescription: {description}\n---\n", encoding="utf-8"
+    )
+
+
+class TestPluginSkillsDir:
+    """Tests for _plugin_skills_dir()."""
+
+    def test_returns_none_when_no_skills_dir(self, tmp_path: Path) -> None:
+        """A plugin shipping no skills directory resolves to None."""
+        assert up2date._plugin_skills_dir(tmp_path) is None
+
+    def test_finds_plain_skills_dir(self, tmp_path: Path) -> None:
+        """The common installPath/skills/ layout is found."""
+        (tmp_path / "skills").mkdir()
+        assert up2date._plugin_skills_dir(tmp_path) == tmp_path / "skills"
+
+    def test_falls_back_to_dot_claude_layout(self, tmp_path: Path) -> None:
+        """installPath/.claude/skills/ is found when skills/ is absent."""
+        nested = tmp_path / ".claude" / "skills"
+        nested.mkdir(parents=True)
+        assert up2date._plugin_skills_dir(tmp_path) == nested
+
+    def test_plain_layout_wins_over_dot_claude(self, tmp_path: Path) -> None:
+        """When both layouts exist, skills/ takes priority."""
+        (tmp_path / "skills").mkdir()
+        (tmp_path / ".claude" / "skills").mkdir(parents=True)
+        assert up2date._plugin_skills_dir(tmp_path) == tmp_path / "skills"
+
+    def test_ignores_a_file_named_skills(self, tmp_path: Path) -> None:
+        """A regular file named 'skills' is not mistaken for the directory."""
+        (tmp_path / "skills").write_text("not a dir", encoding="utf-8")
+        assert up2date._plugin_skills_dir(tmp_path) is None
+
+
+class TestCheckPluginSkills:
+    """Tests for check_plugin_skills()."""
+
+    def test_empty_when_no_plugins(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """No installed plugins yields empty skills and skipped lists."""
+        f = tmp_path / "installed_plugins.json"
+        _write_installed(f, {})
+        monkeypatch.setattr(up2date, "INSTALLED_PLUGINS_FILE", f)
+        assert up2date.check_plugin_skills() == {"skills": [], "skipped": []}
+
+    def test_collects_skills_from_plain_layout(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Skills under installPath/skills/ are collected with their metadata."""
+        install = tmp_path / "cache" / "demo" / "1.0.0"
+        _make_skill(install / "skills", "alpha", "Does alpha things")
+        f = tmp_path / "installed_plugins.json"
+        _write_installed(
+            f,
+            {"demo@mkt": [{"installPath": str(install), "version": "1.0.0"}]},
+        )
+        monkeypatch.setattr(up2date, "INSTALLED_PLUGINS_FILE", f)
+
+        result = up2date.check_plugin_skills()
+
+        assert result["skipped"] == []
+        assert len(result["skills"]) == 1
+        skill = result["skills"][0]
+        assert skill["name"] == "alpha"
+        assert skill["source"] == "plugin"
+        assert skill["plugin_id"] == "demo@mkt"
+        assert skill["plugin_version"] == "1.0.0"
+        assert skill["description"] == "Does alpha things"
+
+    def test_collects_skills_from_dot_claude_layout(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Skills nested under .claude/skills/ are no longer dropped."""
+        install = tmp_path / "cache" / "nested" / "2.13.0"
+        _make_skill(install / ".claude" / "skills", "design")
+        _make_skill(install / ".claude" / "skills", "ui-styling")
+        f = tmp_path / "installed_plugins.json"
+        _write_installed(
+            f,
+            {"nested@mkt": [{"installPath": str(install), "version": "2.13.0"}]},
+        )
+        monkeypatch.setattr(up2date, "INSTALLED_PLUGINS_FILE", f)
+
+        result = up2date.check_plugin_skills()
+
+        assert result["skipped"] == []
+        assert sorted(s["name"] for s in result["skills"]) == ["design", "ui-styling"]
+
+    def test_reports_plugin_without_skills_as_skipped(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An install with neither layout is reported, not silently dropped."""
+        install = tmp_path / "cache" / "bare" / "0.1.0"
+        install.mkdir(parents=True)
+        f = tmp_path / "installed_plugins.json"
+        _write_installed(
+            f,
+            {"bare@mkt": [{"installPath": str(install), "version": "0.1.0"}]},
+        )
+        monkeypatch.setattr(up2date, "INSTALLED_PLUGINS_FILE", f)
+
+        result = up2date.check_plugin_skills()
+
+        assert result["skills"] == []
+        assert result["skipped"] == [
+            {
+                "plugin_id": "bare@mkt",
+                "version": "0.1.0",
+                "install_path": str(install),
+            }
+        ]
+
+    def test_skipped_version_defaults_to_unknown(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A skipped entry missing its version records 'unknown'."""
+        install = tmp_path / "cache" / "bare" / "x"
+        install.mkdir(parents=True)
+        f = tmp_path / "installed_plugins.json"
+        _write_installed(f, {"bare@mkt": [{"installPath": str(install)}]})
+        monkeypatch.setattr(up2date, "INSTALLED_PLUGINS_FILE", f)
+
+        assert up2date.check_plugin_skills()["skipped"][0]["version"] == "unknown"
+
+    def test_mixed_layouts_are_all_counted(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Plain, nested, and skill-less plugins are each handled in one pass."""
+        plain = tmp_path / "plain"
+        _make_skill(plain / "skills", "one")
+        nested = tmp_path / "nested"
+        _make_skill(nested / ".claude" / "skills", "two")
+        bare = tmp_path / "bare"
+        bare.mkdir()
+        f = tmp_path / "installed_plugins.json"
+        _write_installed(
+            f,
+            {
+                "plain@mkt": [{"installPath": str(plain), "version": "1.0.0"}],
+                "nested@mkt": [{"installPath": str(nested), "version": "2.0.0"}],
+                "bare@mkt": [{"installPath": str(bare), "version": "3.0.0"}],
+            },
+        )
+        monkeypatch.setattr(up2date, "INSTALLED_PLUGINS_FILE", f)
+
+        result = up2date.check_plugin_skills()
+
+        assert sorted(s["name"] for s in result["skills"]) == ["one", "two"]
+        assert [s["plugin_id"] for s in result["skipped"]] == ["bare@mkt"]
+
+    def test_ignores_non_directory_entries(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Loose files inside a skills directory are not treated as skills."""
+        install = tmp_path / "demo"
+        skills = install / "skills"
+        _make_skill(skills, "real")
+        (skills / "README.md").write_text("not a skill", encoding="utf-8")
+        f = tmp_path / "installed_plugins.json"
+        _write_installed(
+            f, {"demo@mkt": [{"installPath": str(install), "version": "1.0.0"}]}
+        )
+        monkeypatch.setattr(up2date, "INSTALLED_PLUGINS_FILE", f)
+
+        result = up2date.check_plugin_skills()
+
+        assert [s["name"] for s in result["skills"]] == ["real"]

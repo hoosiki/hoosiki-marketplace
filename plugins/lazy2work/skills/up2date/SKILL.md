@@ -55,6 +55,10 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/up2date.py --skill
   Claude Code's own CLI: `claude plugin marketplace update <name>`, then
   `claude plugin update <plugin> --scope <scope> --yes` for each installed plugin
   from a stale marketplace
+- **Plugin skill inventory** — skills are enumerated from each installed plugin's
+  `installPath`, checking `skills/` first and falling back to `.claude/skills/`
+  for plugins that nest them there. An install with neither is listed under a
+  "Skipped … no skills dir" line instead of vanishing from the count
 - `~/.claude/commands/sc/` SuperClaude command list → `superclaude update`
 
 Add `--no-skill-prune` to update global skills **without** removing the dead ones:
@@ -78,6 +82,9 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/up2date.py --skill --no-skill-prune
 - Plugin updates are skipped with a notice if the `claude` executable is absent
 - SuperClaude updates use `superclaude update`
 - User skills (`~/.claude/skills/`) are manually managed; only status checks are performed
+- The plugin skill scan covers two layouts, in order: `<installPath>/skills/`
+  (most plugins) and `<installPath>/.claude/skills/` (e.g. `ui-ux-pro-max`).
+  Only the first match is read, so a plugin shipping both is not double-counted
 - Global agent-skill update needs `npx` (Node.js 18+); it is skipped with a notice if `npx` is absent
 - Dead-skill pruning is **on by default** with `--skill`; pass `--no-skill-prune` to keep them
 - `brew upgrade --cask --greedy` upgrades all casks including those with `auto_updates=true`

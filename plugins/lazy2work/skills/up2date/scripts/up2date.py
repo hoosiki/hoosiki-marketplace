@@ -38,6 +38,9 @@ _NPX_TIMEOUT: int = 300
 _CLAUDE_TIMEOUT: int = 180
 # Scopes accepted by `claude plugin update --scope`.
 _PLUGIN_SCOPES: frozenset[str] = frozenset({"user", "project", "local", "managed"})
+# Where a plugin may keep its skills, relative to installPath, in priority order.
+# Most use "skills/"; some (e.g. ui-ux-pro-max) nest them under ".claude/skills/".
+_PLUGIN_SKILL_DIRS: tuple[str, ...] = ("skills", ".claude/skills")
 
 # Matches ANSI SGR color/style escape sequences (e.g. "\x1b[38;5;145m").
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
@@ -517,32 +520,69 @@ def check_user_skills() -> list[dict]:
     return skills
 
 
-def check_plugin_skills() -> list[dict]:
-    """Check skills installed via plugin marketplaces in cache directories.
+def _plugin_skills_dir(install_path: Path) -> Path | None:
+    """Locate a plugin's skills directory, tolerating the ``.claude/`` layout.
 
-    Reads installed_plugins.json and enumerates skills under each
-    plugin's ``installPath/skills/`` directory.
+    Args:
+        install_path: The plugin's recorded ``installPath``.
 
     Returns:
-        List of skill info dicts with keys: ``name``, ``path``, ``source``,
-        ``plugin_id``, ``plugin_version``, ``has_scripts``, ``has_references``,
-        ``has_assets``.
+        The first directory in ``_PLUGIN_SKILL_DIRS`` that exists under
+        ``install_path``, or None when the plugin ships no skills directory.
 
     Examples:
-        >>> skills = check_plugin_skills()
-        >>> all(s["source"] == "plugin" for s in skills)
+        >>> _plugin_skills_dir(Path("/nonexistent")) is None
         True
     """
-    skills = []
+    for rel in _PLUGIN_SKILL_DIRS:
+        candidate = install_path / rel
+        if candidate.is_dir():
+            return candidate
+    return None
+
+
+def check_plugin_skills() -> dict:
+    """Check skills installed via plugin marketplaces in cache directories.
+
+    Reads installed_plugins.json and enumerates skills under each plugin's
+    skills directory, which is ``installPath/skills/`` for most plugins and
+    ``installPath/.claude/skills/`` for some (see ``_PLUGIN_SKILL_DIRS``).
+    Installs carrying neither are reported as skipped rather than dropped
+    silently.
+
+    Returns:
+        Dict with two keys. ``skills`` is a list of skill info dicts with
+        keys ``name``, ``path``, ``source``, ``plugin_id``,
+        ``plugin_version``, ``has_scripts``, ``has_references``,
+        ``has_assets``. ``skipped`` is a list of dicts with keys
+        ``plugin_id``, ``version``, ``install_path`` — one per install
+        that has no skills directory.
+
+    Examples:
+        >>> result = check_plugin_skills()
+        >>> all(s["source"] == "plugin" for s in result["skills"])
+        True
+        >>> set(result) == {"skills", "skipped"}
+        True
+    """
+    skills: list[dict] = []
+    skipped: list[dict] = []
     data = _read_installed_plugins()
     if not data.get("plugins"):
-        return skills
+        return {"skills": skills, "skipped": skipped}
 
     for plugin_id, installs in data["plugins"].items():
         for inst in installs:
             install_path = Path(inst.get("installPath", ""))
-            skills_dir = install_path / "skills"
-            if not skills_dir.exists():
+            skills_dir = _plugin_skills_dir(install_path)
+            if skills_dir is None:
+                skipped.append(
+                    {
+                        "plugin_id": plugin_id,
+                        "version": inst.get("version", "unknown"),
+                        "install_path": str(install_path),
+                    }
+                )
                 continue
 
             for skill_dir in sorted(skills_dir.iterdir()):
@@ -571,7 +611,7 @@ def check_plugin_skills() -> list[dict]:
 
                 skills.append(info)
 
-    return skills
+    return {"skills": skills, "skipped": skipped}
 
 
 def _is_skill_registered(skill_name: str) -> bool:
@@ -1045,7 +1085,8 @@ def run_skill(prune_dead: bool = True) -> None:
 
     # -- 1b. Plugin Skills --
     print_section("Plugin Skills")
-    plugin_skills = check_plugin_skills()
+    plugin_skill_info = check_plugin_skills()
+    plugin_skills = plugin_skill_info["skills"]
     if plugin_skills:
         # Group by plugin_id
         by_plugin: dict[str, list[dict]] = {}
@@ -1061,6 +1102,13 @@ def run_skill(prune_dead: bool = True) -> None:
                 _print_skill_info(sk)
     else:
         print("\n  No plugin skills found")
+
+    skipped_plugins = plugin_skill_info["skipped"]
+    if skipped_plugins:
+        looked_in = ", ".join(f"{d}/" for d in _PLUGIN_SKILL_DIRS)
+        print(f"\n  Skipped {len(skipped_plugins)} plugin(s) — no skills dir ({looked_in}):")
+        for sk in skipped_plugins:
+            print(f"    {sk['plugin_id']} ({sk['version']}) at {sk['install_path']}")
 
     # -- 2. Plugins --
     print_section("Plugins")

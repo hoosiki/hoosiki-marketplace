@@ -49,3 +49,18 @@ load an updated plugin.
 | `~/.claude/plugins/known_marketplaces.json` | Marketplace registry |
 | `~/.claude/commands/sc/` | SuperClaude commands |
 | `~/.claude/settings.json` | Skill registration check |
+
+## Plugin Skill Layouts
+
+A plugin's skills are read from its recorded `installPath`. Two layouts are
+supported, checked in this order — the first match wins, so a plugin carrying
+both is never double-counted:
+
+| Relative path | Used by |
+|---------------|---------|
+| `skills/` | Most plugins (`lazy2work`, `document-skills`, `tavily`) |
+| `.claude/skills/` | Plugins that nest them, e.g. `ui-ux-pro-max` |
+
+An install with neither directory is reported on a `Skipped N plugin(s) — no
+skills dir` line naming the plugin, version, and path, rather than being
+dropped from the inventory without comment.
