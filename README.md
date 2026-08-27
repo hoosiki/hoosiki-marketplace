@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.44.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.45.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -29,7 +29,7 @@ claude plugin install lazy2work@hoosiki-marketplace
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.44.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
+| [**lazy2work**](plugins/lazy2work/) | 1.45.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
 
 ---
 
@@ -52,7 +52,7 @@ Optional, per skill:
 
 | Skill | Command | Description |
 |-------|---------|-------------|
-| **up2date** | `/lazy2work:up2date` | Unified updater — checks and updates Homebrew packages, Claude Code skills/plugins, and SuperClaude commands in one go (`--brew` for Homebrew only, `--skill` for skills only). The `--skill` path also runs **`npx skills@latest update -g -y`** to refresh global agent skills (e.g. mattpocock/skills) and **prunes skills deleted upstream** by parsing the updater's warning and calling `npx skills remove` (opt out with `--no-skill-prune`) |
+| **up2date** | `/lazy2work:up2date` | Unified updater — checks and updates Homebrew packages, Claude Code skills/plugins, and SuperClaude commands in one go (`--brew` for Homebrew only, `--skill` for skills only). Plugin updates are delegated to Claude Code's own CLI (**`claude plugin marketplace update`** → **`claude plugin update <p> --scope <scope> --yes`**), so the plugin cache and registry are never hand-edited. The `--skill` path also runs **`npx skills@latest update -g -y`** to refresh global agent skills (e.g. mattpocock/skills) and **prunes skills deleted upstream** by parsing the updater's warning and calling `npx skills remove` (opt out with `--no-skill-prune`). The `--brew` path adds `brew autoremove` and a **Caskroom `.pkg` sweep** for the installers `brew cleanup` leaves behind |
 | **analyze-arxiv** | `/lazy2work:analyze-arxiv` | Study arXiv papers — fetches paper content, generates structured summaries, and creates prerequisite knowledge documents for deeper understanding |
 | **constitution-generator** | `/lazy2work:constitution-generator` | Generate optimized `/speckit.constitution` prompts — gathers project info (tech stack, project stage, conventions), detects brownfield patterns, and outputs a **minimal-but-enforceable** constitution: 6–12 non-negotiable principles in MUST/NO language, each with a `(Rationale: …)`, prototype-stage gate stripping, and a validation checklist |
 | **generate-optimized-spec-kit-prompt** | `/lazy2work:generate-optimized-spec-kit-prompt` | Generate complete Spec Kit prompts for the full 8-stage flow (specify → clarify → plan → checklist → tasks → analyze → implement → converge, + commit) from a PRD + pre-sliced issue files — 1 issue = 1 feature (no re-slicing), Mermaid diagrams, `/speckit.tasks` command-only (no hand-authored tasks), and auto-accept prompts for clarify/checklist/analyze/converge. Also plans the run for **maximum parallelism**: a dependency DAG (`DEPENDENCIES.md` with a Mermaid diagram), **vertical waves** (`waves.json` — one wave = one dependency chain), a two-phase runbook (`PARALLEL_EXECUTION.md`), and 4 runner scripts — Phase 1 runs every feature as background processes in one working tree, Phase 2 runs the trunk chain then the branch chains in parallel workmux worktrees |
@@ -1315,6 +1315,15 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.45.0 (2026-08-27)
+
+- **up2date: plugin updates now go through the official `claude plugin` CLI** — the `--skill` path used to reimplement Claude Code's internals: `git pull --ff-only` in the marketplace checkout, then `shutil.copytree()` into `~/.claude/plugins/cache/<mkt>/<plugin>/<version>/`, then hand-editing `installed_plugins.json` (`version`, `gitCommitSha`, `installPath`, `lastUpdated`). That is someone else's schema, and it drifts the moment it changes. Claude Code 2.1.246 ships `claude plugin marketplace update <name>` and `claude plugin update <plugin> --scope <scope> --yes`, so the script now *detects* staleness from git (keeping the "N commits behind" report) and **delegates the write**. `_find_plugin_source()`, `update_plugin_cache()`, and `_write_installed_plugins()` are gone along with the `MARKETPLACES_DIR` / `CACHE_DIR` constants and the `tempfile` / `timezone` imports they needed
+- **up2date: `--scope` is read from the plugin's own registry entry, not assumed** — a user-scope install stays user-scope, a project-scope install stays project-scope, with `user` as the fallback for an unrecognized value. `--yes` is passed unconditionally because the CLI *requires* it whenever stdin or stdout is not a TTY, which is always true for this script. The run ends with an explicit "Restart Claude Code to load the updated plugins" — the CLI updates the cache, not the live session — and the whole step is skipped with a notice when the `claude` executable is absent
+- **up2date: `brew cleanup` does not remove Caskroom installers, so up2date now does** — a pkg-based cask keeps its `.pkg` beside the version it installed, and Homebrew treats that as live data rather than cache. Measured on a real machine: `brew cleanup --prune=all` freed **629 B** while **10.2 GB** of `.pkg` sat in the Caskroom, 6.4 GB of it a single MacTeX installer. `brew_cleanup_caskroom()` sweeps `*.pkg` under the Caskroom tree only — app bundles and `INSTALL_RECEIPT.json` are left alone, verified by test — and reports the bytes reclaimed. `brew autoremove` was also added to drop orphaned dependency-only formulae
+- **up2date: verified against the current CLIs rather than assumed** — `skills` **v1.5.23** still accepts `update -g -y` and `remove <names> -g -y`, so that path is unchanged; Homebrew **6.0.19** still accepts every flag already in use. Only the plugin path was actually stale
+- **up2date: side-effecting doctests guarded** — four new `Examples:` blocks carry `# doctest: +SKIP`. `brew_cleanup_caskroom()`'s would otherwise **delete real `.pkg` files** when doctests run, and the two `claude plugin` wrappers would shell out to the network. Suite: **67 → 73 tests passing**; doctest failures held at the pre-existing baseline of 9
+- **Version bump**: 1.44.0 → 1.45.0
 
 ### v1.44.0 (2026-08-27)
 

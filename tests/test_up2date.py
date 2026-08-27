@@ -230,30 +230,6 @@ class TestReadInstalledPlugins:
         assert result == {"version": 2, "plugins": {}}
 
 
-# ── _write_installed_plugins() ───────────────────────────────────
-
-
-class TestWriteInstalledPlugins:
-    """Tests for _write_installed_plugins()."""
-
-    def test_writes_json_atomically(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """_write_installed_plugins creates valid JSON file."""
-        target = tmp_path / "installed_plugins.json"
-        monkeypatch.setattr(up2date, "INSTALLED_PLUGINS_FILE", target)
-        data = {"version": 2, "plugins": {"test@mkt": []}}
-        up2date._write_installed_plugins(data)
-        written = json.loads(target.read_text(encoding="utf-8"))
-        assert written == data
-
-    def test_no_temp_file_left_on_success(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """_write_installed_plugins leaves no temp files after success."""
-        target = tmp_path / "installed_plugins.json"
-        monkeypatch.setattr(up2date, "INSTALLED_PLUGINS_FILE", target)
-        up2date._write_installed_plugins({"version": 2, "plugins": {}})
-        tmp_files = list(tmp_path.glob("*.tmp"))
-        assert tmp_files == []
-
-
 # ── _is_skill_registered() ──────────────────────────────────────
 
 
@@ -286,47 +262,91 @@ class TestIsSkillRegistered:
         assert up2date._is_skill_registered("my-skill") is False
 
 
-# ── _find_plugin_source() ───────────────────────────────────────
+# ── _human_bytes() ──────────────────────────────────────────────
 
 
-class TestFindPluginSource:
-    """Tests for _find_plugin_source()."""
+class TestHumanBytes:
+    """Tests for _human_bytes()."""
 
-    def test_standard_layout(self, tmp_path: Path) -> None:
-        """_find_plugin_source finds plugin under plugins/ directory."""
-        (tmp_path / "plugins" / "my-plugin").mkdir(parents=True)
-        result = up2date._find_plugin_source(tmp_path, "my-plugin")
-        assert result == tmp_path / "plugins" / "my-plugin"
+    def test_zero(self) -> None:
+        """_human_bytes renders zero without a decimal."""
+        assert up2date._human_bytes(0) == "0 B"
 
-    def test_flat_layout(self, tmp_path: Path) -> None:
-        """_find_plugin_source finds plugin as direct subdirectory."""
-        (tmp_path / "my-plugin").mkdir()
-        result = up2date._find_plugin_source(tmp_path, "my-plugin")
-        assert result == tmp_path / "my-plugin"
+    def test_kilobytes(self) -> None:
+        """_human_bytes steps up to KB past 1024."""
+        assert up2date._human_bytes(1536) == "1.5 KB"
 
-    def test_root_source_layout(self, tmp_path: Path) -> None:
-        """_find_plugin_source resolves source './' from marketplace.json."""
-        claude_plugin = tmp_path / ".claude-plugin"
-        claude_plugin.mkdir()
-        mkt_json = claude_plugin / "marketplace.json"
-        mkt_json.write_text(
-            json.dumps({"plugins": [{"name": "doc-skills", "source": "./"}]}),
-            encoding="utf-8",
+    def test_gigabytes_do_not_overflow_to_a_larger_unit(self) -> None:
+        """GB is the top unit — a huge value stays in GB rather than wrapping."""
+        assert up2date._human_bytes(10 * 1024**3) == "10.0 GB"
+        assert up2date._human_bytes(4096 * 1024**3).endswith("GB")
+
+
+# ── brew_cleanup_caskroom() ─────────────────────────────────────
+
+
+class TestBrewCleanupCaskroom:
+    """Tests for brew_cleanup_caskroom()."""
+
+    def test_returns_zero_when_prefix_lookup_fails(self, mock_run: MagicMock) -> None:
+        """A failed `brew --prefix` yields no deletions rather than an exception."""
+        mock_run.return_value = subprocess.CompletedProcess([], returncode=1, stdout="", stderr="")
+        assert up2date.brew_cleanup_caskroom() == (0, 0)
+
+    def test_returns_zero_when_caskroom_absent(
+        self, tmp_path: Path, mock_run: MagicMock
+    ) -> None:
+        """A prefix without a Caskroom directory is a no-op."""
+        mock_run.return_value = subprocess.CompletedProcess(
+            [], returncode=0, stdout=str(tmp_path), stderr=""
         )
-        result = up2date._find_plugin_source(tmp_path, "doc-skills")
-        assert result == tmp_path
+        assert up2date.brew_cleanup_caskroom() == (0, 0)
 
-    def test_returns_none_when_not_found(self, tmp_path: Path) -> None:
-        """_find_plugin_source returns None when plugin cannot be located."""
-        result = up2date._find_plugin_source(tmp_path, "nonexistent")
-        assert result is None
+    def test_removes_pkg_and_reports_bytes(self, tmp_path: Path, mock_run: MagicMock) -> None:
+        """Leftover .pkg files are deleted and their combined size reported."""
+        pkg_dir = tmp_path / "Caskroom" / "mactex" / "2026.0324"
+        pkg_dir.mkdir(parents=True)
+        pkg = pkg_dir / "mactex.pkg"
+        pkg.write_bytes(b"x" * 2048)
+        mock_run.return_value = subprocess.CompletedProcess(
+            [], returncode=0, stdout=str(tmp_path), stderr=""
+        )
 
-    def test_standard_takes_precedence_over_flat(self, tmp_path: Path) -> None:
-        """_find_plugin_source prefers standard layout over flat."""
-        (tmp_path / "plugins" / "my-plugin").mkdir(parents=True)
-        (tmp_path / "my-plugin").mkdir()
-        result = up2date._find_plugin_source(tmp_path, "my-plugin")
-        assert result == tmp_path / "plugins" / "my-plugin"
+        assert up2date.brew_cleanup_caskroom() == (1, 2048)
+        assert not pkg.exists()
+
+    def test_leaves_non_pkg_files_alone(self, tmp_path: Path, mock_run: MagicMock) -> None:
+        """Only *.pkg is removed — app bundles and metadata survive."""
+        cask = tmp_path / "Caskroom" / "obsidian" / "1.0"
+        cask.mkdir(parents=True)
+        keep = cask / "Obsidian.app"
+        keep.mkdir()
+        receipt = cask / "INSTALL_RECEIPT.json"
+        receipt.write_text("{}")
+        mock_run.return_value = subprocess.CompletedProcess(
+            [], returncode=0, stdout=str(tmp_path), stderr=""
+        )
+
+        assert up2date.brew_cleanup_caskroom() == (0, 0)
+        assert keep.exists()
+        assert receipt.exists()
+
+
+# ── _claude_cli_available() ─────────────────────────────────────
+
+
+class TestClaudeCliAvailable:
+    """Tests for _claude_cli_available()."""
+
+    def test_true_when_claude_on_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """_claude_cli_available is True when shutil.which resolves claude."""
+        monkeypatch.setattr(up2date.shutil, "which", lambda _: "/usr/local/bin/claude")
+        assert up2date._claude_cli_available() is True
+
+    def test_false_when_claude_absent(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """_claude_cli_available is False when claude is not installed."""
+        monkeypatch.setattr(up2date.shutil, "which", lambda _: None)
+        assert up2date._claude_cli_available() is False
 
 
 # ── update_marketplace() ────────────────────────────────────────
@@ -335,39 +355,99 @@ class TestFindPluginSource:
 class TestUpdateMarketplace:
     """Tests for update_marketplace()."""
 
-    def test_returns_path_not_found_for_missing_dir(self) -> None:
-        """update_marketplace returns error for nonexistent path."""
-        result = up2date.update_marketplace("test", "/nonexistent/path")
-        assert result == "Path not found: /nonexistent/path"
-
-    def test_returns_updated_on_success(self, tmp_path: Path, mock_run: MagicMock) -> None:
-        """update_marketplace returns success message on git pull success."""
-        mock_run.return_value = subprocess.CompletedProcess(
-            [], returncode=0, stdout="Already up to date.", stderr=""
+    def test_reports_missing_cli(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """update_marketplace refuses to guess when claude is absent."""
+        monkeypatch.setattr(up2date, "_claude_cli_available", lambda: False)
+        assert up2date.update_marketplace("mkt") == (
+            "claude CLI not found — cannot update marketplaces"
         )
-        result = up2date.update_marketplace("test", str(tmp_path))
-        assert result.startswith("Updated:")
 
-    def test_returns_failed_on_git_error(self, tmp_path: Path, mock_run: MagicMock) -> None:
-        """update_marketplace returns failure message on git error."""
+    def test_returns_updated_on_success(
+        self, monkeypatch: pytest.MonkeyPatch, mock_run: MagicMock
+    ) -> None:
+        """update_marketplace returns success message on exit 0."""
+        monkeypatch.setattr(up2date, "_claude_cli_available", lambda: True)
         mock_run.return_value = subprocess.CompletedProcess(
-            [], returncode=1, stdout="", stderr="fatal: not a git repo"
+            [], returncode=0, stdout="Updated marketplace mkt", stderr=""
         )
-        result = up2date.update_marketplace("test", str(tmp_path))
-        assert result.startswith("Update failed:")
+        assert up2date.update_marketplace("mkt").startswith("Updated:")
+
+    def test_invokes_official_cli(
+        self, monkeypatch: pytest.MonkeyPatch, mock_run: MagicMock
+    ) -> None:
+        """update_marketplace shells out to `claude plugin marketplace update`."""
+        monkeypatch.setattr(up2date, "_claude_cli_available", lambda: True)
+        mock_run.return_value = subprocess.CompletedProcess([], returncode=0, stdout="", stderr="")
+        up2date.update_marketplace("mkt")
+        assert mock_run.call_args[0][0] == [
+            "claude",
+            "plugin",
+            "marketplace",
+            "update",
+            "mkt",
+        ]
+
+    def test_returns_failed_on_error(
+        self, monkeypatch: pytest.MonkeyPatch, mock_run: MagicMock
+    ) -> None:
+        """update_marketplace surfaces stderr on a non-zero exit."""
+        monkeypatch.setattr(up2date, "_claude_cli_available", lambda: True)
+        mock_run.return_value = subprocess.CompletedProcess(
+            [], returncode=1, stdout="", stderr="unknown marketplace"
+        )
+        assert up2date.update_marketplace("mkt").startswith("Update failed:")
 
 
-# ── update_plugin_cache() ───────────────────────────────────────
+# ── update_plugin() ─────────────────────────────────────────────
 
 
-class TestUpdatePluginCache:
-    """Tests for update_plugin_cache()."""
+class TestUpdatePlugin:
+    """Tests for update_plugin()."""
 
-    def test_returns_error_for_missing_marketplace(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """update_plugin_cache returns error when marketplace dir is missing."""
-        monkeypatch.setattr(up2date, "MARKETPLACES_DIR", Path("/nonexistent"))
-        result = up2date.update_plugin_cache("test@mkt", "mkt")
-        assert result == "Marketplace not found: mkt"
+    def test_reports_missing_cli(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """update_plugin refuses to guess when claude is absent."""
+        monkeypatch.setattr(up2date, "_claude_cli_available", lambda: False)
+        assert up2date.update_plugin("p@mkt") == "claude CLI not found — cannot update plugins"
+
+    def test_defaults_to_user_scope_and_passes_yes(
+        self, monkeypatch: pytest.MonkeyPatch, mock_run: MagicMock
+    ) -> None:
+        """update_plugin targets user scope and always passes --yes.
+
+        --yes is required whenever stdin/stdout is not a TTY, which is always
+        true for this script.
+        """
+        monkeypatch.setattr(up2date, "_claude_cli_available", lambda: True)
+        mock_run.return_value = subprocess.CompletedProcess([], returncode=0, stdout="", stderr="")
+        up2date.update_plugin("p@mkt")
+        assert mock_run.call_args[0][0] == [
+            "claude",
+            "plugin",
+            "update",
+            "p@mkt",
+            "--scope",
+            "user",
+            "--yes",
+        ]
+
+    def test_honors_explicit_scope(
+        self, monkeypatch: pytest.MonkeyPatch, mock_run: MagicMock
+    ) -> None:
+        """update_plugin forwards a non-default scope."""
+        monkeypatch.setattr(up2date, "_claude_cli_available", lambda: True)
+        mock_run.return_value = subprocess.CompletedProcess([], returncode=0, stdout="", stderr="")
+        up2date.update_plugin("p@mkt", "project")
+        assert "project" in mock_run.call_args[0][0]
+
+    def test_returns_failed_on_error(
+        self, monkeypatch: pytest.MonkeyPatch, mock_run: MagicMock
+    ) -> None:
+        """update_plugin surfaces stderr on a non-zero exit."""
+        monkeypatch.setattr(up2date, "_claude_cli_available", lambda: True)
+        mock_run.return_value = subprocess.CompletedProcess(
+            [], returncode=1, stdout="", stderr="plugin not installed"
+        )
+        assert up2date.update_plugin("p@mkt").startswith("Update failed:")
 
 
 # ── _print_skill_info() ─────────────────────────────────────────

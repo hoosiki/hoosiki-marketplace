@@ -17,8 +17,7 @@ import os
 import re
 import shutil
 import subprocess
-import tempfile
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 # --- Constants ---
@@ -27,8 +26,6 @@ CLAUDE_DIR = Path.home() / ".claude"
 SKILLS_DIR = CLAUDE_DIR / "skills"
 PLUGINS_DIR = CLAUDE_DIR / "plugins"
 COMMANDS_DIR = CLAUDE_DIR / "commands"
-MARKETPLACES_DIR = PLUGINS_DIR / "marketplaces"
-CACHE_DIR = PLUGINS_DIR / "cache"
 INSTALLED_PLUGINS_FILE = PLUGINS_DIR / "installed_plugins.json"
 KNOWN_MARKETPLACES_FILE = PLUGINS_DIR / "known_marketplaces.json"
 SETTINGS_FILE = CLAUDE_DIR / "settings.json"
@@ -37,6 +34,10 @@ _BREW_TIMEOUT: int = 300
 _GIT_TIMEOUT: int = 60
 _DEFAULT_TIMEOUT: int = 120
 _NPX_TIMEOUT: int = 300
+# `claude plugin ...` reaches the network (marketplace fetch + plugin download).
+_CLAUDE_TIMEOUT: int = 180
+# Scopes accepted by `claude plugin update --scope`.
+_PLUGIN_SCOPES: frozenset[str] = frozenset({"user", "project", "local", "managed"})
 
 # Matches ANSI SGR color/style escape sequences (e.g. "\x1b[38;5;145m").
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
@@ -236,6 +237,89 @@ def brew_cleanup() -> str:
     return result.stdout.strip()
 
 
+def brew_autoremove() -> str:
+    """Run ``brew autoremove`` to drop orphaned dependencies.
+
+    Removes formulae that were only ever installed as another formula's
+    dependency and are no longer required by anything.
+
+    Returns:
+        stdout output listing removed formulae (empty when nothing is orphaned).
+
+    Examples:
+        >>> isinstance(brew_autoremove(), str)  # doctest: +SKIP
+        True
+    """
+    print("  Running brew autoremove...", flush=True)
+    result = run(["brew", "autoremove"], timeout=_BREW_TIMEOUT)
+    return result.stdout.strip()
+
+
+def brew_cleanup_caskroom() -> tuple[int, int]:
+    """Delete leftover ``.pkg`` installers under the Caskroom.
+
+    ``brew cleanup --prune=all`` does **not** touch these. A pkg-based cask
+    keeps its installer beside the version it installed, so Homebrew treats it
+    as live data rather than cache. The app itself is already installed and the
+    pkg is re-downloaded on demand, so it is pure residue — but it is residue
+    that `cleanup` reports as nothing to do. Measured on a real machine:
+    ``cleanup --prune=all`` freed 629 B while 10.2 GB of ``.pkg`` sat in the
+    Caskroom, most of it a single MacTeX installer.
+
+    Only files matching ``*.pkg`` directly under the Caskroom tree are removed;
+    nothing else in the prefix is touched.
+
+    Returns:
+        ``(files_removed, bytes_freed)``.
+
+    Examples:
+        >>> removed, freed = brew_cleanup_caskroom()  # doctest: +SKIP
+        >>> removed >= 0 and freed >= 0               # doctest: +SKIP
+        True
+    """
+    prefix = run(["brew", "--prefix"], timeout=_BREW_TIMEOUT)
+    if prefix.returncode != 0:
+        return (0, 0)
+
+    caskroom = Path(prefix.stdout.strip()) / "Caskroom"
+    if not caskroom.is_dir():
+        return (0, 0)
+
+    removed = 0
+    freed = 0
+    for pkg in caskroom.rglob("*.pkg"):
+        if not pkg.is_file():
+            continue
+        try:
+            size = pkg.stat().st_size
+            pkg.unlink()
+        except OSError:
+            continue
+        removed += 1
+        freed += size
+
+    return (removed, freed)
+
+
+def _human_bytes(n: int) -> str:
+    """Format a byte count for display.
+
+    Examples:
+        >>> _human_bytes(0)
+        '0 B'
+        >>> _human_bytes(1536)
+        '1.5 KB'
+        >>> _human_bytes(10 * 1024 ** 3)
+        '10.0 GB'
+    """
+    size = float(n)
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1024 or unit == "GB":
+            return f"{size:.1f} {unit}" if unit != "B" else f"{int(size)} {unit}"
+        size /= 1024
+    return f"{size:.1f} GB"
+
+
 def run_brew() -> None:
     """Run full Homebrew check, update, upgrade, and cleanup.
 
@@ -328,6 +412,19 @@ def run_brew() -> None:
     else:
         print("    Nothing to clean up")
 
+    autoremove_result = brew_autoremove()
+    if autoremove_result:
+        for line in autoremove_result.split("\n")[:5]:
+            print(f"    {line}")
+    else:
+        print("    No orphaned dependencies")
+
+    pkg_count, pkg_bytes = brew_cleanup_caskroom()
+    if pkg_count:
+        print(f"    Caskroom: removed {pkg_count} leftover .pkg ({_human_bytes(pkg_bytes)})")
+    else:
+        print("    Caskroom: no leftover .pkg installers")
+
     # Summary
     after_formula = get_outdated("formula")
     after_cask = get_outdated("cask")
@@ -367,32 +464,6 @@ def _read_installed_plugins() -> dict:
         return json.loads(INSTALLED_PLUGINS_FILE.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {"version": 2, "plugins": {}}
-
-
-def _write_installed_plugins(data: dict) -> None:
-    """Atomically write installed_plugins.json via tempfile + rename.
-
-    Args:
-        data: Plugin data dict to serialize as JSON.
-
-    Raises:
-        OSError: If the write or rename fails.
-
-    Examples:
-        >>> _write_installed_plugins({"version": 2, "plugins": {}})
-    """
-    INSTALLED_PLUGINS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_path = tempfile.mkstemp(
-        dir=str(INSTALLED_PLUGINS_FILE.parent), suffix=".tmp"
-    )
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
-        os.replace(tmp_path, str(INSTALLED_PLUGINS_FILE))
-    except OSError:
-        if os.path.exists(tmp_path):
-            os.unlink(tmp_path)
-        raise
 
 
 def check_user_skills() -> list[dict]:
@@ -656,164 +727,81 @@ def check_superclaude() -> dict:
     return result
 
 
-def update_marketplace(name: str, mkt_path: str) -> str:
-    """Update a marketplace via ``git pull --ff-only``.
+def _claude_cli_available() -> bool:
+    """Report whether the ``claude`` executable is on PATH.
 
-    Args:
-        name: Marketplace display name (for logging).
-        mkt_path: Absolute path to the marketplace git repo.
-
-    Returns:
-        Status message — either "Updated: ..." or "Update failed: ...".
+    Marketplace and plugin updates are delegated to it; without it there is
+    no supported way to refresh a plugin.
 
     Examples:
-        >>> update_marketplace("test", "/nonexistent/path")
-        'Path not found: /nonexistent/path'
-    """
-    path = Path(mkt_path)
-    if not path.exists():
-        return f"Path not found: {mkt_path}"
-
-    result = run(["git", "pull", "--ff-only"], cwd=str(path), timeout=_GIT_TIMEOUT)
-    if result.returncode == 0:
-        return f"Updated: {result.stdout.strip()}"
-    return f"Update failed: {result.stderr.strip()}"
-
-
-def _find_plugin_source(mkt_path: Path, plugin_name: str) -> Path | None:
-    """Locate plugin source directory in a marketplace.
-
-    Searches in order:
-      1. ``plugins/{plugin_name}/``  (standard marketplace layout)
-      2. ``{plugin_name}/``          (flat layout)
-      3. ``marketplace.json`` source field  (root-source layout)
-
-    Args:
-        mkt_path: Root path of the marketplace git repo.
-        plugin_name: Plugin name to look up (e.g. ``"lazy2work"``).
-
-    Returns:
-        Path to the plugin source directory, or None if not found.
-
-    Examples:
-        >>> _find_plugin_source(Path("/nonexistent"), "test") is None
+        >>> isinstance(_claude_cli_available(), bool)
         True
     """
-    # Standard layout: plugins/<name>/
-    candidate = mkt_path / "plugins" / plugin_name
-    if candidate.exists():
-        return candidate
-
-    # Flat layout: <name>/
-    candidate = mkt_path / plugin_name
-    if candidate.exists():
-        return candidate
-
-    # Root-source layout: marketplace.json defines source="./"
-    mkt_json = mkt_path / ".claude-plugin" / "marketplace.json"
-    if mkt_json.exists():
-        try:
-            mdata = json.loads(mkt_json.read_text(encoding="utf-8"))
-            for plugin_def in mdata.get("plugins", []):
-                if plugin_def.get("name") == plugin_name:
-                    source = plugin_def.get("source", "")
-                    if source in ("./", "."):
-                        return mkt_path
-                    source_path = (mkt_path / source).resolve()
-                    if source_path.exists():
-                        return source_path
-        except (OSError, json.JSONDecodeError):
-            pass
-
-    return None
+    return shutil.which("claude") is not None
 
 
-def update_plugin_cache(plugin_id: str, marketplace_name: str) -> str:
-    """Refresh plugin cache to marketplace latest version.
+def update_marketplace(name: str) -> str:
+    """Update one marketplace via ``claude plugin marketplace update``.
 
-    Copies plugin contents from marketplace source to the cache directory
-    and updates installed_plugins.json with the new version and SHA.
-    Skips if the cache already matches the current git SHA.
+    Delegates to Claude Code's own command rather than running ``git pull``
+    in the marketplace checkout: the CLI owns that directory's layout and
+    refreshes the derived state alongside it. Seed-managed marketplaces are
+    read-only and are skipped by the command itself.
 
     Args:
-        plugin_id: Full plugin identifier (e.g. ``"lazy2work@hoosiki-marketplace"``).
-        marketplace_name: Name of the marketplace directory.
+        name: Marketplace name as registered with Claude Code.
 
     Returns:
-        Status message — "Already up to date", "Cache refreshed", or error.
+        Status message — "Updated: ..." or "Update failed: ...".
 
     Examples:
-        >>> update_plugin_cache("test@missing", "nonexistent")
-        'Marketplace not found: nonexistent'
+        >>> isinstance(update_marketplace("nonexistent-marketplace"), str)  # doctest: +SKIP
+        True
     """
-    mkt_path = MARKETPLACES_DIR / marketplace_name
-    if not mkt_path.exists():
-        return f"Marketplace not found: {marketplace_name}"
+    if not _claude_cli_available():
+        return "claude CLI not found — cannot update marketplaces"
 
-    sha_result = run(["git", "rev-parse", "--short", "HEAD"], cwd=str(mkt_path), timeout=_GIT_TIMEOUT)
-    if sha_result.returncode != 0:
-        return "SHA check failed"
-    new_sha = sha_result.stdout.strip()
+    result = run(
+        ["claude", "plugin", "marketplace", "update", name],
+        timeout=_CLAUDE_TIMEOUT,
+    )
+    output = (result.stdout.strip() or result.stderr.strip()).strip()
+    if result.returncode == 0:
+        return f"Updated: {output}" if output else "Updated"
+    return f"Update failed: {output}"
 
-    full_sha_result = run(["git", "rev-parse", "HEAD"], cwd=str(mkt_path), timeout=_GIT_TIMEOUT)
-    new_full_sha = full_sha_result.stdout.strip()
 
-    plugin_name = plugin_id.split("@")[0]
+def update_plugin(plugin_id: str, scope: str = "user") -> str:
+    """Update one installed plugin via ``claude plugin update``.
 
-    # Detect plugin version from plugin.json or marketplace.json
-    new_version = new_sha
-    plugin_json = mkt_path / "plugins" / plugin_name / ".claude-plugin" / "plugin.json"
-    if plugin_json.exists():
-        try:
-            pdata = json.loads(plugin_json.read_text(encoding="utf-8"))
-            new_version = pdata.get("version", new_sha)
-        except (OSError, json.JSONDecodeError):
-            pass
+    ``--yes`` is mandatory here, not merely convenient: the CLI requires it
+    whenever stdin or stdout is not a TTY, which is always the case when this
+    script runs. The update lands in the cache but does **not** affect the
+    running session — Claude Code must be restarted to pick it up.
 
-    plugin_src = _find_plugin_source(mkt_path, plugin_name)
-    if plugin_src is None:
-        return f"Plugin source not found in marketplace: {plugin_name}"
+    Args:
+        plugin_id: Plugin name, or ``name@marketplace`` to disambiguate.
+        scope: Installation scope to update — ``user``, ``project``,
+            ``local``, or ``managed``. Defaults to ``user``.
 
-    cache_dest = CACHE_DIR / marketplace_name / plugin_name / new_version
+    Returns:
+        Status message — "Updated: ..." or "Update failed: ...".
 
-    # Check if cache exists AND git SHA matches (same version but different content)
-    data = _read_installed_plugins()
-    installed_sha = ""
-    for inst in data.get("plugins", {}).get(plugin_id, []):
-        installed_sha = inst.get("gitCommitSha", "")
-        break
+    Examples:
+        >>> isinstance(update_plugin("nonexistent@nowhere"), str)  # doctest: +SKIP
+        True
+    """
+    if not _claude_cli_available():
+        return "claude CLI not found — cannot update plugins"
 
-    if cache_dest.exists() and installed_sha == new_full_sha:
-        return f"Already up to date: {new_version} ({new_sha})"
-
-    # Remove stale cache if version matches but SHA differs
-    if cache_dest.exists() and installed_sha != new_full_sha:
-        shutil.rmtree(cache_dest)
-
-    cache_dest.mkdir(parents=True, exist_ok=True)
-
-    # Copy all plugin contents (skills, hooks, commands, rules, scripts, etc.)
-    for item in plugin_src.iterdir():
-        if item.name.startswith("."):
-            continue
-        dest_item = cache_dest / item.name
-        if item.is_dir():
-            shutil.copytree(str(item), str(dest_item), dirs_exist_ok=True)
-        else:
-            shutil.copy2(str(item), str(dest_item))
-
-    if plugin_id in data.get("plugins", {}):
-        for inst in data["plugins"][plugin_id]:
-            inst["version"] = new_version
-            inst["gitCommitSha"] = new_full_sha
-            inst["installPath"] = str(cache_dest)
-            inst["lastUpdated"] = datetime.now(timezone.utc).isoformat()
-        try:
-            _write_installed_plugins(data)
-        except OSError as e:
-            return f"installed_plugins.json update failed: {e}"
-
-    return f"Cache refreshed: {plugin_name} {new_version} (was {new_sha[:7] if new_version != new_sha else 'new'})"
+    result = run(
+        ["claude", "plugin", "update", plugin_id, "--scope", scope, "--yes"],
+        timeout=_CLAUDE_TIMEOUT,
+    )
+    output = (result.stdout.strip() or result.stderr.strip()).strip()
+    if result.returncode == 0:
+        return f"Updated: {output}" if output else "Updated"
+    return f"Update failed: {output}"
 
 
 def update_superclaude() -> str:
@@ -1103,22 +1091,22 @@ def run_skill(prune_dead: bool = True) -> None:
             print(f"    - {u['marketplace']}: {u['behind_commits']} commits behind")
 
         print_section("Plugin Update")
-        for u in plugin_info["updates_available"]:
-            mkt_name = u["marketplace"]
-            mkt_info = next(
-                (m for m in plugin_info["marketplaces"] if m["name"] == mkt_name),
-                None,
-            )
-            if mkt_info:
+        if not _claude_cli_available():
+            print("\n  claude CLI not found — skipping (install Claude Code to update plugins)")
+        else:
+            stale = {u["marketplace"] for u in plugin_info["updates_available"]}
+            for mkt_name in sorted(stale):
                 print(f"\n  Updating {mkt_name} marketplace...")
-                result = update_marketplace(mkt_name, mkt_info["install_location"])
-                print(f"    {result}")
+                print(f"    {update_marketplace(mkt_name)}")
 
-                for p in plugin_info["installed"]:
-                    if mkt_name in p["id"]:
-                        print(f"\n  Refreshing {p['id']} cache...")
-                        cache_result = update_plugin_cache(p["id"], mkt_name)
-                        print(f"    {cache_result}")
+            for p in plugin_info["installed"]:
+                if p["id"].split("@")[-1] not in stale:
+                    continue
+                scope = p["scope"] if p["scope"] in _PLUGIN_SCOPES else "user"
+                print(f"\n  Updating {p['id']} (scope: {scope})...")
+                print(f"    {update_plugin(p['id'], scope)}")
+
+            print("\n  Restart Claude Code to load the updated plugins.")
     else:
         print("\n  Marketplaces: all up to date")
 

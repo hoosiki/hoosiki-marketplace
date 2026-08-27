@@ -32,8 +32,11 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/up2date.py --brew
 - Runs `brew doctor` for diagnostics
 - `brew update` (update Homebrew itself)
 - `brew upgrade --formula` (upgrade formulae)
-- `brew upgrade --cask` (upgrade casks)
+- `brew upgrade --cask --greedy` (upgrade casks, including auto-updating ones)
 - `brew cleanup --prune=all` (clean cache)
+- `brew autoremove` (drop orphaned dependencies)
+- **Caskroom `.pkg` sweep** — `brew cleanup` does *not* remove the installer a
+  pkg-based cask keeps beside its installed version, so those are deleted here
 - Outputs before/after comparison summary
 
 ### Skills/Plugins Only
@@ -47,7 +50,11 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/up2date.py --skill
   installed skill (e.g. mattpocock/skills under `~/.agents/skills/`), then
   **removes skills deleted upstream** that the non-interactive updater only warns
   about (parsed from its "deleted upstream" output → `npx skills remove <names> -g -y`)
-- `~/.claude/plugins/` plugin installation status and marketplace currency → `git pull` marketplaces
+- `~/.claude/plugins/` plugin status and marketplace currency. Staleness is
+  *detected* from git (`N commits behind`), but the update itself is delegated to
+  Claude Code's own CLI: `claude plugin marketplace update <name>`, then
+  `claude plugin update <plugin> --scope <scope> --yes` for each installed plugin
+  from a stale marketplace
 - `~/.claude/commands/sc/` SuperClaude command list → `superclaude update`
 
 Add `--no-skill-prune` to update global skills **without** removing the dead ones:
@@ -59,11 +66,25 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/up2date.py --skill --no-skill-prune
 ## Notes
 
 - If no flag is given, both `--brew` and `--skill` run in sequence
-- Marketplace updates use `git pull --ff-only` for safety
+- Plugin updates go through the official `claude plugin` CLI — the script never
+  writes `installed_plugins.json` or the plugin cache itself. Claude Code owns
+  that layout; hand-editing it drifts the moment the schema changes
+- `--scope` is taken from the plugin's own recorded scope (`user` by default),
+  so a user-scope install stays user-scope
+- `--yes` is **required**, not cosmetic: the CLI demands it whenever stdin or
+  stdout is not a TTY, which is always true here
+- Updated plugins land in the cache but do **not** affect the running session —
+  Claude Code must be restarted to load them
+- Plugin updates are skipped with a notice if the `claude` executable is absent
 - SuperClaude updates use `superclaude update`
 - User skills (`~/.claude/skills/`) are manually managed; only status checks are performed
 - Global agent-skill update needs `npx` (Node.js 18+); it is skipped with a notice if `npx` is absent
 - Dead-skill pruning is **on by default** with `--skill`; pass `--no-skill-prune` to keep them
 - `brew upgrade --cask --greedy` upgrades all casks including those with `auto_updates=true`
-- `brew cleanup --prune=all` removes all cached downloads
+- `brew cleanup --prune=all` removes cached downloads, but **not** Caskroom
+  `.pkg` installers — Homebrew treats those as live data belonging to the
+  installed version. Measured on a real machine, `cleanup` freed 629 B while
+  10.2 GB of `.pkg` sat in the Caskroom. The sweep removes only `*.pkg` under
+  the Caskroom tree; the app itself is already installed and the pkg is
+  re-downloaded on demand
 - Summarize script output and report to the user
