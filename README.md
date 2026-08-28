@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.46.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.47.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -40,7 +40,7 @@ runs both of these for you across every installed plugin.
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.46.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
+| [**lazy2work**](plugins/lazy2work/) | 1.47.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
 
 ---
 
@@ -1128,12 +1128,12 @@ One-command MCP server installers accessible via `/lazy2work:setup:*`:
 | Command | Description | Requires |
 |---------|-------------|----------|
 | `install-tavily-mcp` | Install [Tavily MCP](https://tavily.com) for web search/research | `TAVILY_API_KEY` |
-| `install-serena-mcp` | Install [Serena MCP](https://github.com/oraios/serena) for semantic code intelligence | `uv` |
-| `install-context7-mcp` | Install [Context7 MCP](https://github.com/upstash/context7) for library docs lookup | `npx` |
+| `install-serena-mcp` | Install [Serena MCP](https://github.com/oraios/serena) for semantic code intelligence | `uv`, Python 3.11–3.14 |
+| `install-context7-mcp` | Install [Context7 MCP](https://github.com/upstash/context7) for library docs lookup | `CONTEXT7_API_KEY` (or `npx`) |
 | `install-sequential-thinking-mcp` | Install Sequential Thinking MCP for structured reasoning | `npx` |
 | `install-morph-mcp` | Install [Morph MCP](https://morphllm.com) for fast file editing | `MORPH_API_KEY` |
-| `install-morph-fast-apply` | Install Morph Fast Apply MCP for bulk code transformations | `MORPH_API_KEY` |
-| `install-tavily-skill` | Install [Tavily Skills](https://github.com/tavily-ai/skills) pack | `npx` |
+| `install-morph-fast-apply` | **Deprecated** — redirects to `install-morph-mcp` (upstream package moved) | — |
+| `install-tavily-skill` | Install [Tavily Skills](https://github.com/tavily-ai/skills) pack (8 skills, plugin or `npx`) | `claude` or `npx` |
 
 #### API Key Setup
 
@@ -1146,7 +1146,10 @@ Some MCP servers require API keys. Add these to your shell profile (`~/.zshrc` o
 export TAVILY_API_KEY="tvly-xxxxxxxxxxxxxxxxxxxxx"
 
 # Morph — https://morphllm.com (sign up and generate an API key)
-export MORPH_API_KEY="morph-xxxxxxxxxxxxxxxxxxxxx"
+export MORPH_API_KEY="sk-xxxxxxxxxxxxxxxxxxxxx"
+
+# Context7 — https://context7.com/dashboard (optional; raises rate limits)
+export CONTEXT7_API_KEY="ctx7sk-xxxxxxxxxxxxxxxxxxxxx"
 ```
 
 After editing, apply the changes:
@@ -1405,6 +1408,18 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.47.0 (2026-08-28)
+
+- **setup: `install-morph-fast-apply` was installing a package npm has marked deprecated** — `@morph-llm/morph-fast-apply` carries the published notice *"This package has moved to @morphllm/morphmcp"*, which `install-morph-mcp` had already been using. The two commands had silently converged on the same capability by different, and one of them dead, routes. Rather than delete the file and break any existing reference to it, it is now a deprecation redirect: it emits `morph-fast-apply is deprecated — use /setup:install-morph-mcp`, offers to `claude mcp remove morph-fast-apply -s user`, and installs nothing. The `ALL_TOOLS=true` it used to set is documented as a no-op on the replacement
+- **setup: `install-morph-mcp` pinned a tool name that no longer exists** — it set `ENABLED_TOOLS=edit_file,warpgrep_codebase_search`, but upstream's README now states *"All three tools are always exposed. Clients can manage tool visibility on their side"*, and `warpgrep_codebase_search` has been renamed `codebase_search` (WarpGrep is now the backend, not the tool name). The variable is dropped from the install command, the three current tools (`edit_file`, `codebase_search`, `github_codebase_search`) are documented in a table, and a note tells existing users to check `claude mcp get morph-mcp` and reinstall to clear the stale value — confirmed present and ignored on a live install, which is what made the drift visible
+- **setup: `install-serena-mcp` stated a Python version that cannot install Serena** — the doc said "Python 3.10+" while `serena-agent` on PyPI declares `>=3.11,<3.15`, so 3.10 fails and 3.15+ is equally unsupported. The requirement is now stated as **3.11–3.14**. The install method was also stale: upstream documents `uv tool install -p 3.13 serena-agent` followed by `claude mcp add --scope user serena -- serena start-mcp-server --context claude-code --project-from-cwd`. The previous `uvx --from git+https://github.com/oraios/serena` form re-resolves the repository on every launch and tracks unreleased dev builds (a live install reported `1.7.1.dev0` against a `1.7.0` release), so it is kept only as a documented alternative. `--context` and `--project-from-cwd` were verified still valid against `serena start-mcp-server --help`
+- **setup: `install-tavily-skill` verified skill names that no longer exist, so its check could never pass** — it expected five skills at `search/`, `research/`, `extract/`, `crawl/`, and `tavily-best-practices/`. The repository actually ships **eight**, all `tavily-`-prefixed: `tavily-search`, `tavily-research`, `tavily-extract`, `tavily-crawl`, `tavily-map`, `tavily-cli`, `tavily-dynamic-search`, `tavily-best-practices`. The same repository now also serves a Claude Code plugin marketplace (`tavily-plugins`, plugin `tavily`), which is the native path for this client and is documented first; the `npx skills add` route is kept for cross-agent installs and corrected to `--global --all`. The existence check was cwd-relative (`find . -path "*/.agents/skills/*"`) and now looks at `~/.agents/skills/` and the plugin cache
+- **setup: `install-tavily-mcp` embedded the API key in the server URL, where it leaks** — `claude mcp add --transport http tavily "https://mcp.tavily.com/mcp/?tavilyApiKey=$TAVILY_API_KEY"` stores the key verbatim in the Claude config and makes `claude mcp list` print it in plaintext, so it escapes into terminal scrollback, logs, and screenshots. Upstream documents an `Authorization: Bearer` header as an equally supported alternative, and that is now the recommended form; the URL variant and the OAuth flow are retained as documented fallbacks, with a note on rotating an existing URL-form install
+- **setup: `install-context7-mcp` followed a path upstream no longer documents** — Context7's README now covers only the hosted endpoint `https://mcp.context7.com/mcp` with `Authorization: Bearer`, plus an interactive `npx ctx7 setup`. An API key is recommended rather than required (it raises rate limits). The hosted form is now primary; the `@upstash/context7-mcp` stdio server, still published at 4.0.3 and functional, is kept as the explicit zero-key fallback
+- **setup: every `claude mcp add` had its flags in a position the CLI can swallow** — commands were written as `claude mcp add context7 npx -y @upstash/context7-mcp -s user`, but the signature is `claude mcp add [options] <name> <commandOrUrl> [args...]` with a **variadic** trailing parameter, so flags placed after the command are liable to be captured as subprocess arguments. All installers now use `claude mcp add --scope user <name> -- <command> <args>`, with options before the name and `--` separating the subprocess. `claude mcp remove <name> -s user` is left as-is — it takes no variadic arguments and is unambiguous
+- **README: the setup table and API-key block reflect the above** — the `install-morph-fast-apply` row is marked deprecated, Serena's row states the Python range, Context7's requirement becomes `CONTEXT7_API_KEY` (or `npx`), the Tavily skills row notes eight skills and both install routes, `CONTEXT7_API_KEY` is added to the shell-profile example, and the Morph key placeholder is corrected to its real `sk-` prefix
+- **Version bump**: 1.46.0 → 1.47.0
 
 ### v1.46.0 (2026-08-27)
 

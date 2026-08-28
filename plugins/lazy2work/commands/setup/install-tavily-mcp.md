@@ -2,7 +2,7 @@
 
 Ensure Tavily MCP is properly installed and running for Claude Code CLI.
 
-Tavily MCP provides web search and research capabilities via the Tavily API.
+Tavily MCP provides web search, extraction, mapping, and crawling via the Tavily API.
 
 ## Prerequisites
 
@@ -31,9 +31,11 @@ Tavily MCP provides web search and research capabilities via the Tavily API.
      ```bash
      claude mcp remove tavily -s user
      ```
-   - Install Tavily MCP:
+   - Install Tavily MCP with **header authentication (recommended)**:
      ```bash
-     claude mcp add --transport http --scope user tavily "https://mcp.tavily.com/mcp/?tavilyApiKey=$TAVILY_API_KEY"
+     claude mcp add --scope user --transport http tavily \
+       https://mcp.tavily.com/mcp/ \
+       --header "Authorization: Bearer $TAVILY_API_KEY"
      ```
 
 5. **Validate Installation**
@@ -48,8 +50,22 @@ If installation fails, provide these troubleshooting hints:
 - Ensure `TAVILY_API_KEY` is set: `export TAVILY_API_KEY=your_api_key`
 - Check network connection to https://mcp.tavily.com
 - Verify your Tavily API key is valid at https://tavily.com
+- If the header method is rejected by your client version, fall back to the URL method
+  in Notes below
 
 ## Notes
 
-- Uses HTTP transport instead of stdio (connects to remote MCP server)
-- API key is passed as URL parameter to Tavily's hosted MCP service
+- Uses HTTP transport instead of stdio (connects to Tavily's hosted MCP server)
+- **Prefer the header over the URL parameter.** Upstream documents both, but embedding the
+  key in the URL means `claude mcp list` prints the key in plaintext and it is stored
+  verbatim in your Claude config — an easy way to leak it into logs, screenshots, and
+  pasted terminal output. The `Authorization: Bearer` header keeps it out of the server URL
+- **URL-parameter alternative** (upstream-documented, less safe):
+  ```bash
+  claude mcp add --scope user --transport http tavily \
+    "https://mcp.tavily.com/mcp/?tavilyApiKey=$TAVILY_API_KEY"
+  ```
+- **OAuth alternative** — add the server without a key, then run `claude`, type `/mcp`,
+  select the Tavily server, and complete the browser authentication flow
+- If an existing install used the URL method, `claude mcp get tavily` will show the key.
+  Remove and reinstall with the header form to rotate it out of the config

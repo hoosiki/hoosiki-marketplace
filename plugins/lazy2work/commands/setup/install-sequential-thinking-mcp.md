@@ -2,6 +2,9 @@
 
 Ensure Sequential Thinking MCP is properly installed and running for Claude Code CLI.
 
+Sequential Thinking provides a structured, revisable chain-of-thought tool for breaking
+down complex problems.
+
 ## Instructions
 
 1. **Check Current Status**
@@ -18,7 +21,8 @@ Ensure Sequential Thinking MCP is properly installed and running for Claude Code
      ```
    - Install Sequential Thinking MCP:
      ```bash
-     claude mcp add sequential-thinking npx -y @modelcontextprotocol/server-sequential-thinking -s user
+     claude mcp add --scope user sequential-thinking \
+       -- npx -y @modelcontextprotocol/server-sequential-thinking
      ```
 
 4. **Validate Installation**
@@ -30,3 +34,11 @@ Ensure Sequential Thinking MCP is properly installed and running for Claude Code
 If installation fails:
 - Ensure `npx` is installed (comes with Node.js)
 - Verify Node.js version is 18+ (`node --version`)
+
+## Notes
+
+- Maintained in the official `modelcontextprotocol/servers` repository and actively
+  published; unlike several sibling reference servers, it has not been archived
+- Put the flags **before** the server name and separate the subprocess with `--`;
+  `claude mcp add` treats trailing tokens as command arguments, so a trailing `-s user`
+  is fragile

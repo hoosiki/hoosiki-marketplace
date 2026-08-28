@@ -24,6 +24,7 @@ Morph MCP provides fast file editing and codebase search capabilities via the Mo
      echo $MORPH_API_KEY
      ```
    - If empty or not set, report failure: `MORPH_API_KEY environment variable is not set`
+   - Stop here if not set
 
 4. **If Not Installed or Not Connected**
    - If morph-mcp exists but is not connected, first remove it:
@@ -32,10 +33,8 @@ Morph MCP provides fast file editing and codebase search capabilities via the Mo
      ```
    - Install Morph MCP:
      ```bash
-     claude mcp add morph-mcp \
-       --scope user \
+     claude mcp add --scope user morph-mcp \
        -e MORPH_API_KEY=$MORPH_API_KEY \
-       -e ENABLED_TOOLS=edit_file,warpgrep_codebase_search \
        -- npx -y @morphllm/morphmcp
      ```
 
@@ -52,5 +51,17 @@ If installation fails:
 
 ## Notes
 
-- `ENABLED_TOOLS=edit_file,warpgrep_codebase_search` limits which tools are exposed
-- To enable all tools, remove the `ENABLED_TOOLS` environment variable
+- Three tools are exposed, and **all of them are always exposed** — upstream no longer
+  supports narrowing the set from the server side. Manage tool visibility on the client:
+
+  | Tool | What it does |
+  |------|--------------|
+  | `edit_file` | Applies code changes at high throughput |
+  | `codebase_search` | Natural-language code exploration, backed by WarpGrep |
+  | `github_codebase_search` | Searches any public GitHub repo by URL or `owner/repo` |
+
+- **Existing installs may carry a stale `ENABLED_TOOLS` value.** Earlier versions of this
+  command set `ENABLED_TOOLS=edit_file,warpgrep_codebase_search`. That variable is no
+  longer honored, and `warpgrep_codebase_search` no longer exists as a tool name — it is
+  now `codebase_search`. Check with `claude mcp get morph-mcp`; if the variable is present,
+  remove and reinstall using the command above to clear it

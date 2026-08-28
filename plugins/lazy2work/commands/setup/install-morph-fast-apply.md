@@ -1,55 +1,34 @@
-# Install Morph Fast Apply MCP
+# Install Morph Fast Apply MCP (deprecated)
 
-Ensure Morph Fast Apply MCP is properly installed and running for Claude Code CLI.
+> **This command is deprecated. Use `/setup:install-morph-mcp` instead.**
 
-Morph Fast Apply provides fast code application and transformation capabilities via the Morph API.
+The npm package this command installed, `@morph-llm/morph-fast-apply`, is deprecated
+upstream. Its published deprecation notice reads:
 
-## Prerequisites
+> This package has moved to @morphllm/morphmcp. See https://morphllm.com/
 
-- `MORPH_API_KEY` environment variable must be set before running this command
-- Get your API key from https://morphllm.com
+`@morphllm/morphmcp` supersedes it and provides the same fast-apply capability through
+the `edit_file` tool, alongside `codebase_search` and `github_codebase_search`.
 
 ## Instructions
 
-1. **Check Current Status**
-   Run `claude mcp list` and check if morph-fast-apply is present and shows "✓ Connected"
+1. **Redirect to the current command**
+   - Output exactly: `morph-fast-apply is deprecated — use /setup:install-morph-mcp`
+   - Do not install `@morph-llm/morph-fast-apply`
 
-2. **If Already Installed and Connected**
-   - Output exactly: `morph-fast-apply already installed`
-   - Stop here - do not proceed further
-
-3. **Check MORPH_API_KEY**
-   - Verify the environment variable is set:
-     ```bash
-     echo $MORPH_API_KEY
-     ```
-   - If empty or not set, report failure: `MORPH_API_KEY environment variable is not set`
-
-4. **If Not Installed or Not Connected**
-   - If morph-fast-apply exists but is not connected, first remove it:
+2. **If a legacy `morph-fast-apply` server is still registered, remove it**
+   - Check with `claude mcp list`
+   - If present:
      ```bash
      claude mcp remove morph-fast-apply -s user
      ```
-   - Install Morph Fast Apply MCP:
-     ```bash
-     claude mcp add morph-fast-apply \
-       -e MORPH_API_KEY=$MORPH_API_KEY \
-       -e ALL_TOOLS=true \
-       -- npx -y @morph-llm/morph-fast-apply
-     ```
 
-5. **Validate Installation**
-   - Run `claude mcp list` again
-   - Verify morph-fast-apply shows "✓ Connected"
-
-## Error Handling
-
-If installation fails:
-- Ensure `MORPH_API_KEY` is set: `export MORPH_API_KEY=your_api_key`
-- Ensure `npx` is installed (comes with Node.js)
-- Get your API key from https://morphllm.com
+3. **Install the replacement**
+   - Follow `/setup:install-morph-mcp`
 
 ## Notes
 
-- `ALL_TOOLS=true` enables all available tools
-- To limit tools, replace `ALL_TOOLS=true` with specific tool configuration
+- Kept as a redirect rather than deleted so that existing references to this command
+  fail loudly with a pointer instead of silently installing a deprecated package
+- `ALL_TOOLS=true`, which this command used to set, has no effect on `@morphllm/morphmcp` —
+  all three tools are always exposed and visibility is managed client-side
