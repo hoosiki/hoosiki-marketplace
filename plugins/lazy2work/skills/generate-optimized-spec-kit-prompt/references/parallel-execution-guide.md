@@ -190,7 +190,7 @@ The driver blocks on `-W/--wait`, which returns only when the window closes, and
 |---|----------|-----|
 | 1 | **Script pane, not agent pane** — a single-pane named layout running a script | An interactive `claude` never exits, so `-W/--wait` never returns and `--max-concurrent` deadlocks. A script exits → the window/session closes → the driver advances. It also enables per-stage `--model`/`--effort`/`--max-turns`. |
 | 2 | **Exactly one pane** | The window closes only when *all* panes exit. A default two-pane layout (agent + shell) hangs forever because the shell never dies. |
-| 3 | **The pane command must end with `; exit`** | A pane `command:` is a line handed to a **shell**, not the pane's process. When the script finishes, the shell returns to its prompt and sits there — the wave completes, writes `OK`, and the driver still blocks forever. `'bash utilities/wm_stage_runner.sh …; exit'` closes the shell with the script. This one is invisible in `--dry-run`; it only shows up in a real run. |
+| 3 | **The pane command must end with `; exit`** | A pane `command:` is a line handed to a **shell**, not the pane's process. When the script finishes, the shell returns to its prompt and sits there — the wave completes, writes `OK`, and the driver still blocks forever. `'bash utilities/{prd-name}/wm_stage_runner.sh …; exit'` closes the shell with the script. This one is invisible in `--dry-run`; it only shows up in a real run. |
 | 4 | **`--foreach` + `--max-concurrent`, not a bash `&` loop** | Concurrent `git worktree add` races on `.git/worktrees/` metadata. workmux serializes creation internally and throttles concurrency. |
 
 Verified against **workmux 0.1.229**:

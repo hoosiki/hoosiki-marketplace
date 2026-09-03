@@ -14,14 +14,14 @@
 #   웨이브 안은 순차(같은 worktree), 웨이브끼리는 병렬. 스테이지 사이에만 병합 배리어가 있다.
 #
 # Usage:
-#   ./utilities/speckit_parallel.sh waves                       # 스테이지/웨이브 계획 출력
-#   ./utilities/speckit_parallel.sh spec [--dry-run]            # Phase 1 — 전 feature 백그라운드 병렬
-#   ./utilities/speckit_parallel.sh build [--dry-run]           # Phase 2 — 전 스테이지 순차 진행
-#   ./utilities/speckit_parallel.sh build --stage 1             # 해당 스테이지만
-#   ./utilities/speckit_parallel.sh build --from-stage 1        # 해당 스테이지부터 끝까지
-#   ./utilities/speckit_parallel.sh build --wave w2-channels    # 웨이브 하나만
-#   ./utilities/speckit_parallel.sh merge --wave w2-channels    # 병합만 재시도
-#   ./utilities/speckit_parallel.sh merge --stage 1
+#   ./utilities/<project>/speckit_parallel.sh waves                       # 스테이지/웨이브 계획 출력
+#   ./utilities/<project>/speckit_parallel.sh spec [--dry-run]            # Phase 1 — 전 feature 백그라운드 병렬
+#   ./utilities/<project>/speckit_parallel.sh build [--dry-run]           # Phase 2 — 전 스테이지 순차 진행
+#   ./utilities/<project>/speckit_parallel.sh build --stage 1             # 해당 스테이지만
+#   ./utilities/<project>/speckit_parallel.sh build --from-stage 1        # 해당 스테이지부터 끝까지
+#   ./utilities/<project>/speckit_parallel.sh build --wave w2-channels    # 웨이브 하나만
+#   ./utilities/<project>/speckit_parallel.sh merge --wave w2-channels    # 병합만 재시도
+#   ./utilities/<project>/speckit_parallel.sh merge --stage 1
 #
 # Options:
 #   --prompts <path>   .speckit-prompts/<project> 경로 (기본: 자동 탐지 / SPECKIT_PROMPTS_DIR)
@@ -48,7 +48,18 @@
 #     저장소는 이것 때문에 모든 웨이브 병합이 영구히 막힌다.
 set -euo pipefail
 
-PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+# ── 스크립트 자기 위치에서 프로젝트를 알아낸다 ────────────────────────────────
+# 배치는 둘 중 하나다.
+#   utilities/<project>/foo.sh  ← 권장. 디렉터리 이름이 곧 .speckit-prompts/<project> 다.
+#   utilities/foo.sh            ← 구 배치. 이름으로 알 수 없어 탐색에 기댄다.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ "$(basename "$SCRIPT_DIR")" = "utilities" ]; then
+	SPECKIT_PROJECT=""
+	PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+else
+	SPECKIT_PROJECT="$(basename "$SCRIPT_DIR")"
+	PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+fi
 cd "$PROJECT_DIR"
 
 RED='\033[0;31m'
@@ -118,6 +129,11 @@ done
 # ──────────────────────────────────────────────
 # Prompts 디렉터리 / waves.json 확정
 # ──────────────────────────────────────────────
+# 스크립트가 utilities/<project>/ 아래 있으면 그 이름이 곧 프로젝트다 — 탐색이 필요 없다.
+if [ -z "$PROMPTS_DIR" ] && [ -n "$SPECKIT_PROJECT" ] \
+	&& [ -f "$PROJECT_DIR/.speckit-prompts/$SPECKIT_PROJECT/waves.json" ]; then
+	PROMPTS_DIR="$PROJECT_DIR/.speckit-prompts/$SPECKIT_PROJECT"
+fi
 if [ -z "$PROMPTS_DIR" ]; then
 	read_lines < <(find "$PROJECT_DIR/.speckit-prompts" -maxdepth 2 -name waves.json -type f 2>/dev/null | sort)
 	_candidates=(${LINES[@]+"${LINES[@]}"})
@@ -127,7 +143,7 @@ if [ -z "$PROMPTS_DIR" ]; then
 	*)
 		warn "waves.json 이 여러 개입니다:"
 		printf '  %s\n' "${_candidates[@]}"
-		die "--prompts 로 하나를 지정하세요."
+		die "--prompts 로 하나를 지정하거나, 스크립트를 utilities/<project>/ 아래에 두세요."
 		;;
 	esac
 fi
@@ -250,8 +266,8 @@ fi
 # Preflight
 # ──────────────────────────────────────────────
 preflight_common() {
-	[ -x "$PROJECT_DIR/utilities/speckit_pipeline.sh" ] \
-		|| die "utilities/speckit_pipeline.sh 가 없거나 실행 권한이 없습니다 (chmod +x)"
+	[ -x "$SCRIPT_DIR/speckit_pipeline.sh" ] \
+		|| die "$SCRIPT_DIR/speckit_pipeline.sh 가 없거나 실행 권한이 없습니다 (chmod +x)"
 
 	if git ls-files --error-unmatch .specify/feature.json >/dev/null 2>&1; then
 		die ".specify/feature.json 이 git 에 추적 중입니다 — 프로세스마다 덮어써서 병합이 전부 충돌합니다.
@@ -275,8 +291,8 @@ preflight_workmux() {
 	grep -qE '^[[:space:]]*speckit:' "$PROJECT_DIR/.workmux.yaml" \
 		|| die ".workmux.yaml 에 layouts.speckit (단일 pane) 레이아웃이 없습니다"
 
-	[ -x "$PROJECT_DIR/utilities/wm_stage_runner.sh" ] \
-		|| die "utilities/wm_stage_runner.sh 가 없거나 실행 권한이 없습니다 (chmod +x)"
+	[ -x "$SCRIPT_DIR/wm_stage_runner.sh" ] \
+		|| die "$SCRIPT_DIR/wm_stage_runner.sh 가 없거나 실행 권한이 없습니다 (chmod +x)"
 
 	if [ -z "$BASE_BRANCH" ]; then
 		local line
@@ -336,7 +352,7 @@ run_spec_phase() {
 		(
 			# feature 마다 로그 루트를 분리한다 — 공유하면 .last_checkpoint 가 레이스한다
 			if SPECKIT_LOG_ROOT="$run_dir/logs/$f" \
-				bash "$PROJECT_DIR/utilities/speckit_pipeline.sh" "$PROMPTS_DIR" \
+				bash "$SCRIPT_DIR/speckit_pipeline.sh" "$PROMPTS_DIR" \
 				--phase spec --only "$fnum" --no-commit \
 				</dev/null >"$run_dir/$f.log" 2>&1; then
 				echo "OK" >"$run_dir/$f.status"
@@ -439,7 +455,7 @@ merge_waves() {
 			warn "[$w] 병합 실패 — worktree 보존. 원인은 셋 중 하나입니다:"
 			warn "    1) git 충돌 — 확인: git merge-tree --write-tree $BASE_BRANCH build/$w"
 			warn "    2) pre_merge 게이트 거부 — 미완료 태스크 또는 검증 명령 실패."
-			warn "       워크트리에서 직접: WM_BRANCH_NAME=build/$w bash utilities/wm_pre_merge_gate.sh"
+			warn "       워크트리에서 직접: WM_BRANCH_NAME=build/$w bash utilities/${SPECKIT_PROJECT:-.}/wm_pre_merge_gate.sh"
 			warn "    3) 훅 자체가 실행되지 못함 — .workmux.yaml 의 pre_merge 가 'VAR=... cmd' 형태면"
 			warn "       셸 없이 exec 될 때 죽습니다. 'env VAR=... cmd' 로 쓰세요."
 			warn "    검증 명령이 원인이면 SPECKIT_VERIFY_CMD 가 이 저장소의 기준선에 맞는지 보세요"
@@ -516,11 +532,11 @@ if [ "$CMD" = "spec" ]; then
 
 	head_ "Spec 게이트 — spec.md 존재 + [NEEDS CLARIFICATION] 잔존 0건"
 	gate_ok=true
-	if [ -x "$PROJECT_DIR/utilities/wm_pre_merge_gate.sh" ]; then
-		bash "$PROJECT_DIR/utilities/wm_pre_merge_gate.sh" --phase spec \
+	if [ -x "$SCRIPT_DIR/wm_pre_merge_gate.sh" ]; then
+		bash "$SCRIPT_DIR/wm_pre_merge_gate.sh" --phase spec \
 			--features "$(printf '%s ' "${ALL_FEATURES[@]}")" || gate_ok=false
 	else
-		warn "utilities/wm_pre_merge_gate.sh 가 없어 게이트를 건너뜁니다"
+		warn "$SCRIPT_DIR/wm_pre_merge_gate.sh 가 없어 게이트를 건너뜁니다"
 	fi
 
 	if $NO_COMMIT; then
@@ -542,7 +558,7 @@ if [ "$CMD" = "spec" ]; then
 		exit 0
 	fi
 	die "Phase 1 미완 — 실패한 feature 를 고친 뒤 재실행하세요:
-    ./utilities/speckit_pipeline.sh $PROMPTS_DIR --phase spec --only NNN"
+    ./utilities/${SPECKIT_PROJECT:-.}/speckit_pipeline.sh $PROMPTS_DIR --phase spec --only NNN"
 fi
 
 # ──────────────────────────────────────────────

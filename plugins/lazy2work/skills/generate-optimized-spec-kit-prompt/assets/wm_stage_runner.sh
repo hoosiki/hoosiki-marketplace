@@ -18,7 +18,7 @@
 # 상태 파일은 worktree 가 지워져도 남도록 반드시 "메인 저장소"에 쓴다.
 #
 # Usage (보통 .workmux.yaml 의 layouts.speckit pane command 로 실행):
-#   bash utilities/wm_stage_runner.sh [PROMPTS_PATH]
+#   bash utilities/<project>/wm_stage_runner.sh [PROMPTS_PATH]
 #
 #   PROMPTS_PATH 생략 시: 워크트리 → 메인 저장소 순서로 .speckit-prompts/*/waves.json 을 자동 탐지.
 set -uo pipefail
@@ -40,7 +40,7 @@ build)
 	;;
 spec)
 	echo "❌ Phase 1(spec) 은 worktree 를 쓰지 않습니다 — 드라이버가 메인 워킹트리에서 직접 돌립니다."
-	echo "   './utilities/speckit_parallel.sh spec' 을 쓰세요. (구버전 브랜치 스킴: '$BRANCH')"
+	echo "   './utilities/<project>/speckit_parallel.sh spec' 을 쓰세요. (구버전 브랜치 스킴: '$BRANCH')"
 	sleep 5
 	exit 2
 	;;
@@ -54,15 +54,51 @@ esac
 # 메인 저장소 경로 — 로그·상태 파일은 여기에 쓴다 (worktree 는 병합 후 사라질 수 있다)
 MAIN_ROOT="${WM_PROJECT_ROOT:-$(git worktree list --porcelain | head -1 | sed 's/^worktree //')}"
 
-# 프롬프트 경로: 인자 → worktree → 메인 저장소 순
-PROMPTS_DIR="${1:-}"
-if [ -z "$PROMPTS_DIR" ]; then
+# ── 스크립트 자기 위치에서 프로젝트를 알아낸다 ────────────────────────────────
+# 배치는 둘 중 하나다.
+#   utilities/<project>/foo.sh  ← 권장. 디렉터리 이름이 곧 .speckit-prompts/<project> 다.
+#   utilities/foo.sh            ← 구 배치. 이름으로 알 수 없어 탐색에 기댄다.
+# 저장소에 speckit 프로젝트가 둘 이상일 때, 앞의 배치는 "어느 프로젝트인가"를 구조로 답한다.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ "$(basename "$SCRIPT_DIR")" = "utilities" ]; then
+	SPECKIT_PROJECT=""
+else
+	SPECKIT_PROJECT="$(basename "$SCRIPT_DIR")"
+fi
+
+# 프롬프트 경로: 인자 → SPECKIT_PROMPTS_DIR → 스크립트 폴더 이름 → 웨이브를 담은 waves.json 탐색
+# ⚠️ 예전에는 마지막 단계가 `sort | head -1` 이라 프로젝트가 둘 이상이면 알파벳 순 첫 번째를
+#    무조건 집었다. 게이트에서 같은 결함이 모든 병합을 막은 사고가 있었다(2026-09-03).
+PROMPTS_DIR="${1:-${SPECKIT_PROMPTS_DIR:-}}"
+if [ -z "$PROMPTS_DIR" ] && [ -n "$SPECKIT_PROJECT" ]; then
 	for root in "$WT_ROOT" "$MAIN_ROOT"; do
-		candidate="$(find "$root/.speckit-prompts" -maxdepth 2 -name waves.json -type f 2>/dev/null | sort | head -1)"
-		if [ -n "$candidate" ]; then
-			PROMPTS_DIR="$(dirname "$candidate")"
+		if [ -f "$root/.speckit-prompts/$SPECKIT_PROJECT/waves.json" ]; then
+			PROMPTS_DIR="$root/.speckit-prompts/$SPECKIT_PROJECT"
 			break
 		fi
+	done
+fi
+if [ -z "$PROMPTS_DIR" ]; then
+	# 웨이브를 실제로 담고 있는 waves.json 을 고른다 (첫 파일이 아니라).
+	for root in "$WT_ROOT" "$MAIN_ROOT"; do
+		_cands="$(find "$root/.speckit-prompts" -maxdepth 2 -name waves.json -type f 2>/dev/null | sort)"
+		[ -n "$_cands" ] || continue
+		# shellcheck disable=SC2086
+		_hit="$(python3 - "$WAVE" $_cands <<-'PYEOF'
+			import json, sys
+			wave = sys.argv[1]
+			for path in sys.argv[2:]:
+			    try:
+			        with open(path, encoding="utf-8") as fh:
+			            data = json.load(fh)
+			    except Exception:
+			        continue
+			    if any(e.get("name") == wave for e in data.get("waves", [])):
+			        print(path)
+			        sys.exit(0)
+			sys.exit(3)
+		PYEOF
+		)" && { PROMPTS_DIR="$(dirname "$_hit")"; break; }
 	done
 fi
 if [ -z "$PROMPTS_DIR" ] || [ ! -d "$PROMPTS_DIR" ]; then
@@ -91,7 +127,7 @@ echo ""
 #   </dev/null              → 실패 시 대화형 프롬프트로 멈추지 않고 즉시 중단시킨다 (pane 은 tty 다)
 SPECKIT_WORKTREE_MODE=1 \
 SPECKIT_LOG_ROOT="$RUN_DIR/$WAVE-logs" \
-	bash "$WT_ROOT/utilities/speckit_pipeline.sh" "$PROMPTS_DIR" \
+	bash "$SCRIPT_DIR/speckit_pipeline.sh" "$PROMPTS_DIR" \
 	--phase build \
 	--wave "$WAVE" \
 	</dev/null

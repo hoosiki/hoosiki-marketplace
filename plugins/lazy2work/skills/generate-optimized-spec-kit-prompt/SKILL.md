@@ -206,16 +206,39 @@ After writing the prompts, install the bundled execution assets so the user can 
 
 **Copy verbatim** (do NOT hand-retype these — copy the asset files so they stay byte-for-byte correct), then `chmod +x` each:
 
+**Scripts go in a per-project folder: `utilities/{prd-name}/`, never directly in `utilities/`.**
+Each script derives its project from its own directory name, so
+`utilities/loan-review/wm_pre_merge_gate.sh` knows it belongs to `.speckit-prompts/loan-review`.
+That is what makes a repo with several Spec Kit projects unambiguous — see **Why a per-project folder** below.
+
 | Asset | Destination | Role |
 |-------|-------------|------|
-| `assets/speckit_pipeline.sh` | `<project>/utilities/speckit_pipeline.sh` | headless stage runner (phase/wave aware) — single source of stage/model/effort logic and of the feature-directory pin |
-| `assets/speckit_parallel.sh` | `<project>/utilities/speckit_parallel.sh` | driver — Phase 1 background fan-out, Phase 2 stage-by-stage workmux waves |
-| `assets/wm_stage_runner.sh` | `<project>/utilities/wm_stage_runner.sh` | in-worktree pane script — derives the wave from the branch name |
-| `assets/wm_pre_merge_gate.sh` | `<project>/utilities/wm_pre_merge_gate.sh` | quality gate — `pre_merge` hook for build, direct call for the Phase 1 spec gate |
+| `assets/speckit_pipeline.sh` | `<project>/utilities/{prd-name}/speckit_pipeline.sh` | headless stage runner (phase/wave aware) — single source of stage/model/effort logic and of the feature-directory pin |
+| `assets/speckit_parallel.sh` | `<project>/utilities/{prd-name}/speckit_parallel.sh` | driver — Phase 1 background fan-out, Phase 2 stage-by-stage workmux waves |
+| `assets/wm_stage_runner.sh` | `<project>/utilities/{prd-name}/wm_stage_runner.sh` | in-worktree pane script — derives the wave from the branch name |
+| `assets/wm_pre_merge_gate.sh` | `<project>/utilities/{prd-name}/wm_pre_merge_gate.sh` | quality gate — `pre_merge` hook for build, direct call for the Phase 1 spec gate |
+
+### Why a per-project folder
+
+A repo accumulates Spec Kit projects — a finished one and the one you are building now. The scripts
+resolve `waves.json` by scanning `.speckit-prompts/`, and **scanning is ambiguous the moment there are two.**
+An earlier version picked `sort | head -1`, so the alphabetically-first project always won and every wave of
+every other project failed the merge gate with "no such wave in waves.json". The gate is invoked by the
+`pre_merge` hook **with no arguments**, so there was no way to correct it from configuration — every wave of
+the second project was permanently unmergeable.
+
+Putting the scripts under `utilities/{prd-name}/` makes the answer structural: the folder name *is* the
+project. Resolution order is now `--prompts` → `SPECKIT_PROMPTS_DIR` → **folder name** → scan for the file
+that actually contains the requested wave (never "the first file found"). The scripts still work from a bare
+`utilities/` for backward compatibility, falling back to the corrected scan.
+
+It also keeps a finished project's scripts pinned to the version that ran it, instead of being overwritten
+by the next project's install.
 
 **Fill in and write** `assets/workmux.yaml.template` → `<project>/.workmux.yaml`, replacing:
 
 - `{{ MAIN_BRANCH }}` — resolve from the repo (`git symbolic-ref --short HEAD` on a clean main, or the repo's default branch)
+- `{{ SCRIPTS_PATH }}` — `utilities/{prd-name}` (the folder you just installed the four scripts into)
 - `{{ PROMPTS_PATH }}` — `.speckit-prompts/{prd-name}`
 - `{{ FILES_COPY }}` / `{{ POST_CREATE }}` — derive from the PRD's tech stack (e.g. `- .env` and `- 'uv sync --frozen'` for a uv-based Python project; `- 'npm ci'` for Node). If nothing applies, write `[]` for `files.copy` and drop the `post_create` key.
 - `{{ VERIFY_CMD }}` — the project's own verification command for the build gate. **Measure the baseline before writing it**: run the project's test command once and look at the *exit code*, not just the summary. A brownfield repo very often exits non-zero on a clean tree (integration tests that need a live server, known xfails, environment-gated suites), and the gate treats any non-zero exit as a merge failure — so an unmeasured value blocks every wave forever while the driver reports only "conflict or gate". Narrow the command until it is green on the untouched baseline (`--deselect`/`--ignore` the known-failing paths, `-m 'not integration'`, and so on) and say in the file which paths you excluded and why. Do **not** chain lint or type checks with `&&`: those carry their own baselines and fail for the same reason. If the project genuinely has no runnable check, write `skip` and tell the user the gate is disabled.
@@ -233,16 +256,19 @@ echo '.speckit-logs/' >> .gitignore
 
 ```bash
 # Sequential (single process, no worktrees) — unchanged from before
-./utilities/speckit_pipeline.sh .speckit-prompts/{prd-name}
-./utilities/speckit_pipeline.sh .speckit-prompts/{prd-name} --phase build --wave w1-scheduling
+./utilities/{prd-name}/speckit_pipeline.sh .speckit-prompts/{prd-name}
+./utilities/{prd-name}/speckit_pipeline.sh .speckit-prompts/{prd-name} --phase build --wave w1-scheduling
 
 # Parallel
-./utilities/speckit_parallel.sh waves            # show the stage/wave plan
-./utilities/speckit_parallel.sh spec --dry-run   # Phase 1 preview
-./utilities/speckit_parallel.sh spec             # Phase 1 — all features, background, one working tree
-./utilities/speckit_parallel.sh build            # Phase 2 — trunk stage, merge, then branch waves in parallel
-./utilities/speckit_parallel.sh build --from-stage 1   # resume after fixing a stage
+./utilities/{prd-name}/speckit_parallel.sh waves            # show the stage/wave plan
+./utilities/{prd-name}/speckit_parallel.sh spec --dry-run   # Phase 1 preview
+./utilities/{prd-name}/speckit_parallel.sh spec             # Phase 1 — all features, background, one working tree
+./utilities/{prd-name}/speckit_parallel.sh build            # Phase 2 — trunk stage, merge, then branch waves in parallel
+./utilities/{prd-name}/speckit_parallel.sh build --from-stage 1   # resume after fixing a stage
 ```
+
+Because the scripts live under `utilities/{prd-name}/`, they default to `.speckit-prompts/{prd-name}`
+and need no `--prompts` even when the repo holds several Spec Kit projects.
 
 Phase 1 needs neither workmux nor tmux — only Phase 2 does.
 
@@ -300,6 +326,9 @@ After generating everything, verify against:
 | Constitution candidates listed | Cross-feature conventions that `clarify` must not decide independently |
 | `PARALLEL_EXECUTION.md` exists | Pre-flight, both phase commands, monitoring, failure recovery, merge-conflict guidance |
 | 4 scripts installed + `chmod +x` | pipeline, parallel, stage runner, pre-merge gate |
+| Scripts live in `utilities/{prd-name}/`, **not** bare `utilities/` | The folder name is how each script resolves its project; a bare install is ambiguous once a second project exists |
+| `.workmux.yaml` references scripts via `{{ SCRIPTS_PATH }}` | Both the pane command and the `pre_merge` hook — a bare `utilities/…` path breaks per-project resolution |
+| No script resolves `waves.json` with `head -1` | Resolution must pick the file **containing the requested wave**, never "the first file found" |
 | No hardcoded model version anywhere | Prompts and scripts name no concrete model ID; the runner resolves the latest Opus/Sonnet at run start |
 | `.workmux.yaml` has a **single-pane** `speckit` layout | Two panes deadlock `-W`/`--max-concurrent` |
 | `pre_merge` passes an explicit `SPECKIT_VERIFY_CMD` | Verified green against the untouched baseline; no `&&`-chained lint/type checks |

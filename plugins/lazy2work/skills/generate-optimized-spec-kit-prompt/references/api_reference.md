@@ -20,12 +20,18 @@
 │           ├── 08_converge.md
 │           └── 09_commit.md
 ├── utilities/
-│   ├── speckit_pipeline.sh           # headless stage runner (phase/wave aware)
-│   ├── speckit_parallel.sh           # workmux driver (2 phases, waves, sequential merge)
-│   ├── wm_stage_runner.sh            # in-worktree pane script
-│   └── wm_pre_merge_gate.sh          # pre_merge quality gate
+│   └── {prd-name}/                   # ← per project. the folder name IS the project.
+│       ├── speckit_pipeline.sh       # headless stage runner (phase/wave aware)
+│       ├── speckit_parallel.sh       # workmux driver (2 phases, waves, sequential merge)
+│       ├── wm_stage_runner.sh        # in-worktree pane script
+│       └── wm_pre_merge_gate.sh      # pre_merge quality gate
 └── .workmux.yaml                     # single-pane `speckit` layout + pre_merge hook
 ```
+
+The scripts sit under `utilities/{prd-name}/`, **not** directly in `utilities/`. Each one reads its own
+directory name to decide which `.speckit-prompts/<project>` it belongs to. A repo that holds two Spec Kit
+projects would otherwise have to guess, and an earlier version guessed with `sort | head -1` — which meant
+the alphabetically-first project always won and every wave of the other one was permanently unmergeable.
 
 All four scripts are copied verbatim from the skill's `assets/` and `chmod +x`-ed. `.workmux.yaml` is rendered from `assets/workmux.yaml.template`.
 
@@ -254,9 +260,9 @@ brew install raine/workmux/workmux         # workmux + tmux required for Phase 2
 git rm --cached .specify/feature.json 2>/dev/null; echo '.specify/feature.json' >> .gitignore
 echo '.speckit-logs/' >> .gitignore
 git commit -am "chore: prepare repo for parallel speckit"
-chmod +x utilities/speckit_pipeline.sh utilities/speckit_parallel.sh \
-         utilities/wm_stage_runner.sh utilities/wm_pre_merge_gate.sh
-./utilities/speckit_parallel.sh waves       # confirm the stage/wave plan
+chmod +x utilities/{prd-name}/speckit_pipeline.sh utilities/{prd-name}/speckit_parallel.sh \
+         utilities/{prd-name}/wm_stage_runner.sh utilities/{prd-name}/wm_pre_merge_gate.sh
+./utilities/{prd-name}/speckit_parallel.sh waves       # confirm the stage/wave plan
 ```
 
 Confirm `constitution.md` pins the cross-feature conventions listed in DEPENDENCIES.md **before** Phase 1.
@@ -269,9 +275,9 @@ creates a branch per `specify`, which collides with the single-working-tree fan-
 ## Phase 1 — spec (background fan-out, no worktrees)
 
 ```bash
-./utilities/speckit_parallel.sh spec --dry-run
-./utilities/speckit_parallel.sh spec                    # all {N} features at once
-./utilities/speckit_parallel.sh spec --spec-jobs 6      # throttle if you hit 429s
+./utilities/{prd-name}/speckit_parallel.sh spec --dry-run
+./utilities/{prd-name}/speckit_parallel.sh spec                    # all {N} features at once
+./utilities/{prd-name}/speckit_parallel.sh spec --spec-jobs 6      # throttle if you hit 429s
 ```
 
 Each feature gets its own background `claude -p` with `SPECIFY_FEATURE_DIRECTORY=specs/{id}`, writing
@@ -281,10 +287,10 @@ exists, zero `[NEEDS CLARIFICATION]`) and makes **one** commit of `specs/`.
 ## Phase 2 — build, stage by stage
 
 ```bash
-./utilities/speckit_parallel.sh build                    # every stage, in order
-./utilities/speckit_parallel.sh build --stage 1          # one stage
-./utilities/speckit_parallel.sh build --from-stage 1     # resume from a stage
-./utilities/speckit_parallel.sh build --wave w2-channels # one wave
+./utilities/{prd-name}/speckit_parallel.sh build                    # every stage, in order
+./utilities/{prd-name}/speckit_parallel.sh build --stage 1          # one stage
+./utilities/{prd-name}/speckit_parallel.sh build --from-stage 1     # resume from a stage
+./utilities/{prd-name}/speckit_parallel.sh build --wave w2-channels # one wave
 ```
 
 {Per-stage table: stage, kind, waves, features per wave, expected concurrency, what it unlocks}
@@ -305,12 +311,12 @@ which workmux's 10-second no-output heuristic reads as "interrupted".
 ## Failure recovery
 
 - **Phase 1**: a failed feature is reported and skipped; the others still commit. Re-run just it:
-  `./utilities/speckit_pipeline.sh .speckit-prompts/{prd-name} --phase spec --only {NNN}`
+  `./utilities/{prd-name}/speckit_pipeline.sh .speckit-prompts/{prd-name} --phase spec --only {NNN}`
 - **Phase 2**: a wave whose status is `FAIL` is excluded from the merge and its worktree is preserved.
   The chain stops at the failing feature, so earlier features in that wave keep their commits.
   Fix inside the worktree and resume mid-chain:
-  `./utilities/speckit_pipeline.sh .speckit-prompts/{prd-name} --phase build --from {NNN}`
-- Merge again once fixed: `./utilities/speckit_parallel.sh merge --wave {wave}`
+  `./utilities/{prd-name}/speckit_pipeline.sh .speckit-prompts/{prd-name} --phase build --from {NNN}`
+- Merge again once fixed: `./utilities/{prd-name}/speckit_parallel.sh merge --wave {wave}`
 - A stage failure stops the run; nothing downstream starts on a broken barrier.
 
 ## Merge conflicts
@@ -595,32 +601,32 @@ Copy the skill's bundled assets verbatim and `chmod +x`. Do not regenerate them 
 
 | Asset | Destination |
 |-------|-------------|
-| `assets/speckit_pipeline.sh` | `utilities/speckit_pipeline.sh` |
-| `assets/speckit_parallel.sh` | `utilities/speckit_parallel.sh` |
-| `assets/wm_stage_runner.sh` | `utilities/wm_stage_runner.sh` |
-| `assets/wm_pre_merge_gate.sh` | `utilities/wm_pre_merge_gate.sh` |
+| `assets/speckit_pipeline.sh` | `utilities/{prd-name}/speckit_pipeline.sh` |
+| `assets/speckit_parallel.sh` | `utilities/{prd-name}/speckit_parallel.sh` |
+| `assets/wm_stage_runner.sh` | `utilities/{prd-name}/wm_stage_runner.sh` |
+| `assets/wm_pre_merge_gate.sh` | `utilities/{prd-name}/wm_pre_merge_gate.sh` |
 | `assets/workmux.yaml.template` | `.workmux.yaml` (render placeholders first) |
 
-### `utilities/speckit_pipeline.sh` — headless stage runner
+### `utilities/{prd-name}/speckit_pipeline.sh` — headless stage runner
 
 Iterates the `NNN-<slug>` feature folders under `.speckit-prompts/{prd-name}/` and runs each stage via `claude -p` (slash commands aren't supported headless, so it feeds each prompt file's contents as the instruction). It is the single source of stage/model/effort logic — the parallel driver delegates to it.
 
 ```bash
 # Sequential, everything
-./utilities/speckit_pipeline.sh .speckit-prompts/{prd-name}
+./utilities/{prd-name}/speckit_pipeline.sh .speckit-prompts/{prd-name}
 
 # By phase
-./utilities/speckit_pipeline.sh .speckit-prompts/{prd-name} --phase spec
-./utilities/speckit_pipeline.sh .speckit-prompts/{prd-name} --phase build
+./utilities/{prd-name}/speckit_pipeline.sh .speckit-prompts/{prd-name} --phase spec
+./utilities/{prd-name}/speckit_pipeline.sh .speckit-prompts/{prd-name} --phase build
 
 # By wave (reads waves.json; runs the wave's features in array order, not folder order)
-./utilities/speckit_pipeline.sh .speckit-prompts/{prd-name} --phase build --wave w1-scheduling
+./utilities/{prd-name}/speckit_pipeline.sh .speckit-prompts/{prd-name} --phase build --wave w1-scheduling
 
 # Slices and recovery
-./utilities/speckit_pipeline.sh .speckit-prompts/{prd-name} --only 002
-./utilities/speckit_pipeline.sh .speckit-prompts/{prd-name} --from 003/06
-./utilities/speckit_pipeline.sh .speckit-prompts/{prd-name} --dry-run
-./utilities/speckit_pipeline.sh .speckit-prompts/{prd-name} --resume
+./utilities/{prd-name}/speckit_pipeline.sh .speckit-prompts/{prd-name} --only 002
+./utilities/{prd-name}/speckit_pipeline.sh .speckit-prompts/{prd-name} --from 003/06
+./utilities/{prd-name}/speckit_pipeline.sh .speckit-prompts/{prd-name} --dry-run
+./utilities/{prd-name}/speckit_pipeline.sh .speckit-prompts/{prd-name} --resume
 ```
 
 | Phase | Stages | Commit scope |
@@ -661,18 +667,18 @@ Per-stage defaults (override via env vars `SPECIFY_MODEL`/`SPECIFY_EFFORT`, `CLA
 
 Logs land in `$SPECKIT_LOG_ROOT/<timestamp>/`; a checkpoint file enables `--resume`.
 
-### `utilities/speckit_parallel.sh` — two-phase driver
+### `utilities/{prd-name}/speckit_parallel.sh` — two-phase driver
 
 ```bash
-./utilities/speckit_parallel.sh waves                        # print the stage/wave plan
-./utilities/speckit_parallel.sh spec [--dry-run]             # Phase 1 — background fan-out, no worktrees
-./utilities/speckit_parallel.sh spec --spec-jobs 6           # throttle Phase 1
-./utilities/speckit_parallel.sh build [--dry-run]            # Phase 2 — every stage in order
-./utilities/speckit_parallel.sh build --stage 1
-./utilities/speckit_parallel.sh build --from-stage 1
-./utilities/speckit_parallel.sh build --wave w2-channels
-./utilities/speckit_parallel.sh merge --wave w2-channels     # retry merges only
-./utilities/speckit_parallel.sh merge --stage 1
+./utilities/{prd-name}/speckit_parallel.sh waves                        # print the stage/wave plan
+./utilities/{prd-name}/speckit_parallel.sh spec [--dry-run]             # Phase 1 — background fan-out, no worktrees
+./utilities/{prd-name}/speckit_parallel.sh spec --spec-jobs 6           # throttle Phase 1
+./utilities/{prd-name}/speckit_parallel.sh build [--dry-run]            # Phase 2 — every stage in order
+./utilities/{prd-name}/speckit_parallel.sh build --stage 1
+./utilities/{prd-name}/speckit_parallel.sh build --from-stage 1
+./utilities/{prd-name}/speckit_parallel.sh build --wave w2-channels
+./utilities/{prd-name}/speckit_parallel.sh merge --wave w2-channels     # retry merges only
+./utilities/{prd-name}/speckit_parallel.sh merge --stage 1
 ```
 
 Options: `--prompts <path>` (default: autodetect the single `.speckit-prompts/*/waves.json`), `--stage N`, `--from-stage N`, `--wave NAME`, `--max-concurrent N` (Phase 2, default 4), `--spec-jobs N` (Phase 1, default 0 = all features), `--base <branch>`, `--rebase`, `--no-merge`, `--no-commit`, `--dry-run`.
@@ -683,7 +689,7 @@ Options: `--prompts <path>` (default: autodetect the single `.speckit-prompts/*/
 
 Pre-flight it enforces: an executable `speckit_pipeline.sh`, `.specify/feature.json` untracked, and a warning if `.specify/extensions.yml` registers a `before_specify` hook. Phase 2 additionally requires workmux + tmux, a `.workmux.yaml` with a `speckit` layout, an executable `wm_stage_runner.sh`, and a resolvable base branch.
 
-### `utilities/wm_stage_runner.sh` — in-worktree pane script
+### `utilities/{prd-name}/wm_stage_runner.sh` — in-worktree pane script
 
 Runs as the **single pane** of each wave's worktree window. Derives the wave from the branch name (tmux panes do not reliably inherit the driver's environment, so the branch is the channel), delegates to `speckit_pipeline.sh` with `SPECKIT_WORKTREE_MODE=1`, writes the status file into the **main** repo, and exits so the window closes and the driver advances.
 
@@ -693,14 +699,15 @@ build/{wave}   → --phase build --wave {wave}    (features run in waves.json or
 
 A `spec/…` branch is rejected with a pointer to `speckit_parallel.sh spec` — Phase 1 no longer uses worktrees.
 
-### `utilities/wm_pre_merge_gate.sh` — quality gate
+### `utilities/{prd-name}/wm_pre_merge_gate.sh` — quality gate
 
 Two entry points: workmux's `pre_merge` hook (no arguments — reads `WM_BRANCH_NAME`), and a direct call from the driver after Phase 1.
 
 ```bash
-bash utilities/wm_pre_merge_gate.sh                                    # pre_merge hook, build/{wave}
-bash utilities/wm_pre_merge_gate.sh --phase spec --features "000-a 001-b"
-bash utilities/wm_pre_merge_gate.sh --phase build --wave w1-scheduling
+bash utilities/{prd-name}/wm_pre_merge_gate.sh                                    # pre_merge hook, build/{wave}
+bash utilities/{prd-name}/wm_pre_merge_gate.sh --phase spec --features "000-a 001-b"
+bash utilities/{prd-name}/wm_pre_merge_gate.sh --phase build --wave w1-scheduling
+bash utilities/{prd-name}/wm_pre_merge_gate.sh --prompts .speckit-prompts/{prd-name}
 ```
 
 Because a wave holds several features, the gate iterates a **list**, not a single feature.

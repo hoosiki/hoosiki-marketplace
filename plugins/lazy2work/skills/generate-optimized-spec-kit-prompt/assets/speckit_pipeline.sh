@@ -2,18 +2,18 @@
 # speckit_pipeline.sh — SpecKit 8-Stage Pipeline Automation (Headless Mode, phase/wave aware)
 #
 # Usage:
-#   ./utilities/speckit_pipeline.sh <PROMPTS_PATH>                      # 전체 feature × 전체 단계 순차 실행
-#   ./utilities/speckit_pipeline.sh <PROMPTS_PATH> --phase spec         # Phase 1: 01_specify + 02_clarify (+commit)
-#   ./utilities/speckit_pipeline.sh <PROMPTS_PATH> --phase build        # Phase 2: 03_plan ~ 08_converge (+commit)
-#   ./utilities/speckit_pipeline.sh <PROMPTS_PATH> --wave w1-scheduling  # waves.json의 해당 웨이브 feature만
-#   ./utilities/speckit_pipeline.sh <PROMPTS_PATH> --from 003           # 003 feature부터 실행 (해당 feature 포함, 이후 전부)
-#   ./utilities/speckit_pipeline.sh <PROMPTS_PATH> --from 003/06        # 003 feature의 06_analyze 단계부터 실행
-#   ./utilities/speckit_pipeline.sh <PROMPTS_PATH> --only 002           # 002 feature만 실행
-#   ./utilities/speckit_pipeline.sh <PROMPTS_PATH> --step 07            # 07_implement 단계만 실행
-#   ./utilities/speckit_pipeline.sh <PROMPTS_PATH> --dry-run            # 실행 없이 계획만 출력
-#   ./utilities/speckit_pipeline.sh <PROMPTS_PATH> --no-commit          # 단계 완료 후 커밋 생략
-#   ./utilities/speckit_pipeline.sh <PROMPTS_PATH> --skip-clarify       # 02_clarify 단계 건너뛰기
-#   ./utilities/speckit_pipeline.sh <PROMPTS_PATH> --resume             # 마지막 실패/중단 지점부터 재개
+#   ./utilities/<project>/speckit_pipeline.sh <PROMPTS_PATH>                      # 전체 feature × 전체 단계 순차 실행
+#   ./utilities/<project>/speckit_pipeline.sh <PROMPTS_PATH> --phase spec         # Phase 1: 01_specify + 02_clarify (+commit)
+#   ./utilities/<project>/speckit_pipeline.sh <PROMPTS_PATH> --phase build        # Phase 2: 03_plan ~ 08_converge (+commit)
+#   ./utilities/<project>/speckit_pipeline.sh <PROMPTS_PATH> --wave w1-scheduling  # waves.json의 해당 웨이브 feature만
+#   ./utilities/<project>/speckit_pipeline.sh <PROMPTS_PATH> --from 003           # 003 feature부터 실행 (해당 feature 포함, 이후 전부)
+#   ./utilities/<project>/speckit_pipeline.sh <PROMPTS_PATH> --from 003/06        # 003 feature의 06_analyze 단계부터 실행
+#   ./utilities/<project>/speckit_pipeline.sh <PROMPTS_PATH> --only 002           # 002 feature만 실행
+#   ./utilities/<project>/speckit_pipeline.sh <PROMPTS_PATH> --step 07            # 07_implement 단계만 실행
+#   ./utilities/<project>/speckit_pipeline.sh <PROMPTS_PATH> --dry-run            # 실행 없이 계획만 출력
+#   ./utilities/<project>/speckit_pipeline.sh <PROMPTS_PATH> --no-commit          # 단계 완료 후 커밋 생략
+#   ./utilities/<project>/speckit_pipeline.sh <PROMPTS_PATH> --skip-clarify       # 02_clarify 단계 건너뛰기
+#   ./utilities/<project>/speckit_pipeline.sh <PROMPTS_PATH> --resume             # 마지막 실패/중단 지점부터 재개
 #
 #   <PROMPTS_PATH>: 'NNN-<slug>' 형식의 feature 폴더들을 직접 담고 있는 (절대) 경로.
 #                   예) /abs/path/to/.speckit-prompts/japanese-tutor
@@ -64,8 +64,24 @@ set -euo pipefail
 # ──────────────────────────────────────────────
 # Configuration
 # ──────────────────────────────────────────────
-PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-DEFAULT_PROMPTS_DIR="$PROJECT_DIR/.speckit-prompts"
+# ── 스크립트 자기 위치에서 프로젝트를 알아낸다 ────────────────────────────────
+# 배치는 둘 중 하나다.
+#   utilities/<project>/foo.sh  ← 권장. 디렉터리 이름이 곧 .speckit-prompts/<project> 다.
+#   utilities/foo.sh            ← 구 배치. 이름으로 알 수 없어 탐색에 기댄다.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ "$(basename "$SCRIPT_DIR")" = "utilities" ]; then
+	SPECKIT_PROJECT=""
+	PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+else
+	SPECKIT_PROJECT="$(basename "$SCRIPT_DIR")"
+	PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+fi
+# 프로젝트를 알면 그 하위를 기본값으로 쓴다 — 저장소에 프로젝트가 여럿이어도 모호하지 않다.
+if [ -n "$SPECKIT_PROJECT" ] && [ -d "$PROJECT_DIR/.speckit-prompts/$SPECKIT_PROJECT" ]; then
+	DEFAULT_PROMPTS_DIR="$PROJECT_DIR/.speckit-prompts/$SPECKIT_PROJECT"
+else
+	DEFAULT_PROMPTS_DIR="$PROJECT_DIR/.speckit-prompts"
+fi
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 # 로그 루트는 env로 재지정 가능 — worktree에서 돌 때 메인 저장소에 남기기 위함
 LOG_ROOT="${SPECKIT_LOG_ROOT:-$PROJECT_DIR/.speckit-logs}"
@@ -204,12 +220,12 @@ while [[ $# -gt 0 ]]; do
 			웨이브 정의:  <PROMPTS_PATH>/waves.json
 
 			Examples:
-			  ./utilities/speckit_pipeline.sh /abs/.speckit-prompts/japanese-tutor --phase spec
-			  ./utilities/speckit_pipeline.sh /abs/.speckit-prompts/japanese-tutor --phase build --wave w1-scheduling
-			  ./utilities/speckit_pipeline.sh /abs/.speckit-prompts/japanese-tutor --only 000
-			  ./utilities/speckit_pipeline.sh /abs/.speckit-prompts/japanese-tutor --from 002/06
-			  ./utilities/speckit_pipeline.sh /abs/.speckit-prompts/japanese-tutor --resume
-			  ./utilities/speckit_pipeline.sh /abs/.speckit-prompts/japanese-tutor --dry-run
+			  ./utilities/<project>/speckit_pipeline.sh /abs/.speckit-prompts/japanese-tutor --phase spec
+			  ./utilities/<project>/speckit_pipeline.sh /abs/.speckit-prompts/japanese-tutor --phase build --wave w1-scheduling
+			  ./utilities/<project>/speckit_pipeline.sh /abs/.speckit-prompts/japanese-tutor --only 000
+			  ./utilities/<project>/speckit_pipeline.sh /abs/.speckit-prompts/japanese-tutor --from 002/06
+			  ./utilities/<project>/speckit_pipeline.sh /abs/.speckit-prompts/japanese-tutor --resume
+			  ./utilities/<project>/speckit_pipeline.sh /abs/.speckit-prompts/japanese-tutor --dry-run
 		HELPEOF
 		exit 0
 		;;
