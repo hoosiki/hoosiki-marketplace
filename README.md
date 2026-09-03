@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.47.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.48.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -40,7 +40,7 @@ runs both of these for you across every installed plugin.
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.47.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
+| [**lazy2work**](plugins/lazy2work/) | 1.48.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
 
 ---
 
@@ -57,7 +57,7 @@ runs both of these for you across every installed plugin.
 
 Optional, per skill:
 
-- [`workmux`](https://github.com/raine/workmux) 0.1.224+ and `tmux` — only for `generate-optimized-spec-kit-prompt`'s **Phase 2** wave worktrees (`utilities/speckit_parallel.sh build`). Phase 1 and the sequential runner need neither. Install with `brew install raine/workmux/workmux`.
+- [`workmux`](https://github.com/raine/workmux) 0.1.224+ and `tmux` — only for `generate-optimized-spec-kit-prompt`'s **Phase 2** wave worktrees (`utilities/{prd-name}/speckit_parallel.sh build`). Phase 1 and the sequential runner need neither. Install with `brew install raine/workmux/workmux`.
 
 ### Skills (12)
 
@@ -381,7 +381,7 @@ Workflow:
 3. Builds the **dependency DAG** — declared `Blocked by` plus hidden dependencies extracted from the acceptance criteria — and partitions it into **vertical waves**: one wave is one dependency *chain*, grouped into stages by spine decomposition
 4. Generates 8 stage prompts (+ commit) per feature following strict stage separation (specify ← issue scope + acceptance criteria + referenced PRD user stories; plan ← PRD decisions + issue tech details + **Upstream Context** from the DAG; implement ← rules + **shared-file ownership**). `/speckit.tasks` is command-only — tasks are generated from spec + plan, never hand-authored; clarify/checklist/analyze/converge lead with `auto-accept all recommended options`
 5. Writes output to `.speckit-prompts/{prd-name}/{NNN}-{slug}/` folders — the parent folder name is derived from the PRD (short kebab-case project name), the issue number is zero-padded to 3 digits — plus `DEPENDENCIES.md` (Mermaid DAG + stages/waves + hotspots), `PARALLEL_EXECUTION.md` (two-phase runbook), and `waves.json` at the parent folder
-6. Installs 4 runner scripts into `<project>/utilities/` (copied verbatim + `chmod +x`) and renders `.workmux.yaml` — including `{{ VERIFY_CMD }}`, the build gate's verification command, which is measured against the repo's baseline exit code before being written
+6. Installs 4 runner scripts into `<project>/utilities/{prd-name}/` (copied verbatim + `chmod +x`) — the folder name is how each script resolves its own project — and renders `.workmux.yaml` — including `{{ SCRIPTS_PATH }}` (that folder, used by both the pane command and the `pre_merge` hook) and `{{ VERIFY_CMD }}`, the build gate's verification command, which is measured against the repo's baseline exit code before being written
 
 #### Two-Phase Parallel Execution
 
@@ -405,14 +405,14 @@ Two barriers instead of four, wall-clock equal to the longest chain — and noth
 
 ```bash
 # Sequential (single process, no worktrees)
-./utilities/speckit_pipeline.sh .speckit-prompts/japanese-tutor
-./utilities/speckit_pipeline.sh .speckit-prompts/japanese-tutor --phase build --wave w1-scheduling
+./utilities/japanese-tutor/speckit_pipeline.sh .speckit-prompts/japanese-tutor
+./utilities/japanese-tutor/speckit_pipeline.sh .speckit-prompts/japanese-tutor --phase build --wave w1-scheduling
 
 # Parallel
-./utilities/speckit_parallel.sh waves            # show the stage/wave plan
-./utilities/speckit_parallel.sh spec --dry-run   # Phase 1 preview
-./utilities/speckit_parallel.sh spec             # Phase 1 — background fan-out, one commit at the end
-./utilities/speckit_parallel.sh build            # Phase 2 — trunk stage → merge → branch waves in parallel
+./utilities/japanese-tutor/speckit_parallel.sh waves            # show the stage/wave plan
+./utilities/japanese-tutor/speckit_parallel.sh spec --dry-run   # Phase 1 preview
+./utilities/japanese-tutor/speckit_parallel.sh spec             # Phase 1 — background fan-out, one commit at the end
+./utilities/japanese-tutor/speckit_parallel.sh build            # Phase 2 — trunk stage → merge → branch waves in parallel
 ```
 
 Phase 1 needs neither `workmux` nor `tmux` — it launches one background `claude -p` per feature in the main working tree, each pinned to its own `specs/{NNN}-{slug}/` via `SPECIFY_FEATURE_DIRECTORY`, with agents barred from touching git; the driver runs a spec gate and makes a single commit. Phase 2's `pre_merge` gate blocks any wave merge whose `tasks.md` still has unchecked tasks or whose verification command fails — and that command must be set explicitly as `env SPECKIT_VERIFY_CMD="…"` in `.workmux.yaml`, measured green against the repo's untouched baseline, or a brownfield repo that already exits non-zero will block every wave merge forever. The driver refuses to start until `.specify/feature.json` is untracked, and warns if a `before_specify` git hook would create branches during the fan-out.
@@ -472,28 +472,31 @@ Placement test: "Does this diagram remain valid if the tech stack changes?" — 
 │       │   └── ... (same 9 files)
 │       └── 002-persistence-auth/
 │           └── ... (same 9 files)
-├── utilities/                       ← copied verbatim from skill assets, chmod +x
-│   ├── speckit_pipeline.sh          ← headless stage runner (phase/wave aware, pins the feature dir)
-│   ├── speckit_parallel.sh          ← driver: Phase 1 fan-out, Phase 2 wave worktrees
-│   ├── wm_stage_runner.sh           ← in-worktree pane script (one per wave)
-│   └── wm_pre_merge_gate.sh         ← quality gate (pre_merge hook + Phase 1 spec gate)
-└── .workmux.yaml                    ← single-pane `speckit` layout + pre_merge hook
+├── utilities/
+│   └── japanese-tutor/              ← one folder per project — its name is how each script finds its prompts
+│       ├── speckit_pipeline.sh      ← headless stage runner (phase/wave aware, pins the feature dir)
+│       ├── speckit_parallel.sh      ← driver: Phase 1 fan-out, Phase 2 wave worktrees
+│       ├── wm_stage_runner.sh       ← in-worktree pane script (one per wave)
+│       └── wm_pre_merge_gate.sh     ← quality gate (pre_merge hook + Phase 1 spec gate)
+└── .workmux.yaml                    ← single-pane `speckit` layout + pre_merge hook, scripts via `{{ SCRIPTS_PATH }}`
 ```
 
 Folder naming: `{prd-name}/{NNN}-{kebab-case-name}` — `{prd-name}` is a short kebab-case project name derived from the PRD title/product name (e.g. "일본어 학습 튜터 챗봇" → `japanese-tutor`), `{NNN}` is the source issue number zero-padded to 3 digits (`00-env-compat-gate.md` → `{prd-name}/000-env-compat-gate/`). The folder name **is** the feature id — it matches `waves.json`, the `specs/` directory, and the status file names exactly.
+
+Scripts live in `utilities/{prd-name}/`, never directly in `utilities/`. A repo accumulates Spec Kit projects — a finished one and the one being built now — and scanning `.speckit-prompts/` for `waves.json` is ambiguous the moment there are two: an earlier version picked `sort | head -1`, so the alphabetically-first project always won and every wave of the other project failed the `pre_merge` gate, which workmux invokes with no arguments and which therefore could not be corrected from configuration. The folder name **is** the project, so resolution is structural: `--prompts` → `SPECKIT_PROMPTS_DIR` → folder name → the file that actually contains the requested wave, never "the first file found". A legacy bare `utilities/` install still works through the corrected scan, and a finished project's scripts stay pinned to the version that ran it instead of being overwritten by the next project's install.
 
 Run the generated prompts headlessly, sequentially or in parallel:
 
 ```bash
 # Sequential — one process, no worktrees
-./utilities/speckit_pipeline.sh .speckit-prompts/japanese-tutor            # all features
-./utilities/speckit_pipeline.sh .speckit-prompts/japanese-tutor --dry-run  # preview plan
-./utilities/speckit_pipeline.sh .speckit-prompts/japanese-tutor --only 002 # one feature
+./utilities/japanese-tutor/speckit_pipeline.sh .speckit-prompts/japanese-tutor            # all features
+./utilities/japanese-tutor/speckit_pipeline.sh .speckit-prompts/japanese-tutor --dry-run  # preview plan
+./utilities/japanese-tutor/speckit_pipeline.sh .speckit-prompts/japanese-tutor --only 002 # one feature
 
 # Parallel — see "Two-Phase Parallel Execution" above
-./utilities/speckit_parallel.sh waves
-./utilities/speckit_parallel.sh spec
-./utilities/speckit_parallel.sh build
+./utilities/japanese-tutor/speckit_parallel.sh waves
+./utilities/japanese-tutor/speckit_parallel.sh spec
+./utilities/japanese-tutor/speckit_parallel.sh build
 ```
 
 Two pre-flight actions the skill reports (mechanical failures, not suggestions):
@@ -549,7 +552,10 @@ And the parallel plan itself is verified against:
 | Hotspot table has owner + owner wave + idempotency rule | Ownership pushed into the trunk where possible |
 | Constitution candidates listed | Cross-feature conventions that `clarify` must not decide independently |
 | `PARALLEL_EXECUTION.md` exists | Pre-flight, both phase commands, monitoring, failure recovery, merge-conflict guidance |
-| 4 scripts installed + `chmod +x` | pipeline, parallel, stage runner, pre-merge gate |
+| 4 scripts installed into `utilities/{prd-name}/` + `chmod +x` | pipeline, parallel, stage runner, pre-merge gate |
+| Scripts live in `utilities/{prd-name}/`, **not** bare `utilities/` | The folder name is how each script resolves its project; a bare install is ambiguous once a second project exists |
+| `.workmux.yaml` references scripts via `{{ SCRIPTS_PATH }}` | Both the pane command and the `pre_merge` hook — a bare `utilities/…` path breaks per-project resolution |
+| No script resolves `waves.json` with `head -1` | Resolution must pick the file **containing the requested wave**, never "the first file found" |
 | `.workmux.yaml` has a **single-pane** `speckit` layout | Two panes deadlock `-W`/`--max-concurrent` |
 | `pre_merge` passes an explicit `SPECKIT_VERIFY_CMD` | Verified green against the untouched baseline; no `&&`-chained lint/type checks |
 | That env var is passed via `env VAR=...`, not `VAR=...` | `VAR=value cmd` is shell syntax and dies if the hook is exec'd without a shell |
@@ -1408,6 +1414,16 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.48.0 (2026-09-03)
+
+- **generate-optimized-spec-kit-prompt: the pre-merge gate read only the first `waves.json`, so a second Spec Kit project could never merge** — `wm_pre_merge_gate.sh` located the wave list with `find .speckit-prompts -name waves.json | sort | head -1`. With two projects in one repo (a finished one and the one in progress) the alphabetically-first project always won, and every wave of the other failed the gate with "no such wave in waves.json". workmux invokes the gate from the `pre_merge` hook with no arguments, and there was no flag or environment variable for the prompts directory, so nothing in configuration could route around it; it surfaced only after a whole stage was blocked in real use. The same `sort | head -1` sat in `wm_stage_runner.sh`
+- **generate-optimized-spec-kit-prompt: `waves.json` resolution picks the file that contains the requested wave, never the first file found** — candidates are examined in a single Python pass (a heredoc inside a bash loop contends for stdin), `--prompts` and `SPECKIT_PROMPTS_DIR` are accepted, and the failure message now names the files it examined instead of a bare "no such wave" that hid the real cause
+- **generate-optimized-spec-kit-prompt: scripts install into `utilities/{prd-name}/`, not bare `utilities/`** — each script derives its project from its own folder name, so a repo holding several Spec Kit projects is unambiguous by construction. Resolution order is `--prompts` → `SPECKIT_PROMPTS_DIR` → folder name → wave-containing file scan; a legacy bare `utilities/` install keeps working through the corrected scan. A finished project's scripts are no longer overwritten by the next project's install
+- **generate-optimized-spec-kit-prompt: scripts locate themselves with `BASH_SOURCE` and call siblings through `$SCRIPT_DIR`** — `dirname $0/..` resolved the project root one level too shallow under the deeper layout, and `wm_stage_runner.sh` invoked the pipeline as `$WT_ROOT/utilities/…`, which would have kept any wave from starting in the new layout. `workmux.yaml.template` gains `{{ SCRIPTS_PATH }}` so the pane command and the `pre_merge` hook both point at the project folder
+- **generate-optimized-spec-kit-prompt: SKILL.md gains a "Why a per-project folder" section and three Quality Checklist rows** — scripts under `utilities/{prd-name}/`, `.workmux.yaml` references via `{{ SCRIPTS_PATH }}`, and no `head -1` resolution of `waves.json`. Four cases verified in a real repo with two projects and one wave in flight
+- **README: mirrors the per-project layout** — workflow step 6, the prerequisites note, both command blocks, the output tree, a new paragraph on why the folder is per-project, and the Quality Checklist mirror now show `utilities/{prd-name}/`; the version badge and plugin table row, which the v1.48.0 manifests had outrun, are brought back in sync
+- **Version bump**: 1.47.0 → 1.48.0
 
 ### v1.47.0 (2026-08-28)
 
