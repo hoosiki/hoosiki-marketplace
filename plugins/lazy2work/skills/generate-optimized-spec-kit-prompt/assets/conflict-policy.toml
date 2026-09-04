@@ -1,0 +1,37 @@
+# Conflict grading policy for wave partitioning.
+#
+# Grades decide whether two features may be *siblings* (run concurrently in
+# different waves of the same stage). Inside one wave an overlap is harmless —
+# the wave is sequential in a single worktree.
+#
+#   strong       two features touching this file may not be siblings
+#   conditional  siblings allowed, but the merge gets a build+test probe
+#   additive     siblings allowed; one owner plus an idempotent edit rule
+#
+# Precedence: patterns here are checked before the built-in defaults, in the
+# order additive -> strong -> conditional. An unmatched source file defaults to
+# `strong` because prevention beats parallelism and a tie resolves upward.
+# Patterns are fnmatch globs against the repo-relative path.
+
+hub_threshold = 3          # a non-additive path touched by N+ features is a hub
+default_source = "strong"  # unmatched .py/.ts/.js/... files
+default_other = "conditional"
+
+[grades]
+
+# Append-only registries. Concurrent edits are safe with an owner and an
+# idempotent form, so these must never serialise a wave.
+additive = [
+  # "config/settings/*.py",
+  # "config/api_router.py",
+]
+
+# Files where two features editing the same lines is a real conflict.
+strong = [
+  # "financing_automation/loan_app/services.py",
+]
+
+# Peripheral files: allow siblings but probe the merge.
+conditional = [
+  # "docs/**",
+]

@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.48.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.49.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -40,7 +40,7 @@ runs both of these for you across every installed plugin.
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.48.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
+| [**lazy2work**](plugins/lazy2work/) | 1.49.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
 
 ---
 
@@ -66,7 +66,7 @@ Optional, per skill:
 | **up2date** | `/lazy2work:up2date` | Unified updater — checks and updates Homebrew packages, Claude Code skills/plugins, and SuperClaude commands in one go (`--brew` for Homebrew only, `--skill` for skills only). Plugin updates are delegated to Claude Code's own CLI (**`claude plugin marketplace update`** → **`claude plugin update <p> --scope <scope> --yes`**), so the plugin cache and registry are never hand-edited. The `--skill` path also runs **`npx skills@latest update -g -y`** to refresh global agent skills (e.g. mattpocock/skills) and **prunes skills deleted upstream** by parsing the updater's warning and calling `npx skills remove` (opt out with `--no-skill-prune`). The `--brew` path adds `brew autoremove` and a **Caskroom `.pkg` sweep** for the installers `brew cleanup` leaves behind. The skill inventory reads both `<installPath>/skills/` and `<installPath>/.claude/skills/`, and names any plugin it had to skip |
 | **analyze-arxiv** | `/lazy2work:analyze-arxiv` | Study arXiv papers — fetches paper content, generates structured summaries, and creates prerequisite knowledge documents for deeper understanding |
 | **constitution-generator** | `/lazy2work:constitution-generator` | Generate optimized `/speckit.constitution` prompts — gathers project info (tech stack, project stage, conventions), detects brownfield patterns, and outputs a **minimal-but-enforceable** constitution: 6–12 non-negotiable principles in MUST/NO language, each with a `(Rationale: …)`, prototype-stage gate stripping, and a validation checklist |
-| **generate-optimized-spec-kit-prompt** | `/lazy2work:generate-optimized-spec-kit-prompt` | Generate complete Spec Kit prompts for the full 8-stage flow (specify → clarify → plan → checklist → tasks → analyze → implement → converge, + commit) from a PRD + pre-sliced issue files — 1 issue = 1 feature (no re-slicing), Mermaid diagrams, `/speckit.tasks` command-only (no hand-authored tasks), and auto-accept prompts for clarify/checklist/analyze/converge. Also plans the run for **maximum parallelism**: a dependency DAG (`DEPENDENCIES.md` with a Mermaid diagram), **vertical waves** (`waves.json` — one wave = one dependency chain), a two-phase runbook (`PARALLEL_EXECUTION.md`), and 4 runner scripts — Phase 1 runs every feature as background processes in one working tree, Phase 2 runs the trunk chain then the branch chains in parallel workmux worktrees |
+| **generate-optimized-spec-kit-prompt** | `/lazy2work:generate-optimized-spec-kit-prompt` | Generate complete Spec Kit prompts for the full 8-stage flow (specify → clarify → plan → checklist → tasks → analyze → implement → converge, + commit) from a PRD + pre-sliced issue files — 1 issue = 1 feature (no re-slicing), Mermaid diagrams, `/speckit.tasks` command-only (no hand-authored tasks), and auto-accept prompts for clarify/checklist/analyze/converge. Also plans the run for **maximum parallelism**: a dependency DAG (`DEPENDENCIES.md` with a Mermaid diagram), **vertical waves** (`waves.json` — one wave = one dependency chain), a two-phase runbook (`PARALLEL_EXECUTION.md`), and 5 runner scripts — Phase 1 runs every feature as background processes in one working tree, Phase 2 runs the trunk chain then the branch chains in parallel workmux worktrees. Waves are **computed from predicted file overlap**, not from dependencies alone: one subagent per issue predicts the files that feature will touch, and the scheduler keeps two features that would collide out of sibling waves, so a stage merge does not fail halfway through |
 | **pyright-setup** | `/lazy2work:pyright-setup` | Auto-configure Pyright for Python projects — detects Python version from venv, adds `[tool.pyright]` to pyproject.toml, resolves "Import could not be resolved" LSP errors in Neovim/VS Code |
 | **apply-all-sc-save** | `/lazy2work:apply-all-sc-save` | Broadcast `/sc:save` to all Claude Code panes in the current tmux session — auto-detects Claude panes, excludes self, supports `--dry-run`, `--all-sessions`, and custom commands |
 | **fix-mermaid** | `/lazy2work:fix-mermaid` | Fix Markdown rendering issues that break Mermaid diagrams or pandoc PDF conversion — Mermaid v11 syntax (reserved words, Unicode/Langium issues, message escaping) **and** pandoc PDF pitfalls (blank-line compliance before lists/tables/fences as auto-fixed errors, long-mixed-cell overflow as warnings, always-on Unicode glyph map covering U+2212/U+2717/U+2718, **currency-dollar auto-escape** for `$100`/`$76.4억` that prevents `Bad math environment delimiter` errors, **unsafe-inline-code warnings** for `` `pass^k` ``-style content that collides with the `\seqsplit` wrapper and causes `Missing number, treated as zero`, **closing-dollar-trailing-space auto-fix** for `$\mathcal{H}_1 = $ rest` patterns that violate pandoc's `tex_math_dollars` rule and cause `\symcal allowed only in math mode`, plus opt-in **`--latin1-normalize`** for Latin-1 Supplement diacritics like `á é ñ ü ß`). Three bundled Python scripts (`fix_mermaid.py`, `fix_pandoc_blanks.py`, `validate_mermaid.py`) with lint / `--fix` / `--json` modes, plus optional **`--with-mmdc` feedback loop** that renders each diagram with Mermaid CLI and iterates targeted fixes until clean |
@@ -378,10 +378,10 @@ Workflow:
 
 1. Reads the PRD and every issue file — **1 issue file = 1 feature**, never merged or re-split
 2. Extracts Mermaid diagrams and classifies them by stage placement
-3. Builds the **dependency DAG** — declared `Blocked by` plus hidden dependencies extracted from the acceptance criteria — and partitions it into **vertical waves**: one wave is one dependency *chain*, grouped into stages by spine decomposition
+3. Builds the **dependency DAG** — declared `Blocked by` plus hidden dependencies extracted from the acceptance criteria — then predicts each feature's **file impact** with one subagent per issue, run in parallel, and partitions the DAG under both constraints into **vertical waves**: one wave is one dependency *chain*, and two features that would collide on the same files are never siblings
 4. Generates 8 stage prompts (+ commit) per feature following strict stage separation (specify ← issue scope + acceptance criteria + referenced PRD user stories; plan ← PRD decisions + issue tech details + **Upstream Context** from the DAG; implement ← rules + **shared-file ownership**). `/speckit.tasks` is command-only — tasks are generated from spec + plan, never hand-authored; clarify/checklist/analyze/converge lead with `auto-accept all recommended options`
 5. Writes output to `.speckit-prompts/{prd-name}/{NNN}-{slug}/` folders — the parent folder name is derived from the PRD (short kebab-case project name), the issue number is zero-padded to 3 digits — plus `DEPENDENCIES.md` (Mermaid DAG + stages/waves + hotspots), `PARALLEL_EXECUTION.md` (two-phase runbook), and `waves.json` at the parent folder
-6. Installs 4 runner scripts into `<project>/utilities/{prd-name}/` (copied verbatim + `chmod +x`) — the folder name is how each script resolves its own project — and renders `.workmux.yaml` — including `{{ SCRIPTS_PATH }}` (that folder, used by both the pane command and the `pre_merge` hook) and `{{ VERIFY_CMD }}`, the build gate's verification command, which is measured against the repo's baseline exit code before being written
+6. Installs 5 runner scripts into `<project>/utilities/{prd-name}/` (copied verbatim + `chmod +x`) — the folder name is how each script resolves its own project — and renders `.workmux.yaml` — including `{{ SCRIPTS_PATH }}` (that folder, used by both the pane command and the `pre_merge` hook) and `{{ VERIFY_CMD }}`, the build gate's verification command, which is measured against the repo's baseline exit code before being written
 
 #### Two-Phase Parallel Execution
 
@@ -412,6 +412,8 @@ Two barriers instead of four, wall-clock equal to the longest chain — and noth
 ./utilities/japanese-tutor/speckit_parallel.sh waves            # show the stage/wave plan
 ./utilities/japanese-tutor/speckit_parallel.sh spec --dry-run   # Phase 1 preview
 ./utilities/japanese-tutor/speckit_parallel.sh spec             # Phase 1 — background fan-out, one commit at the end
+python3 ./utilities/japanese-tutor/speckit_waves.py .speckit-prompts/japanese-tutor --status final
+                                                               # finalize waves after Phase 1 (required)
 ./utilities/japanese-tutor/speckit_parallel.sh build            # Phase 2 — trunk stage → merge → branch waves in parallel
 ```
 
@@ -457,7 +459,12 @@ Placement test: "Does this diagram remain valid if the tech stack changes?" — 
 │   └── japanese-tutor/              ← parent name derived from the PRD
 │       ├── DEPENDENCIES.md          ← Mermaid DAG + stage/wave table + hidden deps + hotspot ownership
 │       ├── PARALLEL_EXECUTION.md    ← two-phase runbook (pre-flight, monitoring, failure recovery)
-│       ├── waves.json               ← machine-readable stage/wave plan, read by the runners
+│       ├── waves.json               ← stage/wave plan (computed) + `status: provisional|final`
+│       ├── conflict-graph.json      ← audit trail: graded edges, hubs, repair log, makespan
+│       ├── conflict-policy.toml     ← optional per-project grade overrides + hub threshold
+│       ├── .impact/                 ← one file-impact prediction per feature (the recall baseline)
+│       │   ├── 000-env-compat-gate.json
+│       │   └── ... (one per feature)
 │       ├── 000-env-compat-gate/
 │       │   ├── 01_specify.md
 │       │   ├── 02_clarify.md
@@ -477,9 +484,14 @@ Placement test: "Does this diagram remain valid if the tech stack changes?" — 
 │       ├── speckit_pipeline.sh      ← headless stage runner (phase/wave aware, pins the feature dir)
 │       ├── speckit_parallel.sh      ← driver: Phase 1 fan-out, Phase 2 wave worktrees
 │       ├── wm_stage_runner.sh       ← in-worktree pane script (one per wave)
-│       └── wm_pre_merge_gate.sh     ← quality gate (pre_merge hook + Phase 1 spec gate)
+│       ├── wm_pre_merge_gate.sh     ← quality gate (pre_merge hook + Phase 1 spec gate)
+│       └── speckit_waves.py         ← wave scheduler: conflict graph, hub isolation, partition
+├── .speckit-logs/
+│   └── impact-recall.jsonl          ← append-only: predicted vs actual conflicts, per probe
 └── .workmux.yaml                    ← single-pane `speckit` layout + pre_merge hook, scripts via `{{ SCRIPTS_PATH }}`
 ```
+
+`waves.json`, `conflict-graph.json` and the `.impact/` predictions are **computed**, not hand-authored. The skill writes `features[]` with the dependency data; `speckit_waves.py` derives the waves from that plus the predictions. A wave runs sequentially inside one worktree, so a file overlap *within* a wave is harmless — the scheduler only has to keep colliding features out of **sibling** waves, which it does by co-locating them in one wave (no extra merge barrier) or splitting the stage, whichever finishes sooner.
 
 Folder naming: `{prd-name}/{NNN}-{kebab-case-name}` — `{prd-name}` is a short kebab-case project name derived from the PRD title/product name (e.g. "일본어 학습 튜터 챗봇" → `japanese-tutor`), `{NNN}` is the source issue number zero-padded to 3 digits (`00-env-compat-gate.md` → `{prd-name}/000-env-compat-gate/`). The folder name **is** the feature id — it matches `waves.json`, the `specs/` directory, and the status file names exactly.
 
@@ -543,6 +555,11 @@ And the parallel plan itself is verified against:
 |-------|------|
 | `DEPENDENCIES.md` exists with a Mermaid DAG | One subgraph per wave, chains left to right, edges = effective dependencies |
 | Hidden dependencies extracted from ACs | Declared-vs-effective differences called out explicitly |
+| **Every feature has an impact prediction** | `.impact/{id}.json` with `status: ok`; a failure is recorded as `failed`, never as an empty file set |
+| **`waves[]`/`stages[]`/`hotspots[]` are computed, not hand-written** | `speckit_waves.py` derives them from `features[]` + the predictions |
+| **No strong file overlap between sibling waves** | The scheduler guarantees it; its repair log names every wave it merged or split |
+| **Completeness claims are declared and joined** | A feature asserting a set is complete may not be a sibling of one extending it |
+| `waves.json` carries `status` | `provisional` at generation, `final` after Phase 1; `build` refuses provisional |
 | **Waves are chains, not depth levels** | Spine → trunk wave; each gap component → one branch wave; topological order inside |
 | **No edge crosses sibling waves** | A blocker is earlier in the same wave or in an earlier stage — otherwise merge the waves |
 | Stages alternate trunk and branch groups | `stages[]` ordered; a trunk stage holds exactly one wave |
@@ -552,7 +569,7 @@ And the parallel plan itself is verified against:
 | Hotspot table has owner + owner wave + idempotency rule | Ownership pushed into the trunk where possible |
 | Constitution candidates listed | Cross-feature conventions that `clarify` must not decide independently |
 | `PARALLEL_EXECUTION.md` exists | Pre-flight, both phase commands, monitoring, failure recovery, merge-conflict guidance |
-| 4 scripts installed into `utilities/{prd-name}/` + `chmod +x` | pipeline, parallel, stage runner, pre-merge gate |
+| 5 scripts installed into `utilities/{prd-name}/` + `chmod +x` | pipeline, parallel, stage runner, pre-merge gate, wave scheduler |
 | Scripts live in `utilities/{prd-name}/`, **not** bare `utilities/` | The folder name is how each script resolves its project; a bare install is ambiguous once a second project exists |
 | `.workmux.yaml` references scripts via `{{ SCRIPTS_PATH }}` | Both the pane command and the `pre_merge` hook — a bare `utilities/…` path breaks per-project resolution |
 | No script resolves `waves.json` with `head -1` | Resolution must pick the file **containing the requested wave**, never "the first file found" |
@@ -1344,9 +1361,10 @@ hoosiki-marketplace/
 │       │   │   └── references/
 │       │   ├── generate-optimized-spec-kit-prompt/
 │       │   │   ├── SKILL.md
-│       │   │   ├── references/           ← prompt guide, parallel-execution guide, output format
+│       │   │   ├── references/           ← prompt guide, parallel-execution guide, impact-prediction guide, output format
 │       │   │   └── assets/               ← speckit_pipeline.sh, speckit_parallel.sh, wm_stage_runner.sh,
-│       │   │                                wm_pre_merge_gate.sh, workmux.yaml.template (copied into user projects)
+│       │   │                                wm_pre_merge_gate.sh, speckit_waves.py, conflict-policy.toml,
+│       │   │                                workmux.yaml.template (copied into user projects)
 │       │   ├── pyright-setup/
 │       │   │   ├── SKILL.md
 │       │   │   └── scripts/
@@ -1414,6 +1432,18 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.49.0 (2026-09-04)
+
+- **generate-optimized-spec-kit-prompt: waves are now computed from predicted file overlap, not from the dependency DAG alone** — two features with no dependency between them became siblings and ran concurrently even when they edited the same twenty files. In a real project the hand-authored hotspot table recorded 2 of the 9 files two sibling features actually shared, and the stage merge failed. The partition now takes both the precedence DAG and a conflict graph as constraints, which is the formulation Cassandra (Kasi & Sarma, ICSE 2013) uses when it schedules so that "dependent tasks **or tasks that share common files**" are never edited concurrently
+- **generate-optimized-spec-kit-prompt: a strong conflict forbids being *siblings*, not being parallel** — a wave is a sequential chain in one worktree, so an overlap inside a wave is harmless; only waves running concurrently in the same stage can collide. That gives two legal fixes, putting both features in one wave (no extra merge barrier) or splitting the stage (one extra barrier), and the new `assets/speckit_waves.py` tries both and keeps the shorter makespan, preferring the same-wave merge on a tie. Plain graph colouring only ever considers the second fix and is strictly less parallel here
+- **generate-optimized-spec-kit-prompt: per-issue impact prediction by parallel subagents** — one subagent per issue, 5–8 at a time, each writing `.impact/{feature-id}.json` with `creates`/`modifies`/`tests`/`docs_configs`/`registries` plus confidences and symbols. Prompts are instructed for recall over precision, because a missed file becomes a merge conflict while an extra file costs only a little parallelism, and strong models predict too few files by default. A failed subagent must record `status: failed` — never an empty file set, since absent data and no overlap are different things
+- **generate-optimized-spec-kit-prompt: completeness claims catch the conflicts file overlap cannot** — a feature whose acceptance criteria assert a set is exhaustively enumerated may not be a sibling of one that adds members to that set. In the real failure a feature added a verdict value and shipped a structural test asserting its consumers were exactly four places; a sibling added a fifth, so the merge broke that test while the textual merge stayed clean. Subagents now declare `completeness_claims` and `extends_sets`, and the scheduler joins them by set name into a strong edge
+- **generate-optimized-spec-kit-prompt: predictions are augmented mechanically, not trusted as written** — declared symbols are swept for reverse references with `git grep`, and the last 400 commits are mined for co-change coupling, so files no subagent thought to name still enter the path set. Grades are `strong`/`conditional`/`additive` with a built-in table that wins over subagent opinion, ties resolving upward; a non-additive path touched by 3+ features is reported as a hub. Projects override in `conflict-policy.toml`
+- **generate-optimized-spec-kit-prompt: speculative merge probes** — the driver runs `git merge-tree --write-tree` before every wave merge and reports conflicting paths **by name** instead of the previous "one of three causes", and for waves flagged `build-test` it materialises the merged tree in a throwaway worktree and runs the verification command against it. That is the only way to catch a conflict that merges cleanly and still breaks behaviour (Crystal, Brun et al., FSE 2011). Every probe appends predicted-vs-actual to `.speckit-logs/impact-recall.jsonl`, never overwriting the prediction baseline
+- **generate-optimized-spec-kit-prompt: waves are finalized after Phase 1** — the plan computed at generation time is stamped `provisional`, because it predates the `clarify` runs that can move a feature's scope. Phase 1 uses no waves at all, so finalizing costs nothing and happens where the information is best. `speckit_parallel.sh build` hard-fails on a provisional plan and names the command to run, and the scheduler refuses outright when any prediction is missing or failed unless `--force-trunk` is passed, which records the feature as `"placement": "unpredicted"`
+- **README: mirrors the new pipeline** — the skill's summary row states that waves come from predicted file overlap and counts 5 runner scripts; the output tree gains `conflict-graph.json`, `conflict-policy.toml`, `.impact/`, `speckit_waves.py` and `.speckit-logs/impact-recall.jsonl`, with a paragraph on why those artifacts are computed rather than hand-authored; the repo-structure tree lists the new asset and reference files; the parallel-plan checklist gains the five rows that guard the prediction and the computed partition
+- **Version bump**: 1.48.0 → 1.49.0
 
 ### v1.48.0 (2026-09-03)
 

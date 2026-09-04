@@ -223,6 +223,8 @@ waves_query() { python3 - "$WAVES_FILE" "$@" <<-'PYEOF'
 	            break
 	    else:
 	        sys.exit(3)
+	elif mode == "doc-field":
+	    print(data.get(sys.argv[3], ""))
 	elif mode == "table":
 	    for i, kind, names in stages():
 	        for name in names:
@@ -420,6 +422,139 @@ run_stage() {
 }
 
 # ──────────────────────────────────────────────
+# 잠정 웨이브로 build 를 돌리는 것을 막는다.
+# 생성 시점의 웨이브는 사람이 미리 읽는 초안이고, 실행 입력이 아니다.
+# Phase 1 은 웨이브를 쓰지 않으므로 잠정 상태로도 정상 동작한다.
+# ──────────────────────────────────────────────
+require_final_waves() {
+	local status
+	status="$(waves_query doc-field status 2>/dev/null || true)"
+	case "$status" in
+	final) return 0 ;;
+	"")
+		warn "waves.json 에 status 가 없습니다 (구 스키마) — 그대로 진행합니다."
+		return 0
+		;;
+	*)
+		die "waves.json 이 '$status' 상태입니다 — Phase 1 이후 웨이브를 확정해야 합니다.
+
+  Phase 1 의 spec.md 가 확정된 뒤에야 파일 영향도 예측이 정확해집니다.
+  세션에서 스킬을 확정 모드로 실행하거나, 예측이 이미 최신이면 직접:
+
+    python3 utilities/${SPECKIT_PROJECT:-.}/speckit_waves.py $PROMPTS_DIR --status final"
+		;;
+	esac
+}
+
+# merge-tree 를 쓸 수 있는가 (git 2.38+). HEAD 를 자기 자신과 병합해 보는 것이
+# 유일하게 믿을 만한 확인이다 — --help 는 옵션을 몰라도 0 을 반환한다.
+MERGE_TREE_OK=""
+merge_tree_supported() {
+	if [ -z "$MERGE_TREE_OK" ]; then
+		if git merge-tree --write-tree HEAD HEAD >/dev/null 2>&1; then
+			MERGE_TREE_OK=yes
+		else
+			MERGE_TREE_OK=no
+		fi
+	fi
+	[ "$MERGE_TREE_OK" = yes ]
+}
+
+resolve_verify_cmd() {
+	if [ -n "${SPECKIT_VERIFY_CMD:-}" ]; then printf '%s' "$SPECKIT_VERIFY_CMD"; return; fi
+	# .workmux.yaml 의 pre_merge 훅에 env SPECKIT_VERIFY_CMD="..." 형태로 들어 있다
+	sed -n 's/.*SPECKIT_VERIFY_CMD="\([^"]*\)".*/\1/p' "$PROJECT_DIR/.workmux.yaml" 2>/dev/null | head -1
+}
+
+# 예측 대비 실제 충돌을 기록한다. 예측 원본은 절대 덮어쓰지 않는다.
+record_recall() {
+	local wave="$1" kind="$2" conflicts="$3"
+	local out="$PROJECT_DIR/.speckit-logs/impact-recall.jsonl"
+	mkdir -p "$(dirname "$out")"
+	CG="$PROMPTS_DIR/conflict-graph.json" WAVE="$wave" KIND="$kind" 	CONFLICTS="$conflicts" WAVES="$WAVES_FILE" OUT="$out" python3 - <<'PY' 2>/dev/null || true
+import json, os, datetime
+cg_path, out = os.environ["CG"], os.environ["OUT"]
+wave, kind = os.environ["WAVE"], os.environ["KIND"]
+actual = [l.strip() for l in os.environ["CONFLICTS"].splitlines() if l.strip()]
+try:
+    waves = json.load(open(os.environ["WAVES"], encoding="utf-8"))
+except Exception:
+    waves = {}
+members = []
+for w in waves.get("waves", []):
+    if w.get("name") == wave:
+        members = w.get("features", [])
+predicted = set()
+try:
+    cg = json.load(open(cg_path, encoding="utf-8"))
+    for fid in members:
+        predicted |= set(cg.get("features", {}).get(fid, {}).keys())
+except Exception:
+    pass
+hit = [p for p in actual if p in predicted]
+rec = {
+    "ts": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+    "wave": wave, "features": members, "probe": kind,
+    "actual_conflicts": actual, "predicted_count": len(predicted),
+    "hit": hit, "missed": [p for p in actual if p not in predicted],
+    "recall": (len(hit) / len(actual)) if actual else None,
+}
+with open(out, "a", encoding="utf-8") as fh:
+    fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+PY
+}
+
+# 병합 전 투기 프로브 — 텍스트 충돌은 항상, 빌드·테스트는 waves.json 의 probe 필드에 따라.
+# 0 = 통과, 1 = 충돌/실패 (호출자가 병합을 건너뛴다)
+probe_merge() {
+	local w="$1" branch="build/$1"
+	local out rc tree conflicts probe_mode verify commit tmpwt
+
+	merge_tree_supported || { warn "[$w] git 2.38+ 가 아니어서 병합 프로브를 건너뜁니다"; return 0; }
+
+	# 출력 형식: 1행 tree OID, 그 다음 충돌 파일들, 빈 줄, 그 뒤는 안내 메시지(로캘 의존).
+	# 파일 목록만 필요하므로 빈 줄에서 끊는다. 안내문 파싱은 로캘 때문에 깨진다.
+	out="$(git merge-tree --write-tree --name-only "$BASE_BRANCH" "$branch" 2>/dev/null)" && rc=0 || rc=$?
+	if [ "$rc" -ne 0 ]; then
+		conflicts="$(printf '%s\n' "$out" | tail -n +2 | sed '/^[[:space:]]*$/q' | sed '/^[[:space:]]*$/d')"
+		warn "[$w] 병합하면 충돌합니다 — 병합하지 않았습니다. 충돌 파일:"
+		printf '%s\n' "$conflicts" | sed 's/^/      /'
+		record_recall "$w" "merge-tree" "$conflicts"
+		return 1
+	fi
+
+	probe_mode="$(waves_query wave-field "$w" probe 2>/dev/null || true)"
+	[ "$probe_mode" = "build-test" ] || return 0
+
+	verify="$(resolve_verify_cmd)"
+	if [ -z "$verify" ] || [ "$verify" = "skip" ]; then
+		warn "[$w] 검증 명령이 없어 고차 충돌 프로브를 건너뜁니다 (SPECKIT_VERIFY_CMD)"
+		return 0
+	fi
+
+	tree="$(printf '%s\n' "$out" | head -1)"
+	commit="$(git commit-tree "$tree" -p "$(git rev-parse "$BASE_BRANCH")" \
+		-p "$(git rev-parse "$branch")" -m "speckit merge probe: $w" 2>/dev/null)" || {
+		warn "[$w] 프로브 커밋 생성 실패 — 건너뜁니다"; return 0; }
+	tmpwt="$RUN_ROOT/probe-$w"
+	rm -rf "$tmpwt"
+	git worktree add --detach "$tmpwt" "$commit" >/dev/null 2>&1 || {
+		warn "[$w] 프로브 워크트리 생성 실패 — 건너뜁니다"; return 0; }
+
+	log "[$w] 병합 결과에 검증 실행 (텍스트는 깨끗하지만 동작이 깨질 수 있습니다): $verify"
+	if ( cd "$tmpwt" && bash -c "$verify" ); then
+		rc=0
+	else
+		rc=1
+		warn "[$w] 병합 결과가 검증에 실패했습니다 — 고차 충돌입니다."
+		warn "    텍스트 병합은 깨끗하므로 git 은 이것을 잡지 못합니다."
+		record_recall "$w" "build-test" ""
+	fi
+	git worktree remove --force "$tmpwt" >/dev/null 2>&1 || rm -rf "$tmpwt"
+	return $rc
+}
+
+# ──────────────────────────────────────────────
 # 성공한 웨이브만 순차 병합 (동시 병합 금지 — main 의 index 가 레이스한다)
 # 병합 순서는 waves.json 순서 = 충돌이 재현 가능한 순서다.
 # ──────────────────────────────────────────────
@@ -449,6 +584,11 @@ merge_waves() {
 		log "merge build/$w"
 		if $DRY_RUN; then
 			echo "  [DRY-RUN] workmux merge build/$w ${merge_flags[*]-}"
+			continue
+		fi
+		if ! probe_merge "$w"; then
+			warn "[$w] 프로브가 막았습니다 — worktree 보존, 병합 생략."
+			bad+=("$w")
 			continue
 		fi
 		if ! workmux merge "build/$w" ${merge_flags[@]+"${merge_flags[@]}"}; then
@@ -567,6 +707,7 @@ fi
 if [ "$CMD" = "build" ]; then
 	preflight_common
 	preflight_workmux
+	require_final_waves
 	resolve_stages
 
 	# 웨이브 하나만 실행

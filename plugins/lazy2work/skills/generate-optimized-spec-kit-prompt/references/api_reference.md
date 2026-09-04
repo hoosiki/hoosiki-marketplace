@@ -70,12 +70,16 @@ Machine-readable output of the dependency analysis. `speckit_pipeline.sh --wave`
 
 A **wave is a vertical dependency chain**, not a depth level: its features run sequentially in one worktree, and waves run concurrently. A **stage** is a group of waves separated from the next group by a merge barrier.
 
+**You hand-author `features[]` only.** `speckit_waves.py` computes `waves[]`, `stages[]` and `hotspots[]` from `features[]` plus the per-feature impact predictions, and stamps `status`. Hand-authoring the wave plan is what produced a hotspot table covering 2 of 9 genuinely shared files in a real project.
+
 ```json
 {
   "project": "japanese-tutor",
   "prd": "docs/prd-japanese-tutor.md",
   "issues_dir": "docs/issues",
-  "schema": 2,
+  "schema": 3,
+  "status": "final",
+  "finalized_at": "2026-09-04T12:00:00+00:00",
   "stages": [
     { "index": 0, "kind": "trunk",  "waves": ["w0-foundation"] },
     { "index": 1, "kind": "branch", "waves": ["w1-scheduling", "w2-channels", "w3-reporting"] }
@@ -88,7 +92,9 @@ A **wave is a vertical dependency chain**, not a depth level: its features run s
       "stage": 0,
       "rationale": "The serial spine — every branch wave needs the env gate, the HTTP surface, and the shared graph node.",
       "features": ["000-env-compat-gate", "001-sync-chat-http", "003-thin-graph"],
-      "depends_on": []
+      "depends_on": [],
+      "probe": "build-test",
+      "probe_reasons": ["last wave of the stage"]
     },
     {
       "name": "w1-scheduling",
@@ -97,7 +103,9 @@ A **wave is a vertical dependency chain**, not a depth level: its features run s
       "stage": 1,
       "rationale": "Reminder scheduling end to end; touches no module the channel or reporting chains touch.",
       "features": ["004-reminder-core", "005-recurrence", "006-reminder-ui"],
-      "depends_on": ["w0-foundation"]
+      "depends_on": ["w0-foundation"],
+      "probe": "merge-tree-only",
+      "probe_reasons": []
     }
   ],
   "features": [
@@ -107,6 +115,8 @@ A **wave is a vertical dependency chain**, not a depth level: its features run s
       "slug": "env-compat-gate",
       "spec_dir": "specs/000-env-compat-gate",
       "wave": "w0-foundation",
+      "placement": "predicted",
+      "impact_ref": ".impact/000-env-compat-gate.json",
       "declared_blocked_by": [],
       "hidden_blocked_by": [],
       "effective_blocked_by": []
@@ -129,7 +139,8 @@ A **wave is a vertical dependency chain**, not a depth level: its features run s
       "touched_by": ["000-env-compat-gate", "004-reminder-core", "007-channel-base"],
       "owner": "000-env-compat-gate",
       "owner_wave": "w0-foundation",
-      "rule": "w0 creates LOCAL_APPS with a stable tail; branch waves append only if absent."
+      "grade": "additive",
+      "rule": "additive — owner + idempotent edit"
     }
   ],
   "constitution_candidates": [
@@ -147,8 +158,74 @@ Rules:
 - `effective_blocked_by` = union of declared and hidden. Every blocker must be either earlier in the same wave or in an earlier stage — **never in a sibling wave**. If a dependency would cross sibling waves, merge those waves into one.
 - `hidden_reason` is required whenever `hidden_blocked_by` is non-empty.
 - `spec_dir` is what the runner pins via `SPECIFY_FEATURE_DIRECTORY`; keep it `specs/{id}`.
+- `status` is `provisional` (computed at generation time, before `clarify`) or `final` (recomputed after Phase 1). **`speckit_parallel.sh build` refuses to run while it is `provisional`.** Phase 1 does not read waves at all, so a provisional plan is safe to fan out on.
+- `probe` is `merge-tree-only` or `build-test`, and drives the driver's speculative merge check. It is set to `build-test` when the wave has conditional overlap with a sibling, when it extends a set another wave claims complete, or when it is the last wave of its stage.
+- `placement` is `predicted` or `unpredicted`. An `unpredicted` feature had no usable impact estimate and was serialized rather than trusted; it only appears when `--force-trunk` was passed.
 
-Older `waves.json` files without `stages` still load: the driver groups by `waves[].stage`, or falls back to one wave per stage (fully sequential — safe but slow).
+Schema 3 is **additive**. Older `waves.json` files without `stages` still load: the driver groups by `waves[].stage`, or falls back to one wave per stage (fully sequential — safe but slow). A file without `status` runs with a warning rather than being refused.
+
+## .impact/{feature-id}.json
+
+One per feature, written by the per-issue prediction subagent. Never overwritten by
+the scheduler — it is the baseline that makes recall measurable. Full prompt contract
+in [impact-prediction-guide.md](impact-prediction-guide.md).
+
+```json
+{
+  "feature": "005-max-loan-quote",
+  "status": "ok",
+  "creates":      [{"path": "utils/loan/quote.py", "confidence": 0.9, "symbols": ["build_quote"]}],
+  "modifies":     [{"path": "loan_app/services.py", "confidence": 0.8, "symbols": ["review_case"]}],
+  "tests":        [{"path": "loan_app/tests/test_review_service.py", "confidence": 0.7}],
+  "docs_configs": [{"path": "docs/loan.md", "confidence": 0.4}],
+  "registries":   [{"path": "loan_app/migrations/0007_quote.py", "confidence": 0.9}],
+  "completeness_claims": [{"set": "verdict.consumers", "note": "FR-008 enumerates every reader"}],
+  "extends_sets": []
+}
+```
+
+A failed prediction sets `"status": "failed"` and adds `"error"`. It must **never** be
+represented by an empty file set: absent data and no overlap are different things, and
+conflating them is exactly the bug this machinery exists to prevent.
+
+## conflict-graph.json
+
+Written by `speckit_waves.py` beside `waves.json`. Pure audit trail — no runner reads
+it. Holds the normalized per-feature path sets with their provenance (`predicted`,
+`grep:<symbol>`, `cochange:<seed>`), the graded edges with the files that produced
+them, the hub list, the additive owners, the completeness pairs, the augmentation
+counts, and the repair log with makespan before and after.
+
+## conflict-policy.toml (optional)
+
+Per-project overrides, read from `.speckit-prompts/{prd-name}/conflict-policy.toml`.
+Absent, the built-in defaults apply.
+
+```toml
+hub_threshold = 3
+default_source = "strong"
+default_other = "conditional"
+
+[grades]
+additive    = ["config/settings/*.py", "config/api_router.py"]
+strong      = ["financing_automation/loan_app/services.py"]
+conditional = ["docs/**"]
+```
+
+Project patterns are checked before the built-in table. An unmatched source file
+defaults to `strong`, because prevention beats parallelism and a tie resolves upward.
+
+## .speckit-logs/impact-recall.jsonl
+
+Append-only, one line per probe that found a real conflict. Never rewritten, so it
+accumulates across runs and projects and answers the only question that matters about
+this whole mechanism: is prediction recall improving?
+
+```json
+{"ts":"2026-09-04T12:00:00+00:00","wave":"w2-review-desk","features":["006-needs-review-resolution"],
+ "probe":"merge-tree","actual_conflicts":["loan_app/services.py"],"predicted_count":14,
+ "hit":["loan_app/services.py"],"missed":[],"recall":1.0}
+```
 
 ## DEPENDENCIES.md Template
 

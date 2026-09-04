@@ -40,7 +40,7 @@ constitution ──▶ specify ──▶ clarify ──╬══▶ plan ──�
 | `implement` | 🔴 absolute — shared source hotspots | 🔴 **worktree-isolated + sequential merge** |
 | `converge` | 🔴 implement's output | 🔴 one body with implement |
 
-`/speckit.analyze` does **not** rescue cross-feature contradictions: it only reads its own feature's constitution↔spec↔plan↔tasks. Two features that adopted opposite conventions both pass. The only place a cross-feature convention can be enforced is **`constitution.md`** — see §8.
+`/speckit.analyze` does **not** rescue cross-feature contradictions: it only reads its own feature's constitution↔spec↔plan↔tasks. Two features that adopted opposite conventions both pass. The only place a cross-feature convention can be enforced is **`constitution.md`** — see §9.
 
 ## 2. Phase 1 — background fan-out in one working tree
 
@@ -81,7 +81,7 @@ After all N processes exit, the driver runs the spec gate over every feature —
 
 ### Concurrency
 
-The default is **all N at once** — that is the whole point of Phase 1, and these stages are short (`01_specify` caps at 30 turns, `02_clarify` at 50). Throttle with `--max-concurrent` when the account hits 429s; see §9.
+The default is **all N at once** — that is the whole point of Phase 1, and these stages are short (`01_specify` caps at 30 turns, `02_clarify` at 50). Throttle with `--max-concurrent` when the account hits 429s; see §10.
 
 ## 3. Building the dependency DAG
 
@@ -123,7 +123,7 @@ What this buys:
 - **Wall-clock = the longest chain**, not the sum of per-level maxima.
 - **Nothing plans blind.** Trunk code is on `main` before any branch wave starts, and inside a wave each feature's blocker was implemented by the previous step *in the same worktree*. Every effective blocker's code is physically on disk when `plan` runs.
 
-That last point is the real prize: vertical waves dissolve the problem that the safety boundary created. `Upstream Context` stops being a crutch that substitutes for missing code and becomes a pointer to code that is actually there (§7).
+That last point is the real prize: vertical waves dissolve the problem that the safety boundary created. `Upstream Context` stops being a crutch that substitutes for missing code and becomes a pointer to code that is actually there (§8).
 
 ### The algorithm — spine decomposition
 
@@ -146,9 +146,29 @@ Two properties this guarantees, both load-bearing:
 - **No edges cross between sibling waves.** Two connected features land in the same component by construction. If an edge you discover later would cross waves, the two waves must be merged into one — do not "just run them anyway".
 - **Every blocker is already merged or already local.** A blocker is either on the spine (merged in an earlier stage), in the same wave earlier in the chain (same worktree), or in an earlier gap (merged in an earlier stage).
 
+### Spine decomposition is only the starting point — the repair pass
+
+Spine decomposition reads the dependency DAG and nothing else. That is exactly its blind spot: two features with no edge between them are perfectly free to be siblings *in the DAG* and still rewrite the same `models.py`. Waves are therefore no longer computed by eye from the graph — `speckit_waves.py` computes them from the DAG **plus predicted file overlap** (§5), taking the spine partition as the seed and then running a **repair pass** over it.
+
+The asymmetry that makes the repair cheap:
+
+- **A wave is a sequential chain in one worktree.** Two features in the same wave touch the same file one after the other, in the same tree, and the second one sees the first one's edit. A file overlap *inside* a wave is harmless — it is an ordinary sequential edit, not a merge.
+- **Overlap only matters between sibling waves** — waves that run concurrently, in different worktrees, inside the same stage, and land at the same barrier.
+
+So a `strong` conflict edge asserts exactly one thing: **these two may not be siblings.** That leaves exactly two fixes, and both of them are legal:
+
+| Fix | Cost | What the overlap becomes |
+|-----|------|--------------------------|
+| **Same wave** — fuse the two waves into one chain | no extra barrier; that chain gets longer | a sequential in-worktree edit |
+| **Different stages** — push one wave into a later stage | one extra merge barrier | a merged-then-branched-from edit |
+
+The scheduler tries **both** candidates for every violated edge and keeps whichever gives the smaller **makespan** — the sum over stages of the longest wave in that stage, every feature weighted 1. On a tie it prefers the same-wave merge, because a barrier costs more than a step. **Precedence is re-checked on every candidate**: a repair that would place a blocker after its dependent is rejected outright, so no repair can ever break the DAG.
+
+This is **not plain graph colouring**, and the difference is not cosmetic. A colouring assigns conflicting features to different colours — different rounds — which is only ever the second fix. It cannot express "put them in the same wave", so it pays a barrier for conflicts that a fused chain resolves for free, and it is strictly less parallel here.
+
 ### Adjustments
 
-- **Hotspot ownership beats hotspot avoidance.** Two sibling waves that both extend `settings.py` will conflict at merge no matter what wave they are in. Do not split waves to avoid it — assign the file an owner (§8) and make the edits idempotent.
+- **Hotspot ownership beats hotspot avoidance.** Two sibling waves that both extend `settings.py` will conflict at merge no matter what wave they are in. Do not split waves to avoid it — assign the file an owner (§9) and make the edits idempotent. Such a file is graded `additive`, and the repair pass leaves it alone (§5).
 - **Balance, don't reorder.** If one branch wave is 8 features and its siblings are 2, wall-clock is the 8-chain. That is a signal to re-check whether those 8 dependencies are all real — never to fake a partition the DAG does not support.
 - **A component that is internally wide** (a small DAG, not a chain) still runs sequentially in topological order. Splitting it further would need another barrier; only do that if it dominates wall-clock.
 - **No spine at all** (multiple independent roots) is fine: stage 0 is a branch stage with several waves. **All spine** (one long chain) is also fine: a single trunk wave, no parallelism to be had.
@@ -163,7 +183,42 @@ Each wave gets a machine-safe name **and** a human title:
 
 The theme comes from what the *chain* accomplishes, not from a counter. `w0-foundation` is nearly always the trunk containing the environment/prefactor slice.
 
-## 5. workmux mapping
+## 5. Conflict constraints
+
+The repair pass is only as good as the edges handed to it. Not every shared file is a conflict, so overlap is **graded** — a blanket "same file ⇒ separate them" would serialize the whole run over `settings.py`.
+
+### The three grades
+
+| Grade | Meaning | Siblings? | Example |
+|-------|---------|-----------|---------|
+| `strong` | Both features rewrite the same structured region of the same file. | ❌ **may not be siblings** — the repair pass must fuse or re-stage them | two features adding fields to the same app's `models.py` |
+| `conditional` | Overlap is plausible but usually mergeable. | 🟡 siblings allowed, but the merge gets a **build+test probe** (§6) | two features in the same MVC slice with no shared file |
+| `additive` | Append-only structure with one owner and an idempotency rule. | ✅ siblings allowed | `INSTALLED_APPS` in `settings.py` |
+
+**Additive** covers the usual registry files: settings app lists, URL confs, migrations, i18n catalogs, lockfiles. These are hotspots, not conflicts — they get an owner and an idempotent edit rule (§9), never a wave split.
+
+**Strong** covers same-app `models.py` / `views.py` / `services.py` / `forms.py` — the MVC quartet of one app — and shared test files.
+
+### The same-directory signal
+
+Two features working the same **MVC slice** get a `conditional` edge **even when they share no file at all**. Structural proximity predicts conflict on its own: Borba et al. (IST 2020) analysed **73,504 merge scenarios** in Ruby and Python MVC projects and found conflict likelihood rises significantly when the two contributions involve files from the same MVC slice, and that a higher number of changed files raises it by **227%**. A shared *directory* is therefore evidence, and the probe is the cheap way to act on it.
+
+### Hub isolation
+
+A non-additive path touched by **3 or more features** is a **hub**. Burying a hub inside one wave does not reduce conflicts — the other features still reach it from their own waves; it only lengthens that chain. Two ways out, in order:
+
+1. Move its ownership into the **trunk**, so every branch wave branches from a version that already has the extension point.
+2. Or declare it `additive` and write down the idempotency rule.
+
+Never "solve" a hub by growing the wave that happens to contain it.
+
+### Completeness claims
+
+A feature whose acceptance criteria assert that a set is **exhaustively enumerated** may not be a sibling of a feature that **adds members to that set**. This constraint is invisible to file overlap — the two features can touch entirely disjoint files and still break each other.
+
+The concrete case: one feature added a verdict value and shipped a structural test asserting that its consumers were *exactly four places*. A sibling feature added a fifth consumer. The textual merge was clean; the merge broke the first feature's own test. Read acceptance criteria for "all", "exactly N", "every", and "no other" and emit the edge by hand — nothing derives it from the diff.
+
+## 6. workmux mapping
 
 ### One worktree per wave
 
@@ -205,10 +260,11 @@ Verified against **workmux 0.1.229**:
 
 - Merge **sequentially**, never in parallel — concurrent `workmux merge` races on main's index. Merge in `waves.json` order so conflicts are reproducible.
 - Use **`merge_strategy: merge`** (not `rebase`). A vertical wave carries a whole chain of commits; rebasing replays every one of them through the same hotspot and can demand the same conflict resolution repeatedly. One merge commit resolves it once. Keep `--rebase` only for waves that are a single feature.
-- Gate every merge with `pre_merge`; a failing gate aborts the merge and preserves the worktree.
+- Gate every merge with `pre_merge`; a failing gate aborts the merge and preserves the worktree. **`pre_merge` is no longer the only check before a merge** — the driver runs a speculative probe first (below).
+- **Probe before you merge.** Before every wave merge the driver runs `git merge-tree --write-tree` against the target. It computes the merged tree without touching the index or the working tree, so it costs nothing and cannot leave a half-merged `main`; if it reports conflicts, the driver names the conflicting paths and **skips that merge**. Then, when the wave's `probe` field is `build-test` (§5), it materializes the merged tree in a throwaway worktree and runs the verification command against it — that is what catches the conflicts that merge cleanly but break behaviour, which no textual merge can see (the Crystal approach, Brun et al., FSE 2011).
 - Set `merge_keep: true` so evidence survives a bad automated run. Clean up with `workmux rm --all` after review.
 
-## 6. Mandatory pre-conditions (mechanical — skip these and it breaks deterministically)
+## 7. Mandatory pre-conditions (mechanical — skip these and it breaks deterministically)
 
 These are not quality concerns. They are guaranteed failures.
 
@@ -222,8 +278,10 @@ These are not quality concerns. They are guaranteed failures.
 | 6 | `.speckit-logs/` committed into feature branches makes every merge conflict. | `.gitignore` it. |
 | 7 | The `pre_merge` gate falls back to `uv run pytest -q` / `npm test` when `SPECKIT_VERIFY_CMD` is unset, and reads any non-zero exit as failure. A repo whose baseline already exits non-zero therefore fails **every** wave merge, and the driver only reports "conflict or gate". | Set it explicitly in `.workmux.yaml`, narrowed until it is green on the untouched baseline. Never `&&` lint/type checks onto it — they carry their own baselines. |
 | 8 | `VAR=value cmd` in a hook is **shell syntax**. If workmux exec's the hook without a shell, `VAR=...` is taken as the program name and the hook dies before the gate runs — which looks identical to a gate rejection. | Write `env VAR=value cmd`. `env` is a real binary, so it works whether or not a shell is involved. |
+| 9 | Sibling waves edit the same files, so every wave in the stage lands its conflicts at one barrier. | Waves are computed by `speckit_waves.py` from predicted file overlap, not from the dependency DAG alone. Never hand-author `waves[]`. |
+| 10 | Phase 2 runs on a provisional wave plan computed before `clarify` changed feature scope. | `speckit_parallel.sh build` refuses while `waves.json` has `status: provisional`. Finalize with `speckit_waves.py --status final` after Phase 1. |
 
-## 7. What the generated prompts must carry
+## 8. What the generated prompts must carry
 
 Vertical waves put every blocker's code on disk before `plan` runs, so the prompts stop compensating for absent code and start pointing at present code.
 
@@ -247,7 +305,7 @@ The "STOP and report" clause matters: a missing file is now **evidence of a wave
 
 **`01_specify.md`** stays tech-neutral as always; the runner injects the feature-directory pin, so the prompt must not hardcode a number.
 
-## 8. Shared infrastructure ownership
+## 9. Shared infrastructure ownership
 
 A vertical wave accumulates a whole chain of commits before it merges, so cross-wave hotspot collisions are **larger** than in a horizontal run, and they all arrive at the same barrier. Three rules, in priority order:
 
@@ -263,14 +321,14 @@ Record every file more than one feature touches, with the owning feature, the ow
 | API router / URL conf | every feature that adds an endpoint |
 | dependency manifest + lockfile | every feature that adds a dependency |
 
-## 9. Cost and rate limits
+## 10. Cost and rate limits
 
 Concurrent `claude -p` sessions multiply input tokens (CLAUDE.md + constitution + prompt) by the concurrency factor. Headless `claude -p` bills against Agent SDK credits separately from the interactive subscription pool, and falls back to API rates when exhausted.
 
 - **Phase 1** is cheap and short — run all N. Throttle only after seeing 429s.
 - **Phase 2** concurrency is bounded by the wave count, which the DAG fixes; `--max-concurrent` caps it further. Each wave is long-running, so a 429 mid-wave is expensive — start at 4..6 concurrent waves.
 
-## 10. Notes on adjacent stages
+## 11. Notes on adjacent stages
 
 - **`/speckit.taskstoissues`** (not part of this skill's 8-stage flow): if used, run it **sequentially**, only on `analyze`-passed tasks, and preview with `--dry-run`. It writes to external shared state (GitHub Issues); its duplicate-check is check-then-create and races under concurrency, and mis-created issues cannot be `git reset`.
 - **`/speckit.converge` exit codes** report execution success, not convergence. Detect convergence with a sentinel in the output, and guard against phantom completion (`[X]` marked but unimplemented) with real build/test gates — the `pre_merge` gate enforces this by rejecting any unchecked `- [ ] T…` line.
