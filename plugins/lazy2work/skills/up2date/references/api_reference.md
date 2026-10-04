@@ -34,10 +34,10 @@ than reimplemented. The script only *detects* staleness from git.
 | `claude plugin marketplace update <name>` | Refresh one marketplace from its source |
 | `claude plugin update <plugin> --scope <scope> --yes` | Update an installed plugin in place |
 
-`--scope` accepts `user` (default), `project`, `local`, or `managed`, and is read
-from the plugin's own registry entry. `--yes` is mandatory when stdin/stdout is
-not a TTY. Neither command affects the running session — restart Claude Code to
-load an updated plugin.
+`--scope` accepts `user`, `project`, `local`, or `managed` (the CLI auto-detects
+it when omitted, since v2.1.281), and is read from the plugin's own registry
+entry. `--yes` is mandatory when stdin/stdout is not a TTY. Neither command
+affects the running session — restart Claude Code to load an updated plugin.
 
 ## Claude Code Paths
 

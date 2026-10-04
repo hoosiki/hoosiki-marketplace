@@ -404,13 +404,27 @@ def _node_type(node: dict, schemas: set[str]) -> str:
     return _TYPE_MAP.get(t, t)
 
 
+# Return annotations that Hamilton's built-in `@check_output` validators accept,
+# per kwarg (hamilton.data_quality.default_validators). A `@check_output` kwarg
+# with no validator for the return type fails at Driver build time, so other
+# return types (pd.DataFrame, np.ndarray, ...) get a TODO comment instead.
+_CHECK_OUTPUT_TYPES: dict[str, set[str]] = {
+    "range": {"pd.Series", "int", "float"},
+    "allow_nans": {"pd.Series"},
+}
+
+
 def _build_decorators(node: dict, ret_type: str) -> str:
     """Render the Hamilton decorator stack for a node.
 
-    DataFrame returns receive `# TODO: @check_output_custom(...)` comments
-    instead of `@check_output(...)` because Hamilton's built-in decorator
-    doesn't support DataFrame outputs (use `@check_output_custom` with a
-    `RowModelValidator` for those).
+    Return types that Hamilton's built-in `@check_output` validators don't
+    cover (see `_CHECK_OUTPUT_TYPES`) — e.g. DataFrame or ndarray outputs —
+    receive `# TODO: @check_output_custom(...)` comments instead (use
+    `@check_output_custom` with a `RowModelValidator` for DataFrames).
+
+    `range` and `no_nulls` are merged into a single `@check_output(...)` call:
+    Hamilton rejects stacked `@check_output` decorators on one function
+    ("Cannot define function <node>_raw more than once").
 
     Args:
         node: The node spec.
@@ -422,24 +436,35 @@ def _build_decorators(node: dict, ret_type: str) -> str:
     Examples:
         >>> _build_decorators({"invariants": [{"range": [0, 1]}]}, "float")
         '@check_output(range=(0, 1), importance="fail")\\n'
+        >>> _build_decorators(
+        ...     {"invariants": [{"range": [0, 1]}, {"no_nulls": True}]}, "pd.Series")
+        '@check_output(range=(0, 1), allow_nans=False, importance="fail")\\n'
+        >>> _build_decorators({"invariants": [{"no_nulls": True}]}, "np.ndarray")
+        '# TODO: @check_output_custom(allow_nans=False)  # np.ndarray\\n'
     """
     lines: list[str] = []
-    df_return = ret_type == "pd.DataFrame"
+    check_kwargs: list[str] = []
+    check_at = 0
     for inv in node.get("invariants") or []:
         if "range" in inv:
             lo, hi = inv["range"]
-            if df_return:
-                lines.append(f"# TODO: @check_output_custom(range=({lo}, {hi}))  # DataFrame")
-            else:
-                lines.append(f'@check_output(range=({lo}, {hi}), importance="fail")')
+            kind, kwarg = "range", f"range=({lo}, {hi})"
         elif inv.get("no_nulls"):
-            if df_return:
-                lines.append("# TODO: @check_output_custom(allow_nans=False)  # DataFrame")
-            else:
-                lines.append('@check_output(allow_nans=False, importance="fail")')
+            kind, kwarg = "allow_nans", "allow_nans=False"
         elif "values" in inv or "regex" in inv:
             kind = "values" if "values" in inv else "regex"
             lines.append(f"# TODO: @check_output_custom({kind}={inv[kind]!r})")
+            continue
+        else:
+            continue
+        if ret_type not in _CHECK_OUTPUT_TYPES[kind]:
+            lines.append(f"# TODO: @check_output_custom({kwarg})  # {ret_type}")
+            continue
+        if not check_kwargs:
+            check_at = len(lines)
+        check_kwargs.append(kwarg)
+    if check_kwargs:
+        lines.insert(check_at, f'@check_output({", ".join(check_kwargs)}, importance="fail")')
     tags = node.get("tags") or {}
     if tags:
         kv = ", ".join(f'{k}="{v}"' for k, v in tags.items())

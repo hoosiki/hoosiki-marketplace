@@ -33,13 +33,15 @@ Each entry points to a dedicated procedure below. Work each procedure sequential
 
 ## B. Runtime contract violation (@check_output or Pydantic)
 
-1. Note the failing node name from the traceback (it will appear as `<node>_raw_check_output_...`).
+1. Note the failing node name from the traceback (it will appear as `[<node>:<validator>] validator failed`, e.g. `[score:range_validator]`).
 2. Open a Python shell or a small script (run from inside `hamilton_pipeline/`):
    ```python
+   from pathlib import Path
    from hamilton import driver
    import src.pipelines.<module> as pipeline
    dr = driver.Builder().with_modules(pipeline).build()
-   dr.display_upstream_of("<node>", "spec_build/dags/debug/upstream.png")
+   Path("spec_build/dags/debug").mkdir(parents=True, exist_ok=True)
+   dr.display_upstream_of("<node>", output_file_path="spec_build/dags/debug/upstream.png")
    ```
 3. Execute only the upstream nodes, checking the actual values:
    ```python

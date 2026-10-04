@@ -7,7 +7,8 @@ conversion study), verified against the live `linear-server` MCP schemas.
 
 ## 1. Input artifacts (what the parser must know)
 
-`specs/NNN-feature-name/` per feature:
+`specs/NNN-feature-name/` per feature (or `specs/YYYYMMDD-HHMMSS-feature-name/`
+when `.specify/init-options.json` sets `feature_numbering: "timestamp"`):
 
 | File | Produced by | Structure | Role here |
 |---|---|---|---|

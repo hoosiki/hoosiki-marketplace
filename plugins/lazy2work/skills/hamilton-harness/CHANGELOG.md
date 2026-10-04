@@ -2,6 +2,52 @@
 
 This changelog tracks the skill's own version independently from the `lazy2work` plugin that bundles it. Follow SemVer.
 
+## [1.50.0] — 2026-10-04
+
+### Changed
+
+- **Hamilton package renamed: `sf-hamilton` → `apache-hamilton`.** Hamilton is
+  now Apache Hamilton (incubating); `sf-hamilton` 1.90.0 on PyPI is only a
+  redirect that depends on `apache-hamilton`. Install commands in
+  `QUICKSTART.md` and `templates/github-workflow-dag-gate.yml`, and the error
+  hints in `viz.py`, `dump_impl_meta.py`, `row_validator.py`, now name
+  `apache-hamilton`. Import paths (`from hamilton import driver`) are unchanged.
+- **`github-workflow-dag-gate.yml`** — `actions/checkout@v4` → `@v7`,
+  `actions/setup-python@v5` → `@v7`, `actions/upload-artifact@v4` → `@v7`
+  (Node 24 runtime; the inputs used here are unchanged).
+
+### Fixed
+
+- **`yaml_to_hamilton_stub.py`** — a node with both `range` and `no_nulls`
+  got two stacked `@check_output` decorators, which Hamilton rejects at Driver
+  build time (`Cannot define function <node>_raw more than once`); they are now
+  merged into one `@check_output(...)` call. Invariants on return types that
+  Hamilton's built-in validators don't cover (only `pd.Series`, plus
+  `int`/`float` for `range`) now become `# TODO: @check_output_custom(...)`
+  comments, as DataFrames already did — the `rag` example's `np.ndarray` node
+  broke the Driver build before. `SPEC.md` §3 updated to match.
+- **`row_validator.py`** — `RowModelValidator` could not be instantiated: it
+  lacked `BaseDefaultValidator`'s abstract `arg()` classmethod.
+- **`dump_impl_meta.py`** — file-path mode now registers the module in
+  `sys.modules`; without it Hamilton found 0 nodes (or raised `AttributeError`
+  on older releases).
+- **`DEBUG.md`** Entry B — `display_upstream_of` takes node names as `*args`,
+  so the output path is now passed as `output_file_path=` (directory created
+  first); the failing-node hint now matches Hamilton's
+  `[<node>:<validator>] validator failed` message.
+
+### Migration
+
+For projects that copied the templates:
+
+```bash
+# requirements.txt / CI: sf-hamilton[...] → apache-hamilton[...]
+# .github/workflows/dag-gate.yml: actions/checkout, actions/setup-python,
+#   actions/upload-artifact → @v7
+```
+
+Regenerate stubs with `viz.py` to pick up the merged `@check_output` decorators.
+
 ## [1.27.0] — 2026-05-27
 
 ### Changed

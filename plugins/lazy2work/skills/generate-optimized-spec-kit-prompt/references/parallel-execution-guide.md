@@ -323,7 +323,7 @@ Record every file more than one feature touches, with the owning feature, the ow
 
 ## 10. Cost and rate limits
 
-Concurrent `claude -p` sessions multiply input tokens (CLAUDE.md + constitution + prompt) by the concurrency factor. Headless `claude -p` bills against Agent SDK credits separately from the interactive subscription pool, and falls back to API rates when exhausted.
+Concurrent `claude -p` sessions multiply input tokens (CLAUDE.md + constitution + prompt) by the concurrency factor. Headless `claude -p` bills against Agent SDK credits separately from the interactive subscription pool. Once the monthly credit runs out it moves to usage credits at API rates only if usage credits are enabled; otherwise requests stop until the credit refreshes, which can halt a wave mid-chain.
 
 - **Phase 1** is cheap and short — run all N. Throttle only after seeing 429s.
 - **Phase 2** concurrency is bounded by the wave count, which the DAG fixes; `--max-concurrent` caps it further. Each wave is long-running, so a 429 mid-wave is expensive — start at 4..6 concurrent waves.

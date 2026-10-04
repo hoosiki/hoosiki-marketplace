@@ -3,7 +3,7 @@
 
 Scans Markdown files for ```mermaid code blocks and detects/fixes:
   1. Sequence diagram reserved word conflicts (participant IDs)
-  2. Special characters in message text ({, }, [, ], ")
+  2. Special characters in sequence diagram message text ({, }, [, ], ")
   3. Unicode issues (smart quotes, fullwidth CJK, invisible chars, typographic dashes)
 
 Usage:
@@ -283,6 +283,50 @@ def fix_message_line(line: str) -> tuple[str, bool]:
 
 
 # ---------------------------------------------------------------------------
+# Diagram type detection
+# ---------------------------------------------------------------------------
+
+def diagram_header(block_lines: list[str]) -> str:
+    """Return the diagram type declaration line of a mermaid block.
+
+    Skips an optional leading YAML front matter block (``---`` ... ``---``),
+    blank lines, and ``%%`` comments/directives. Mermaid v12 changed the
+    default theme, look, and layout, and its release notes tell authors to
+    pin the old ones in front matter, so the declaration is often not the
+    first line of the block.
+
+    Args:
+        block_lines: Lines inside a mermaid block (without the fences).
+
+    Returns:
+        The stripped declaration line (e.g. ``"sequenceDiagram"``), or an
+        empty string if the block has no declaration.
+
+    Examples:
+        >>> diagram_header(["sequenceDiagram", "A->>B: hi"])
+        'sequenceDiagram'
+        >>> diagram_header(["---", "config:", "  look: classic", "---", "sequenceDiagram"])
+        'sequenceDiagram'
+        >>> diagram_header(["%% comment", "flowchart TD"])
+        'flowchart TD'
+    """
+    i = 0
+    while i < len(block_lines) and not block_lines[i].strip():
+        i += 1
+    if i < len(block_lines) and block_lines[i].strip() == "---":
+        i += 1
+        while i < len(block_lines) and block_lines[i].strip() != "---":
+            i += 1
+        i += 1  # skip the closing ---
+    for line in block_lines[i:]:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("%%"):
+            continue
+        return stripped
+    return ""
+
+
+# ---------------------------------------------------------------------------
 # Reserved word detection & fix
 # ---------------------------------------------------------------------------
 
@@ -301,7 +345,7 @@ def find_reserved_word_issues(
     Returns:
         Tuple of (issues found, rename map {old_id: new_id}).
     """
-    if not block_lines or block_lines[0].strip() != "sequenceDiagram":
+    if not block_lines or diagram_header(block_lines) != "sequenceDiagram":
         return [], {}
 
     issues: list[Issue] = []
@@ -402,7 +446,11 @@ def process_file(filepath: Path, apply_fix: bool = False) -> list[Issue]:
             if rename_map:
                 block_lines = apply_renames(block_lines, rename_map)
 
-            # Phase 2: Unicode + message escaping (line by line)
+            # Phase 2: Unicode + message escaping (line by line).
+            # Message escaping is sequence-only: in other diagram types the
+            # arrow regex also matches lines like `A --> B@{shape: diam}` or
+            # `A --> B["Check: OK"]` and the escape breaks them.
+            is_sequence = diagram_header(block_lines) == "sequenceDiagram"
             fixed_block: list[str] = []
             for j, bline in enumerate(block_lines):
                 line_num = block_start + j + 1  # 1-based
@@ -419,8 +467,8 @@ def process_file(filepath: Path, apply_fix: bool = False) -> list[Issue]:
                     ))
                     bline = fixed
 
-                # Message entity escaping
-                escaped, changed = fix_message_line(bline)
+                # Message entity escaping (sequence diagrams only)
+                escaped, changed = fix_message_line(bline) if is_sequence else (bline, False)
                 if changed:
                     all_issues.append(Issue(
                         line=line_num,
@@ -670,7 +718,7 @@ def main() -> int:
     if with_mmdc and find_mmdc_executable() is None:
         print(
             "ERROR: --with-mmdc requires mmdc on PATH. "
-            "Install via `npm i -g @mermaid-js/mermaid-cli`.",
+            "Install via `npm i -g --allow-scripts=puppeteer @mermaid-js/mermaid-cli`.",
             file=sys.stderr,
         )
         return 2

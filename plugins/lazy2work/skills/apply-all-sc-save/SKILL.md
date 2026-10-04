@@ -10,7 +10,7 @@ Send `/sc:save` to all Claude Code panes in the current tmux session, excluding 
 ## Behavioral Flow
 
 1. Detect the current tmux session and own pane ID
-2. Scan all panes in the session for `pane_current_command == "claude"`
+2. Scan all panes in the session for a Claude `pane_current_command` (`claude` or a version string such as `2.1.286`)
 3. Exclude the current pane (self)
 4. Send `/sc:save` + Enter to each discovered Claude pane via `tmux send-keys`
 5. Report results
@@ -51,4 +51,4 @@ python3 scripts/save_all_claude.py --command "/help"
 
 - The target Claude instance must be in an **idle state** (waiting for user input) to process the command. If Claude is mid-execution, the keys will be buffered and may execute when it becomes idle.
 - The script uses `$TMUX_PANE` environment variable to identify self. This is automatically set by tmux.
-- Only panes where `pane_current_command` is exactly `claude` are targeted.
+- Only panes whose `pane_current_command` starts with `claude` or is a version string (`X.Y.Z`) are targeted. Native-installer builds report the version (e.g. `2.1.286`), because `~/.local/bin/claude` is a symlink into `~/.local/share/claude/versions/<version>`.

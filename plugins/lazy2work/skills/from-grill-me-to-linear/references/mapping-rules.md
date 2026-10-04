@@ -14,10 +14,10 @@ against the live `linear-server` MCP schemas.
 | ↳ slice too big (bundle of end-to-end tasks) | Promote to **Milestone**, decompose inside into Issues | When one story bundles several through-cutting tasks |
 | Scaffold/boilerplate-only work | **Sub-issue** (`parentId`) — **1 level max** | No deep trees |
 | Implementation/Testing Decisions | ❌ → link to ADR / project document | Decisions are not issues |
-| CONTEXT.md glossary | ❌ → stays in repo, link only | "Zero implementation detail" in Linear |
+| `GLOSSARY.md` glossary (formerly `CONTEXT.md`) | ❌ → stays in repo, link only | "Zero implementation detail" in Linear |
 | Out of Scope | ❌ → one line in project summary | Prevents scope creep |
 | Open questions | ❌ → Triage or issue comment | Only resolved items deserve issues |
-| HITL/AFK markers | **Label** `mode:hitl` / `mode:afk` | Enables agent-delegation pipelines |
+| HITL/AFK markers (older outputs) or the ticket's `Status:` triage line (`ready-for-human` ⇒ HITL, `ready-for-agent` ⇒ AFK) | **Label** `mode:hitl` / `mode:afk` | Enables agent-delegation pipelines |
 | Inter-slice dependencies | **blocked-by relations** (DAG) | Never encode as milestone sequence |
 | Acceptance criteria / "pytest passes" clauses | ❌ not separate issues → **AC/DoD checklist inside the issue body** | TDD: the test is part of the issue's DoD |
 | Weekly timebox | **Cycle** (optional, orthogonal to milestones) | Milestone = scope, Cycle = time — never conflate |
@@ -41,7 +41,9 @@ Project      = 1 PRD                          (save_project)
 
 ## 3. Dependency (DAG) rules
 
-- Parse `Blocked by <ID>` lines → `save_issue.blockedBy` arrays.
+- Parse `Blocked by <ID>` lines → `save_issue.blockedBy` arrays. Current
+  `/to-tickets` files write `**Blocked by:**` with ticket numbers/titles, or
+  a `None …` line (e.g. `None (can start immediately)`) for no blockers.
 - **No linearization**: a fan-out like `01→02→{03,04,05,06}` must stay
   parallel. Milestone numbering must not imply a false serial order.
 - Publish in **topological order** so every `blockedBy` reference already

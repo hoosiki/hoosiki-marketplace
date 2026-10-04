@@ -53,8 +53,9 @@
 #   이것이 없으면 각 프로세스가 specs/ 를 스캔해 max+1 을 계산하므로 전부 같은 번호를 집는다.
 #   (레거시 ≤0.11 호환: 프리앰블이 create-new-feature.sh --number/--short-name 도 함께 지시한다.)
 #
-# 주의: claude -p는 슬래시 명령(/speckit.implement 등)을 지원하지 않으므로,
-# 프롬프트 파일 내용을 직접 지시사항으로 전달합니다.
+# 참고: 현행 claude -p 는 프롬프트 속 사용자 호출 스킬·커스텀 명령(/skill-name)을 펼친다
+#   (https://code.claude.com/docs/en/headless). 이 러너는 프리앰블을 앞에 붙인 뒤
+#   프롬프트 파일 내용을 그대로 지시사항으로 전달합니다.
 #
 # 권한: 모든 claude -p 호출은 --permission-mode bypassPermissions + --dangerously-skip-permissions로
 # 무인 실행된다(권한 확인·다이얼로그 생략). ⚠️ root/sudo로는 거부되며, 격리 환경(컨테이너/VM/dev container)

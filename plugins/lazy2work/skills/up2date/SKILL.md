@@ -80,12 +80,14 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/up2date.py --skill --no-skill-prune
 - Updated plugins land in the cache but do **not** affect the running session —
   Claude Code must be restarted to load them
 - Plugin updates are skipped with a notice if the `claude` executable is absent
-- SuperClaude updates use `superclaude update`
+- SuperClaude updates use `superclaude update`, which re-installs the slash
+  commands of the **installed** package version (`install --force`). It does not
+  upgrade the package — run `pipx upgrade superclaude` first to get a newer release
 - User skills (`~/.claude/skills/`) are manually managed; only status checks are performed
 - The plugin skill scan covers two layouts, in order: `<installPath>/skills/`
   (most plugins) and `<installPath>/.claude/skills/` (e.g. `ui-ux-pro-max`).
   Only the first match is read, so a plugin shipping both is not double-counted
-- Global agent-skill update needs `npx` (Node.js 18+); it is skipped with a notice if `npx` is absent
+- Global agent-skill update needs `npx` (Node.js 22.20+); it is skipped with a notice if `npx` is absent
 - Dead-skill pruning is **on by default** with `--skill`; pass `--no-skill-prune` to keep them
 - `brew upgrade --cask --greedy` upgrades all casks including those with `auto_updates=true`
 - `brew cleanup --prune=all` removes cached downloads, but **not** Caskroom

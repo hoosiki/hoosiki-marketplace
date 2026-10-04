@@ -392,7 +392,11 @@ def main() -> int:
         return 0
 
     if find_mmdc_executable() is None:
-        print("ERROR: mmdc not found on PATH. Install via `npm i -g @mermaid-js/mermaid-cli`.", file=sys.stderr)
+        print(
+            "ERROR: mmdc not found on PATH. "
+            "Install via `npm i -g --allow-scripts=puppeteer @mermaid-js/mermaid-cli`.",
+            file=sys.stderr,
+        )
         return 2
 
     output_json = "--json" in sys.argv

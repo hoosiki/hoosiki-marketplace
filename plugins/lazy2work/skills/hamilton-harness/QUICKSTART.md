@@ -6,7 +6,7 @@ This walkthrough uses the `etl` example to get you from zero to a rendered DAG. 
 
 ```bash
 # Python packages
-uv pip install "sf-hamilton[visualization,pandera]" pydantic hypothesis pyyaml jsonschema networkx
+uv pip install "apache-hamilton[visualization,pandera]" pydantic hypothesis pyyaml jsonschema networkx
 
 # System binary (macOS example)
 brew install graphviz

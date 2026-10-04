@@ -20,9 +20,9 @@ jobs:
       run:
         working-directory: hamilton_pipeline
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -33,7 +33,7 @@ jobs:
       - name: Install Python deps
         run: |
           pip install -r requirements.txt
-          pip install "sf-hamilton[visualization]" pydantic pyyaml jsonschema networkx
+          pip install "apache-hamilton[visualization]" pydantic pyyaml jsonschema networkx
 
       - name: Validate every spec
         run: |
@@ -63,7 +63,7 @@ jobs:
 
       - name: Upload DAG artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dag-diagrams
           path: |

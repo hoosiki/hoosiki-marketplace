@@ -6,13 +6,14 @@
   <title><!-- REPLACE: 덱 제목 --></title>
 
   <!-- 전략 A: 내장 테마 미사용 — reset.css + reveal.css만 로드 -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/dist/reset.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/dist/reveal.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@6.0.2/dist/reset.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@6.0.2/dist/reveal.css">
 
   <!-- Pretendard (프로토타입용 CDN — 발표 배포 시 로컬 번들로 교체) -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 
-  <!-- Tailwind Play CDN — 프로토타입용. 배포·오프라인 발표 시 빌드로 교체할 것 -->
+  <!-- Tailwind v3 Play CDN — 프로토타입용. 배포·오프라인 발표 시 빌드로 교체할 것.
+       v4 Play CDN(@tailwindcss/browser)으로 바꾸지 마라 — SKILL.md 기술 가드레일 참조 -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = { darkMode: 'class' };
@@ -201,8 +202,8 @@
 
   </div></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/dist/reveal.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/plugin/notes/notes.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@6.0.2/dist/reveal.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@6.0.2/dist/plugin/notes.js"></script>
   <script>
     // ----- 라이트/다크 토글 (검증된 배관 — 수정 없이 사용) -----
     const THEME_BG = {

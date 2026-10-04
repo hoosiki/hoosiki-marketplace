@@ -62,8 +62,8 @@ def _render_hamilton(spec: dict, stub_paths: list[str],
     try:
         from hamilton import driver
     except ImportError:
-        print("error: sf-hamilton not installed. Install with "
-              "`pip install 'sf-hamilton[visualization]'`.", file=sys.stderr)
+        print("error: apache-hamilton not installed. Install with "
+              "`pip install 'apache-hamilton[visualization]'`.", file=sys.stderr)
         return []
 
     import importlib.util

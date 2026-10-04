@@ -21,6 +21,9 @@ def _load_module(module_path: str):
         if spec is None or spec.loader is None:
             raise ImportError(f"cannot load {module_path}")
         mod = importlib.util.module_from_spec(spec)
+        # Hamilton resolves each function's module via sys.modules; unregistered
+        # modules yield 0 nodes (or an AttributeError on older releases).
+        sys.modules[path_obj.stem] = mod
         spec.loader.exec_module(mod)
         return mod
     return importlib.import_module(module_path)
@@ -30,7 +33,7 @@ def dump(module_ref: str, output_path: str) -> dict:
     try:
         from hamilton import driver
     except ImportError:
-        sys.exit("error: sf-hamilton is required. `pip install sf-hamilton[visualization]`.")
+        sys.exit("error: apache-hamilton is required. `pip install apache-hamilton[visualization]`.")
 
     module = _load_module(module_ref)
     dr = driver.Builder().with_modules(module).build()

@@ -124,7 +124,7 @@ class UserScore(BaseModel):
 | `values` | list of literals | `@check_output_custom(ValuesInValidator(values))` |
 | `regex` | string | `@check_output_custom(RegexValidator(pattern))` |
 
-Multiple entries stack into multiple decorators on the same function.
+Multiple `range` / `no_nulls` entries merge into one `@check_output(range=(lo, hi), allow_nans=False, importance="fail")` call — Hamilton does not allow stacking `@check_output` on the same function. Hamilton's built-in validators cover `range` only for `pd.Series` / `int` / `float` returns and `no_nulls` only for `pd.Series`; for any other return type (e.g. `pd.DataFrame`, `np.ndarray`) the stub emits a `# TODO: @check_output_custom(...)` comment instead.
 
 ### DataFrame invariants
 

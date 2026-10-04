@@ -93,7 +93,7 @@ x = 1
 ### 1.4 Why It Looks Intermittent
 
 Whether the block is parsed correctly without a blank line depends on the
-Markdown dialect (`markdown_github` vs `markdown` vs `markdown_strict`),
+Markdown dialect (`gfm` vs `markdown` vs `markdown_strict`),
 pandoc version, and surrounding context. This makes the bug appear
 non-reproducible. The only reliable rule is: **always put a blank line
 before a block element**.
@@ -508,15 +508,15 @@ report and a step-by-step trace.
 | Markdown inline | Pandoc escape | `\seqsplit` outcome |
 |---|---|---|
 | `` `x^y` `` | `\^{}` | **breaks** — observed |
-| `` `x~y` `` | `\~{}` | **breaks** — same mechanism |
+| `` `x~y` `` | `\textasciitilde{}` | usually OK (no break in pandoc 3.12 test) |
 | `` `x&y` `` | `\&` | breaks in some contexts |
 | `` `x$y` `` | `\$` | breaks in some contexts |
 | `` `x%y` `` | `\%` | breaks in some contexts |
 | `` `x_y` `` | `\_` | usually OK |
 | `` `x#y` `` | `\#` | usually OK |
 
-Pandoc converts fenced code blocks to `\verb`/`lstlisting` (not
-`\texttt`), so the `\seqsplit` wrapper does not apply there. **Only
+Pandoc converts fenced code blocks to `verbatim`/`Highlighting`
+environments (not `\texttt`), so the `\seqsplit` wrapper does not apply there. **Only
 inline backtick spans are at risk.**
 
 ### 7.4 Detection Rule
@@ -560,7 +560,8 @@ In priority order:
 4. **Pandoc option** (rarely worth it — has its own side effects):
 
    ```bash
-   pandoc input.md --listings -o out.pdf
+   # --listings is deprecated since pandoc 3.8
+   pandoc input.md --syntax-highlighting=idiomatic -o out.pdf
    ```
 
 ### 7.6 Diagnostic Commands

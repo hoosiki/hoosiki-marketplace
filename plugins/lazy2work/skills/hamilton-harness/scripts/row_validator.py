@@ -29,7 +29,7 @@ try:
     from hamilton.data_quality.base import ValidationResult
 except ImportError as e:
     raise ImportError(
-        f"row_validator requires pandas, pydantic>=2, and sf-hamilton. "
+        f"row_validator requires pandas, pydantic>=2, and apache-hamilton. "
         f"Missing: {e.name}"
     )
 
@@ -57,6 +57,11 @@ class RowModelValidator(base.BaseDefaultValidator):
     def description(cls) -> str:
         return ("Samples rows from a DataFrame and validates each against a "
                 "Pydantic model; reports failures and the first few error details.")
+
+    @classmethod
+    def arg(cls) -> str:
+        # Abstract on BaseDefaultValidator; without it the class can't be instantiated.
+        return "row_model"
 
     @classmethod
     def name(cls) -> str:

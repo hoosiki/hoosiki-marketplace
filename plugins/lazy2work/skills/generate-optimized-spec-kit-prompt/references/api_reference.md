@@ -686,7 +686,7 @@ Copy the skill's bundled assets verbatim and `chmod +x`. Do not regenerate them 
 
 ### `utilities/{prd-name}/speckit_pipeline.sh` — headless stage runner
 
-Iterates the `NNN-<slug>` feature folders under `.speckit-prompts/{prd-name}/` and runs each stage via `claude -p` (slash commands aren't supported headless, so it feeds each prompt file's contents as the instruction). It is the single source of stage/model/effort logic — the parallel driver delegates to it.
+Iterates the `NNN-<slug>` feature folders under `.speckit-prompts/{prd-name}/` and runs each stage via `claude -p`, feeding each prompt file's contents (behind a preamble) as the instruction. It is the single source of stage/model/effort logic — the parallel driver delegates to it.
 
 ```bash
 # Sequential, everything
@@ -740,7 +740,7 @@ Per-stage defaults (override via env vars `SPECIFY_MODEL`/`SPECIFY_EFFORT`, `CLA
 | 08_converge | latest Opus | xhigh | 2000 |
 | commit | session default | — | 10 |
 
-`xhigh` needs a recent Opus or Sonnet 5+; if resolution lands on an older model the API falls back to `high`.
+`xhigh` needs a recent Opus or Sonnet 5+; if resolution lands on an older model Claude Code falls back to `high`.
 
 Logs land in `$SPECKIT_LOG_ROOT/<timestamp>/`; a checkpoint file enables `--resume`.
 

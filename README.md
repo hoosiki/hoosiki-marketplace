@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.49.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.50.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -40,7 +40,7 @@ runs both of these for you across every installed plugin.
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.49.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
+| [**lazy2work**](plugins/lazy2work/) | 1.50.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
 
 ---
 
@@ -69,9 +69,9 @@ Optional, per skill:
 | **generate-optimized-spec-kit-prompt** | `/lazy2work:generate-optimized-spec-kit-prompt` | Generate complete Spec Kit prompts for the full 8-stage flow (specify → clarify → plan → checklist → tasks → analyze → implement → converge, + commit) from a PRD + pre-sliced issue files — 1 issue = 1 feature (no re-slicing), Mermaid diagrams, `/speckit.tasks` command-only (no hand-authored tasks), and auto-accept prompts for clarify/checklist/analyze/converge. Also plans the run for **maximum parallelism**: a dependency DAG (`DEPENDENCIES.md` with a Mermaid diagram), **vertical waves** (`waves.json` — one wave = one dependency chain), a two-phase runbook (`PARALLEL_EXECUTION.md`), and 5 runner scripts — Phase 1 runs every feature as background processes in one working tree, Phase 2 runs the trunk chain then the branch chains in parallel workmux worktrees. Waves are **computed from predicted file overlap**, not from dependencies alone: one subagent per issue predicts the files that feature will touch, and the scheduler keeps two features that would collide out of sibling waves, so a stage merge does not fail halfway through |
 | **pyright-setup** | `/lazy2work:pyright-setup` | Auto-configure Pyright for Python projects — detects Python version from venv, adds `[tool.pyright]` to pyproject.toml, resolves "Import could not be resolved" LSP errors in Neovim/VS Code |
 | **apply-all-sc-save** | `/lazy2work:apply-all-sc-save` | Broadcast `/sc:save` to all Claude Code panes in the current tmux session — auto-detects Claude panes, excludes self, supports `--dry-run`, `--all-sessions`, and custom commands |
-| **fix-mermaid** | `/lazy2work:fix-mermaid` | Fix Markdown rendering issues that break Mermaid diagrams or pandoc PDF conversion — Mermaid v11 syntax (reserved words, Unicode/Langium issues, message escaping) **and** pandoc PDF pitfalls (blank-line compliance before lists/tables/fences as auto-fixed errors, long-mixed-cell overflow as warnings, always-on Unicode glyph map covering U+2212/U+2717/U+2718, **currency-dollar auto-escape** for `$100`/`$76.4억` that prevents `Bad math environment delimiter` errors, **unsafe-inline-code warnings** for `` `pass^k` ``-style content that collides with the `\seqsplit` wrapper and causes `Missing number, treated as zero`, **closing-dollar-trailing-space auto-fix** for `$\mathcal{H}_1 = $ rest` patterns that violate pandoc's `tex_math_dollars` rule and cause `\symcal allowed only in math mode`, plus opt-in **`--latin1-normalize`** for Latin-1 Supplement diacritics like `á é ñ ü ß`). Three bundled Python scripts (`fix_mermaid.py`, `fix_pandoc_blanks.py`, `validate_mermaid.py`) with lint / `--fix` / `--json` modes, plus optional **`--with-mmdc` feedback loop** that renders each diagram with Mermaid CLI and iterates targeted fixes until clean |
+| **fix-mermaid** | `/lazy2work:fix-mermaid` | Fix Markdown rendering issues that break Mermaid diagrams or pandoc PDF conversion — Mermaid v11/v12 syntax (reserved words, Unicode/Langium issues, message escaping) **and** pandoc PDF pitfalls (blank-line compliance before lists/tables/fences as auto-fixed errors, long-mixed-cell overflow as warnings, always-on Unicode glyph map covering U+2212/U+2717/U+2718, **currency-dollar auto-escape** for `$100`/`$76.4억` that prevents `Bad math environment delimiter` errors, **unsafe-inline-code warnings** for `` `pass^k` ``-style content that collides with the `\seqsplit` wrapper and causes `Missing number, treated as zero`, **closing-dollar-trailing-space auto-fix** for `$\mathcal{H}_1 = $ rest` patterns that violate pandoc's `tex_math_dollars` rule and cause `\symcal allowed only in math mode`, plus opt-in **`--latin1-normalize`** for Latin-1 Supplement diacritics like `á é ñ ü ß`). Three bundled Python scripts (`fix_mermaid.py`, `fix_pandoc_blanks.py`, `validate_mermaid.py`) with lint / `--fix` / `--json` modes, plus optional **`--with-mmdc` feedback loop** that renders each diagram with Mermaid CLI and iterates targeted fixes until clean |
 | **hamilton-harness** | `/lazy2work:hamilton-harness` | Build Hamilton data pipelines through a spec-driven workflow — 4 modes (prompt→YAML, validate, stub+viz, modify), Pydantic schemas, Mermaid/Graphviz/Hamilton rendering, 3 domain examples (ETL/ML/RAG). Artifacts land under **`spec_build/`** (renamed from `build/` in v1.27.0 to avoid colliding with Python packaging / Sphinx / CMake build directories). Self-contained — no plugin-level hooks or rules needed |
-| **make-ppt-html** | `/lazy2work:make-ppt-html` | Convert any document (research note, report, README, storyboard) into a presentation-quality **reveal.js 5.2.1 + Tailwind CSS** single-file HTML deck with a **light↔dark theme toggle** (button + `D` key + localStorage). Follows bundled design guidelines — assertion-style slide titles, 60-30-10 single-accent color system, WCAG-verified contrast pairs, Pretendard, speaker notes, `?print-pdf` export — and ships a browser-verified `template.html` that pre-solves the reveal×Tailwind integration traps (Meyer-reset border-style kill, `Reveal.sync()` background re-theming, print-mode toggle hiding, dark-variant class pairing) |
+| **make-ppt-html** | `/lazy2work:make-ppt-html` | Convert any document (research note, report, README, storyboard) into a presentation-quality **reveal.js 6.0.2 + Tailwind CSS** single-file HTML deck with a **light↔dark theme toggle** (button + `D` key + localStorage). Follows bundled design guidelines — assertion-style slide titles, 60-30-10 single-accent color system, WCAG-verified contrast pairs, Pretendard, speaker notes, `?print-pdf` export — and ships a browser-verified `template.html` that pre-solves the reveal×Tailwind integration traps (Meyer-reset border-style kill, `Reveal.sync()` background re-theming, print-mode toggle hiding, dark-variant class pairing) |
 | **from-grill-me-to-linear** | `/lazy2work:from-grill-me-to-linear` | Publish grill-me/grill-with-docs outputs (PRD + vertical-slice issue files) into a Linear team as a **Project→Milestone→Issue→Sub-issue** hierarchy via the linear-server MCP — filters non-issue noise (user stories, decisions, glossary → project brief/links), preserves the dependency DAG with `blocked-by` relations (no false milestone serialization), and enforces **dry-run approval + idempotent upsert** (query-reuse-update so re-runs never duplicate labels or issues). Requires the Linear MCP integration |
 | **from-speckit-to-linear** | `/lazy2work:from-speckit-to-linear` | Publish GitHub Spec Kit outputs (`spec.md` + `plan.md` + `tasks.md`) into a Linear team as a **Project→Milestone→Issue→Sub-issue** hierarchy via the linear-server MCP — **mirrors the tasks.md phase structure instead of re-slicing** (Setup+Foundational → an `M0 Foundation` milestone that blocks every story, User Stories P1/P2/P3 → milestones whose "done" = each story's Independent Test, tasks → verb-first issues keyed by their **T-ID for idempotent re-runs**), keeps the 40–50 FRs as acceptance-criteria checklists instead of issues, and blocks publication while `[NEEDS CLARIFICATION]` markers remain (routes to `/speckit.clarify` first). Sibling of from-grill-me-to-linear — same publish engine, SpecKit-specific parser. Requires the Linear MCP integration |
 | **update-readme** | `/lazy2work:update-readme` | Audit and refresh a project's `README.md` against README best practices while reconciling it with the current code — reads the existing README, discovers real state from manifests/git/docs, then walks a bundled best-practice checklist (required backbone → recommended → anti-patterns → security "never include" → README-vs-AGENTS split → staleness). **Grilling-style**: resolves facts from the codebase directly and asks the user only decision gaps **one question at a time** (each with a recommended answer); sections the user says are unneeded are omitted, and raw answers are rewritten into clean scannable prose. Routes dev/build/CHANGELOG/full-API content *out* of the README instead of inlining, and flags any leaked secrets rather than keeping them |
@@ -268,7 +268,7 @@ line rather than disappearing from the count.
 
 Workflow:
 
-1. Extracts arXiv ID → fetches full paper from ar5iv HTML
+1. Extracts arXiv ID → fetches full paper from arXiv's native HTML (`arxiv.org/html/{id}`), falling back to ar5iv and then the PDF
 2. Reads all sections (Abstract, Method, Experiments, Results, ...)
 3. Generates **summary document** with:
    - Problem Statement, Key Contribution, Methodology
@@ -717,7 +717,7 @@ What it detects and fixes:
 **With mmdc feedback loop** — runs the Mermaid CLI after static fixes, parses every `Parse error on line N`, and iterates targeted fixes until clean (max 3 iterations, early-exit when errors stop changing):
 
 ```bash
-# Prerequisite: npm i -g @mermaid-js/mermaid-cli
+# Prerequisite: npm i -g --allow-scripts=puppeteer @mermaid-js/mermaid-cli
 
 python3 plugins/lazy2work/skills/fix-mermaid/scripts/fix_mermaid.py docs/architecture.md --with-mmdc
 python3 plugins/lazy2work/skills/fix-mermaid/scripts/fix_mermaid.py docs/ --with-mmdc --json
@@ -841,7 +841,7 @@ Reference documentation:
 **One-time setup (Python deps + Graphviz binary):**
 
 ```bash
-uv pip install "sf-hamilton[visualization,pandera]" pydantic hypothesis pyyaml jsonschema networkx
+uv pip install "apache-hamilton[visualization,pandera]" pydantic hypothesis pyyaml jsonschema networkx
 brew install graphviz   # macOS
 # Ubuntu: sudo apt-get install -y graphviz
 ```
@@ -1034,7 +1034,7 @@ The complexity score is logged to `spec_build/metrics/session-<timestamp>.json` 
 | Theme toggle | Top-right button or `D` key; choice persisted via localStorage; reveal slide backgrounds re-synced live via `Reveal.sync()` |
 | Design system | Light `slate-50`/`slate-800`/`blue-600` ↔ dark `slate-900`/`slate-100`/`sky-400`; semantic ✓/✗/⚠ colors with icon double-cues; WCAG-checked contrast pairs |
 | PDF export | `?print-pdf` → Chrome print (Landscape · no margins · background graphics ON); toggle button auto-hidden; `pdfMaxPagesPerSlide: 1` preset |
-| Tech | reveal.js **5.2.1 pinned** + Tailwind Play CDN (Strategy A — no built-in theme) + Pretendard; highlights/dividers alternate backgrounds via `data-bg-role="divider"` |
+| Tech | reveal.js **6.0.2 pinned** + Tailwind v3 Play CDN (Strategy A — no built-in theme) + Pretendard; highlights/dividers alternate backgrounds via `data-bg-role="divider"` |
 
 **Keyboard controls in the deck:** `D` theme toggle · `S` speaker notes · `ESC`/`O` overview · `G` jump to slide · arrows navigate.
 
@@ -1082,7 +1082,7 @@ The complexity score is logged to `spec_build/metrics/session-<timestamp>.json` 
 | Decisions / glossary / open questions / out-of-scope | ❌ → ADR·repo links / triage / summary line |
 | "tests pass" clauses | ❌ → the issue's **DoD checklist** |
 | `Blocked by` references | **blocked-by relations** (DAG, published in topological order) |
-| HITL/AFK markers | labels `mode:hitl` / `mode:afk` (optional `delegate: "Linear"`) |
+| HITL/AFK markers, or the ticket's `Status:` line (`ready-for-human` / `ready-for-agent`) | labels `mode:hitl` / `mode:afk` (optional `delegate: "Linear"`) |
 
 **Safety rails:**
 
@@ -1432,6 +1432,23 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.50.0 (2026-10-04)
+
+- **Every skill re-checked against current upstream docs** — each external fact a skill relies on (versions, CLI flags, tool names, URLs, syntax rules) was verified against primary sources as of 2026-10-04. Only facts proven stale were changed, each with a source; `pyright-setup` was already current
+- **fix-mermaid: `--fix` no longer breaks valid flowcharts** — message escaping ran on every diagram type, so `A --> B@{shape: diam}` and `A --> C["Check: OK"]` were rewritten into parse errors. It now runs on sequence diagrams only, as the skill already documented. A new `diagram_header()` skips YAML front matter, which Mermaid v12's release notes tell authors to use for pinning the old look and which had silently disabled the reserved-word rename
+- **fix-mermaid: Mermaid v12 and pandoc 3.12** — v12 (12.1.0) is the current major. Diagram keywords are corrected (`gitGraph`, the plain `block`/`xychart`/`sankey`/`packet` forms, plus `radar-beta`, `treemap-beta`, `venn-beta`, `ishikawa-beta`, `usecase-beta`), and three syntax examples that render fine today are no longer called errors. The mermaid-cli install gains `--allow-scripts=puppeteer`, because npm 12 blocks the dependency install script that downloads headless Chrome. Pandoc's deprecated `--listings` and `markdown_github` give way to `--syntax-highlighting=idiomatic` and `gfm`
+- **hamilton-harness: `sf-hamilton` → `apache-hamilton` 1.90.0** — Hamilton moved to the Apache incubator, and `sf-hamilton` is now a redirect package. The dag-gate workflow template moves to `actions/checkout`, `setup-python` and `upload-artifact` v7. An end-to-end smoke test on the current release fixed three bugs: stacked `@check_output` decorators that Hamilton rejects, `@check_output` on return types with no built-in validator (e.g. `np.ndarray`, now a TODO comment), and a `RowModelValidator` that could not be instantiated. All three examples now go spec → stub → Driver → render
+- **make-ppt-html: reveal.js 5.2.1 → 6.0.2** — the notes plugin moved to `dist/plugin/notes.js` (the old path is 404 on 6.x), and 6.0.2 fixes a cross-origin XSS through the postMessage API. In headless Chrome the deck renders the same as on 5.2.1, including the theme toggle and `?print-pdf`. Tailwind stays on the v3 Play CDN, with a new guardrail: v4 puts its utilities in cascade layers, which reveal's unlayered `reset.css` overrides, so headings, spacing and borders collapse
+- **analyze-arxiv: native arXiv HTML first** — ar5iv only covers sources up to the end of August 2026, and for a paper it lacks it redirects to the abstract page with HTTP 200, so the skill summarised abstracts without noticing. Fetching now goes `arxiv.org/html/{id}` → ar5iv (a redirect to `/abs` means no full text) → the PDF
+- **from-grill-me-to-linear: current mattpocock skill outputs** — the PRD and slicing steps are now `/to-spec` and `/to-tickets`, writing `.scratch/<slug>/spec.md` and `issues/<NN>-<slug>.md`. Acceptance criteria are bare checkboxes, the ticket's `Status:` line (`ready-for-human` / `ready-for-agent`) replaces the HITL/AFK markers, and the glossary is `GLOSSARY.md`
+- **from-speckit-to-linear: timestamp feature folders and accurate GitHub sync scope** — `specs/YYYYMMDD-HHMMSS-name/` is accepted when Spec Kit's `feature_numbering` is `timestamp`. Linear's GitHub Issues Sync carries sub-issues after all; what it drops is milestones and blocked-by relations. The same correction is in from-grill-me-to-linear
+- **constitution-generator: Django 5.2 LTS examples and the skills-form command** — Django 4.2 reached end of life on 2026-04-07. Claude Code installs Spec Kit as skills, so the command is typed `/speckit-constitution`; `/speckit.constitution` is Spec Kit's reference notation
+- **generate-optimized-spec-kit-prompt: four stale claims corrected** — checked against Spec Kit 1.1.0, Claude Code 2.1.287 and workmux 0.1.269. `claude -p` does expand slash commands now, the `xhigh` effort fallback happens in Claude Code rather than the API, and an exhausted Agent SDK credit falls back to API rates only when usage credits are enabled; otherwise requests stop and a wave can halt mid-chain. Script behaviour is unchanged
+- **up2date: accurate prerequisites** — `npx skills` now needs Node.js 22.20+, `claude plugin update` auto-detects `--scope` when it is omitted, and `superclaude update` only re-installs the commands of the installed package version; it never upgrades the package
+- **apply-all-sc-save / update-readme** — the docs now match the version-string pane detection the script already does (`2.1.286` from native-installer builds), and the README checklist covers GitHub alerts and `<picture>` theme-paired images
+- **README: mirrors the refreshed facts** — the summary rows and sections now name Mermaid v11/v12, reveal.js 6.0.2 with the Tailwind v3 Play CDN, native arXiv HTML, `apache-hamilton`, the npm 12 mermaid-cli install, and the `Status:` line mapping
+- **Version bump**: 1.49.0 → 1.50.0
 
 ### v1.49.0 (2026-09-04)
 

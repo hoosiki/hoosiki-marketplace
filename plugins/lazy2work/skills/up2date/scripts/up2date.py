@@ -845,7 +845,11 @@ def update_plugin(plugin_id: str, scope: str = "user") -> str:
 
 
 def update_superclaude() -> str:
-    """Update SuperClaude to latest version via ``superclaude update``.
+    """Re-install SuperClaude's slash commands via ``superclaude update``.
+
+    ``superclaude update`` is ``install --force``: it re-installs the commands
+    bundled with the *installed* package version. It does not upgrade the
+    package itself — that is ``pipx upgrade superclaude``.
 
     Returns:
         Status message with command output.
@@ -1007,7 +1011,7 @@ def update_global_skills(remove_dead: bool = True) -> dict[str, object]:
     }
 
     if shutil.which("npx") is None:
-        result["error"] = "npx not found (Node.js 18+ required for skills CLI)"
+        result["error"] = "npx not found (Node.js 22.20+ required for skills CLI)"
         return result
 
     result["available"] = True

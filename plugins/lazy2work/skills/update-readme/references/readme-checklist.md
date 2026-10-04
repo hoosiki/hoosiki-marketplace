@@ -38,7 +38,11 @@ install*). For established/returning-user tools, Install-first is fine.
 - **Badges** (shields.io): build / version / license / coverage. Every badge
   needs `alt` text; don't build a badge wall; don't put badges inside `<h1>`.
 - **Screenshot / GIF / demo** — a short clip near related text, with a caption
-  and alt text; support dark/light (transparent or theme-paired images).
+  and alt text; support dark/light (transparent or theme-paired images — on
+  GitHub, a `<picture>` with `prefers-color-scheme` `<source>`s).
+- **Alerts** (`> [!NOTE]` / `[!TIP]` / `[!IMPORTANT]` / `[!WARNING]` /
+  `[!CAUTION]`) — GitHub-rendered callouts for what a reader must not miss.
+  GitHub's guidance: one or two per document, never consecutive, not nested.
 - **Features / Highlights** — selling-point bullets near the top.
 - **Table of Contents** — effectively required once the file passes ~100 lines.
 - **Configuration** — env vars via `.env.example` **placeholders** (never real

@@ -1,4 +1,4 @@
-# Mermaid v11.x Syntax Reference — Common Errors and Fixes
+# Mermaid v11.x / v12.x Syntax Reference — Common Errors and Fixes
 
 ## Table of Contents
 
@@ -39,10 +39,15 @@ flowchart TD
 ```
 
 Valid types: `flowchart`, `sequenceDiagram`, `classDiagram`, `stateDiagram-v2`,
-`erDiagram`, `gantt`, `pie`, `gitgraph`, `mindmap`, `timeline`,
-`block-beta`, `journey`, `quadrantChart`, `xychart-beta`,
+`erDiagram`, `gantt`, `pie`, `gitGraph`, `mindmap`, `timeline`,
+`block`, `journey`, `quadrantChart`, `xychart`,
 `requirementDiagram`, `C4Context`, `C4Container`, `C4Component`, `C4Dynamic`,
-`C4Deployment`, `sankey-beta`, `packet-beta`, `architecture-beta`, `kanban`.
+`C4Deployment`, `sankey`, `packet`, `architecture-beta`, `kanban`,
+`radar-beta`, `treemap-beta`, `venn-beta` (v11.13.0+), `ishikawa-beta` (v11.13.0+),
+`usecase-beta` (v12.0.0+).
+
+Keywords are case-sensitive (`gitgraph` fails with "No diagram type detected").
+`block-beta`, `xychart-beta`, `sankey-beta`, and `packet-beta` are still accepted.
 
 Note: `stateDiagram` (without `-v2`) still works but v2 is recommended.
 
@@ -214,21 +219,20 @@ flowchart TD
 
 ### Node ID or label containing "end"
 
-If any node ID starts with or equals `end`, Mermaid treats it as a subgraph closer.
+If a node ID is the all-lowercase word `end`, Mermaid treats it as a subgraph
+closer. IDs that merely start with `end` (`endpoint`) are fine.
 
 ```
 %% WRONG — "end" is parsed as subgraph closer
 flowchart TD
     subgraph Process
-        start --> endpoint
-        endpoint --> finish
+        start --> end
     end
 
-%% CORRECT — quote the label, rename the ID
+%% CORRECT — rename the ID and quote the label, or capitalize (End / END)
 flowchart TD
     subgraph Process
-        start --> ep["endpoint"]
-        ep --> finish
+        start --> ep["end"]
     end
 ```
 
@@ -441,13 +445,13 @@ gantt
 ### Common errors
 
 ```
-%% WRONG — missing dateFormat
+%% NOT an error — dateFormat is optional; the default input format is YYYY-MM-DD
 gantt
     title Plan
     section Work
         Task :2024-01-01, 30d
 
-%% WRONG — invalid date format token
+%% NOT an error — DD/MM/YYYY is a valid dayjs format; task dates must then use it
 gantt
     dateFormat DD/MM/YYYY
 ```
@@ -512,7 +516,7 @@ Indentation defines hierarchy. Use consistent indentation (spaces, not tabs).
 ## 13. Block Diagram Rules
 
 ```
-block-beta
+block
     columns 3
     a["Block A"] b["Block B"] c["Block C"]
     d["Block D"]:2 e["Block E"]
@@ -521,14 +525,13 @@ block-beta
     b --> e
 ```
 
-### Common errors
+### Keyword
 
 ```
-%% WRONG — using 'block' instead of 'block-beta'
+%% Both work — `block` is the documented keyword, `block-beta` is still accepted
 block
     columns 2
 
-%% CORRECT
 block-beta
     columns 2
 ```

@@ -100,9 +100,10 @@ After generating, verify against these anti-patterns:
 ## Rules
 
 - Output prompt text only — do not create files
+- Spell the leading command the way the user's agent exposes it: `/speckit.constitution` is Spec Kit's dotted reference notation; skills-based integrations — including Claude Code, which installs Spec Kit as skills in `.claude/skills` — take `/speckit-constitution` (Codex: `$speckit-constitution`)
 - Each principle: one imperative sentence in MUST/NO form + `(Rationale: …)`
 - Only non-negotiables — if the team could reasonably revisit it per-feature, it belongs in /specify or /plan, not here
-- Quantify every threshold; versions always included (e.g., "Django 4.2.x" not "Django")
+- Quantify every threshold; versions always included (e.g., "Django 5.2.x" not "Django")
 - Prohibitions: minimum 3 items, be explicit
 - Prototype stage: strip production gates (CI/CD, deployment, performance budgets) and say so in the prompt
 - Brownfield: always include "Existing Code Reference" section with file paths

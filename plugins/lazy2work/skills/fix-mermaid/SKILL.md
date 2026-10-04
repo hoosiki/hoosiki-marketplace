@@ -41,7 +41,7 @@ description: >
 
 Repairs two classes of Markdown problems that break downstream rendering:
 
-1. **Mermaid diagram syntax** — v11.x Langium parser compatibility (reserved
+1. **Mermaid diagram syntax** — v11.x/v12.x Langium parser compatibility (reserved
    words, Unicode, message escaping).
 2. **Pandoc PDF pitfalls** — blank-line violations before block elements,
    long table cells mixing bold and special symbols that trigger LaTeX
@@ -89,7 +89,7 @@ Read `references/mermaid-v11-syntax.md` for the full rule set and examples.
 
 1. **Diagram type declaration** — First non-comment line must be a valid type
    (`flowchart`, `sequenceDiagram`, `classDiagram`, `stateDiagram-v2`,
-   `erDiagram`, `gantt`, `pie`, `gitgraph`, `mindmap`, `timeline`, `block-beta`, etc.)
+   `erDiagram`, `gantt`, `pie`, `gitGraph`, `mindmap`, `timeline`, `block`, etc.)
 2. **Direction keyword** — `flowchart` requires a direction (`TD`, `TB`, `LR`, `RL`, `BT`).
    `graph` also requires one.
 3. **Special characters in node labels** — Characters like `(`, `)`, `[`, `]`, `{`, `}`,
@@ -148,8 +148,10 @@ automatic fixes can be applied**.
 **Prerequisites.** `mmdc` must be on `PATH`:
 
 ```bash
-npm install -g @mermaid-js/mermaid-cli
-mmdc --version   # 11.x or newer
+# npm 12+ blocks dependency install scripts; puppeteer's postinstall
+# downloads the headless Chrome mmdc needs, so allow it explicitly
+npm install -g --allow-scripts=puppeteer @mermaid-js/mermaid-cli
+mmdc --version   # 11.x or newer (12.x requires Node.js 22.13+)
 ```
 
 **Run.**
@@ -497,7 +499,7 @@ python3 scripts/fix_pandoc_blanks.py path/to/file.md
 # → OK: No issues found.
 
 # Diagnostic: count must be even (paired) — though `\$` no longer counts
-grep -nE '(?<!\\\\)\$[0-9]' path/to/file.md   # → no matches expected
+grep -nE '(^|[^\\])\$[0-9]' path/to/file.md   # → no matches expected
 
 # PDF build
 pandoc -d pdf-korean path/to/file.md -o path/to/file.pdf
@@ -576,7 +578,8 @@ Apply in priority order:
    ```
 
 Fenced code blocks (` ```...``` `) are unaffected — pandoc converts those
-to `\verb`/`lstlisting`, which the `\seqsplit` wrapper does not touch.
+to `verbatim`/`Highlighting` environments, which the `\seqsplit` wrapper
+does not touch.
 
 ### Step F3 — Verify
 
@@ -731,8 +734,8 @@ G is auto-fixable because there is exactly one safe correction
 
 ### Pandoc Unsafe Inline Code
 
-- **Fenced code blocks**: Skipped — pandoc routes them to `\verb`/`lstlisting`
-  which are unaffected by `\seqsplit`.
+- **Fenced code blocks**: Skipped — pandoc routes them to `verbatim`/`Highlighting`
+  environments, which are unaffected by `\seqsplit`.
 - **Inline math `$...$`**: Skipped — math is rendered by LaTeX math fonts,
   not `\texttt`.
 - **Multiple risky chars per line**: Each inline code span is reported
@@ -740,7 +743,7 @@ G is auto-fixable because there is exactly one safe correction
 
 ## References
 
-- `references/mermaid-v11-syntax.md` — Mermaid v11 syntax rules, replacement
+- `references/mermaid-v11-syntax.md` — Mermaid v11/v12 syntax rules, replacement
   tables, and the mmdc error catalog used by the feedback loop.
 - `references/pandoc-pdf-pitfalls.md` — Pandoc PDF rendering pitfalls
   (blank-line compliance, long-mixed-cell overflow, font fallback

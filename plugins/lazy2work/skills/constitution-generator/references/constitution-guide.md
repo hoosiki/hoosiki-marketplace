@@ -60,7 +60,7 @@ When a prototype graduates, revise the constitution — it is versioned, not imm
 | Principles without Rationale | Agent follows blindly, drops rule under pressure | Attach `(Rationale: …)` to every principle |
 | Vague rules ("write quality code") | AI cannot verify | MUST/NO + quantified ("coverage ≥ 80%") |
 | Production gates in a prototype | Perf/security gates block iteration | Strip CI/CD, deployment, perf budgets; state it in the prompt |
-| No tech stack versions | AI picks arbitrary versions | Lock with "Django 4.2.x" |
+| No tech stack versions | AI picks arbitrary versions | Lock with "Django 5.2.x" |
 | Missing Prohibitions | AI expands scope freely | List 3+ explicit NO items |
 | Leftover template boilerplate | Agent treats filler as rules | Delete non-applicable sections — it's plain markdown |
 | Too detailed implementation | AI over-interprets, creates duplicates | Keep principles only; details go in /plan |
@@ -77,7 +77,7 @@ Write every rule in enforceable **MUST / NO** language with a quantified thresho
 ❌ "Write high-quality code"      → ✅ "MUST: type hints on all functions (Rationale: mypy gate)"
 ❌ "Be well-tested"                → ✅ "MUST: unit coverage ≥ 80% on business logic (Rationale: regression safety)"
 ❌ "Be secure"                     → ✅ "NO PII stored unencrypted, at rest or in transit (Rationale: compliance)"
-❌ "Use latest Django"             → ✅ "MUST use Django 4.2.x (LTS) (Rationale: security-patch window)"
+❌ "Use latest Django"             → ✅ "MUST use Django 5.2.x (LTS) (Rationale: security-patch window)"
 ❌ "Good performance"              → ✅ "MUST: API responses P95 < 200ms (Rationale: UX budget)"  [production only]
 ```
 

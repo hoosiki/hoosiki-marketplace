@@ -1,6 +1,7 @@
 ---
 name: analyze-arxiv
-description: Analyze arXiv papers by fetching HTML content from ar5iv.labs.arxiv.org,
+description: Analyze arXiv papers by fetching HTML content from arXiv's native HTML
+  (arxiv.org/html, falling back to ar5iv.labs.arxiv.org),
   creating structured summary documents (Problem Statement, Key Contribution,
   Methodology, Experiments, Results, Limitations) and prerequisite knowledge
   documents with deep research. Triggers on arXiv paper URLs
@@ -23,13 +24,18 @@ Generates (1) a structured paper summary document and (2) a prerequisite knowled
    - `https://arxiv.org/abs/2301.12345` → ID: `2301.12345`
    - `https://arxiv.org/abs/2301.12345v2` → ID: `2301.12345v2`
    - `https://arxiv.org/pdf/2301.12345` → ID: `2301.12345`
+   - `https://arxiv.org/html/2301.12345v1` → ID: `2301.12345v1`
    - `https://ar5iv.labs.arxiv.org/html/2301.12345` → ID: `2301.12345`
    - Bare ID input (e.g., `2301.12345`) is also accepted.
 
-2. Construct the ar5iv HTML URL:
+2. Construct the arXiv HTML URL (arXiv's native LaTeXML HTML — available for every new TeX/LaTeX
+   submission and backfilled for most older papers, including old-style IDs like `math/0211159`):
    ```
-   https://ar5iv.labs.arxiv.org/html/{arxiv_id}
+   https://arxiv.org/html/{arxiv_id}
    ```
+   ar5iv (`https://ar5iv.labs.arxiv.org/html/{arxiv_id}`) is a fallback only — it only covers sources
+   up to the cutoff stated on its home page (one to two months behind the newest papers), and it is
+   often slow.
 
 3. Determine the paper's field from category info or content:
    - Examples: `NLP`, `Computer-Vision`, `Reinforcement-Learning`, `LLM`, `Diffusion-Models`
@@ -37,11 +43,11 @@ Generates (1) a structured paper summary document and (2) a prerequisite knowled
 
 ### Phase 2: Read Paper Content
 
-Fetch the full paper content from the ar5iv HTML page **without omission**.
+Fetch the full paper content from the arXiv HTML page **without omission**.
 
 **Reading strategy:**
 
-1. Use WebFetch or an appropriate tool to read the ar5iv HTML page.
+1. Use WebFetch or an appropriate tool to read the arXiv HTML page.
 2. If the content is too long for a single read:
    - Split by sections (Abstract, Introduction, Related Work, Method, Experiments, Conclusion, etc.)
    - Read each section sequentially, accumulating information
@@ -139,7 +145,7 @@ papers/prerequisite/{field}/{YYYYMMDD}/research_{paper_title}_{YYYYMMDD}.md
 User: `https://arxiv.org/abs/2301.12345 analyze this paper`
 
 Actions:
-1. Extract ID `2301.12345` → read `https://ar5iv.labs.arxiv.org/html/2301.12345`
+1. Extract ID `2301.12345` → read `https://arxiv.org/html/2301.12345`
 2. Determine field (e.g., `LLM`)
 3. Summary → `papers/summary/LLM/20260225/paper_title_20260225.md`
 4. Prerequisite research → `papers/prerequisite/LLM/20260225/research_paper_title_20260225.md`
@@ -150,7 +156,7 @@ Actions:
 User: `https://arxiv.org/abs/2005.14165 analyze this`
 
 Actions:
-1. Attempt to read from ar5iv → content is very long
+1. Attempt to read from arXiv HTML → content is very long
 2. Read section by section (Abstract → Intro → Method → ... → Conclusion)
 3. Write summary from accumulated information
 4. Identify prerequisites (e.g., Transformer, Scaling Laws, Few-shot Learning)
@@ -162,19 +168,26 @@ Actions:
 User: `2401.04088 paper analysis`
 
 Actions:
-1. Recognize ID `2401.04088` → construct ar5iv URL
+1. Recognize ID `2401.04088` → construct arXiv HTML URL
 2. Same workflow follows
 
 ## Troubleshooting
 
-### ar5iv Page Inaccessible
+### arXiv HTML Page Unavailable
 
-Some papers may not yet have ar5iv HTML conversion.
+Some papers have no HTML (no TeX source, or the conversion failed): `https://arxiv.org/html/{id}`
+returns 404 with "No HTML for '{id}'", and the abstract page shows no "HTML (experimental)" link.
 
 Solution:
-1. Read abstract and metadata from `https://arxiv.org/abs/{id}`
-2. Read the PDF via Read tool page by page (max 20 pages at a time)
-3. Combine all information to write documents
+1. Try ar5iv: `https://ar5iv.labs.arxiv.org/html/{id}`. If it redirects to `https://arxiv.org/abs/{id}`,
+   ar5iv has no rendering either — that page is only the abstract, not the full text.
+2. Read abstract and metadata from `https://arxiv.org/abs/{id}`
+3. Download the PDF from `https://arxiv.org/pdf/{id}` to a local file, then read it via the Read tool
+   page by page (max 20 pages at a time)
+4. Combine all information to write documents
+
+If the HTML loads but equations or tables are garbled (HTML conversion is still labeled
+experimental), cross-check those parts against the PDF.
 
 ### Field Determination Difficulty
 

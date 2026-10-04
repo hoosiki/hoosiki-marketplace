@@ -199,9 +199,10 @@ can verify nothing was lost.
 ## Out of scope
 
 - GitHub↔Linear sync, including `/speckit.taskstoissues` (that path creates
-  flat GitHub issues; native Issues Sync then drops milestones, sub-issue
-  hierarchy, and blocked-by entirely — hierarchy needs this skill's
-  direct-MCP path).
+  flat GitHub issues; native Issues Sync carries only title, description,
+  status, assignee, labels, sub-issues and comments, and drops milestones
+  and blocked-by entirely — the Project→Milestone hierarchy and the DAG need
+  this skill's direct-MCP path).
 - Cycles and Initiatives by default — offer an Initiative only for
   multi-spec features; never map stories to Cycles (milestone = scope,
   cycle = time).

@@ -10,6 +10,9 @@ issue files) into a properly structured Linear hierarchy under a user-specified
 team, using the **`linear-server` MCP tools** (`list_*`, `save_project`,
 `save_milestone`, `save_issue`, `create_issue_label`).
 
+Upstream, the PRD step is now `/to-spec` and the slicing step `/to-tickets`;
+with a local tracker they write `.scratch/<feature-slug>/spec.md` and one
+ticket per file at `.scratch/<feature-slug>/issues/<NN>-<slug>.md`.
 Also works with any generic `PRD.md` + `issues/*.md` pair that follows the same
 shape (What to build / Acceptance criteria / Blocked by).
 
@@ -37,8 +40,8 @@ integration — do not fall back to the REST API or `curl`.
 | Input | Required | How to get it |
 |---|---|---|
 | **Team name** | ✅ | From user args. Verify it exists via `list_teams` (fuzzy-match; if no match, list available teams and ask) |
-| **PRD** | ✅ | File path (e.g. `PRD.md`) or pasted text |
-| **Issues** | ✅ | Directory (e.g. `issues/*.md`), file list, or pasted text |
+| **PRD** | ✅ | File path (e.g. `.scratch/<feature-slug>/spec.md` or `PRD.md`) or pasted text |
+| **Issues** | ✅ | Directory (e.g. `.scratch/<feature-slug>/issues/*.md` or `issues/*.md`), file list, or pasted text |
 | Milestone strategy | optional | Default: promote each big slice to a Milestone; small flat sets skip milestones (ask at Gate ②) |
 | AFK delegation | optional | If issues carry `mode:afk`, ask whether to set `delegate: "Linear"` |
 
@@ -85,7 +88,8 @@ Do **not** serialize parallel branches (`01→02→{03,04,05,06}` stays a fan-ou
 Block publication and tell the user why, if:
 - The PRD looks like an un-grilled first draft (unresolved decisions, open
   questions marked TODO/TBD inline).
-- Issue files have no acceptance criteria at all.
+- Issue files have no acceptance criteria at all (current `/to-tickets` local
+  files list them as bare `- [ ]` checkboxes with no heading — those count).
 
 Ask the user to confirm the inputs are final before proceeding.
 
@@ -163,8 +167,9 @@ nothing was lost.
 
 ## Out of scope
 
-- GitHub↔Linear sync (native Issues Sync moves only 6 fields and drops
-  milestones/sub-issue hierarchy/blocked-by entirely — hierarchy needs this
+- GitHub↔Linear sync (native Issues Sync moves only title, description,
+  status, assignee, labels, sub-issues and comments, and drops milestones and
+  blocked-by entirely — the Project→Milestone hierarchy and the DAG need this
   skill's direct-MCP path).
 - Cycles and Initiatives — mention them only if the user asks; solo/single-PRD
   runs don't need either.

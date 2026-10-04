@@ -15,7 +15,7 @@ description: >
 # make-ppt-html — 문서 → reveal.js + Tailwind 프레젠테이션 HTML
 
 입력 문서를 읽고, 디자인 가이드라인을 따르는 **단일 HTML 발표 덱**을 만든다.
-산출물: reveal.js 5.2.1 + Tailwind Play CDN(전략 A — 내장 테마 미사용) + 라이트↔다크 토글
+산출물: reveal.js 6.0.2 + Tailwind v3 Play CDN(전략 A — 내장 테마 미사용) + 라이트↔다크 토글
 (버튼 + `D` 단축키 + localStorage 기억) + 발표자 노트 + `?print-pdf` 지원.
 
 ## 워크플로
@@ -89,6 +89,10 @@ description: >
   Tailwind Preflight의 `*{border-style:solid}`(0,0,0)를 이긴다 → border-style이 none이 되고
   CSS 규칙상 computed border-width가 0으로 강제되어 **모든 border 유틸이 조용히 사라진다**.
   템플릿의 `.reveal .slides * { border-style: solid; }` 한 줄이 이것을 복원한다 — 지우지 마라.
+- **Tailwind는 v3 Play CDN(`cdn.tailwindcss.com`) 고정**: 현재 Tailwind 공식 문서의 Play CDN은
+  v4 `@tailwindcss/browser@4`지만, v4는 유틸리티를 `@layer`(cascade layer) 안에 넣으므로 layer 밖의
+  reveal `reset.css`가 명시도와 무관하게 이긴다 → `text-*`·`p-*`·`m-*`·`border`·`font-bold`가 전부
+  초기화되어 덱이 붕괴한다(실측). `tailwind.config = { darkMode: 'class' }`도 v3 전용 문법이다.
 - **토글 동작 원리**: 모든 leaf `<section>`의 `data-background-color`를 테마 맵으로 다시 쓰고
   `Reveal.sync()`로 배경을 재생성한다. 따라서 **vertical 스택의 래퍼 `<section>`에는
   `data-background-color`를 절대 넣지 마라** (JS 셀렉터가 leaf만 잡도록 설계됨).
