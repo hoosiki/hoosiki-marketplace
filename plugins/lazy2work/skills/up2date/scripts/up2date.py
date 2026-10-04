@@ -36,6 +36,15 @@ _DEFAULT_TIMEOUT: int = 120
 _NPX_TIMEOUT: int = 300
 # `claude plugin ...` reaches the network (marketplace fetch + plugin download).
 _CLAUDE_TIMEOUT: int = 180
+# `pipx upgrade` / `uv tool upgrade` resolve and download from PyPI.
+_TOOL_UPGRADE_TIMEOUT: int = 300
+# SuperClaude's PyPI distribution name (upstream: `pipx install superclaude`).
+_SUPERCLAUDE_PACKAGE: str = "superclaude"
+# Marker each tool manager writes at the root of a venv it owns, in check order.
+_TOOL_VENV_MARKERS: tuple[tuple[str, str], ...] = (
+    ("pipx", "pipx_metadata.json"),
+    ("uv", "uv-receipt.toml"),
+)
 # Scopes accepted by `claude plugin update --scope`.
 _PLUGIN_SCOPES: frozenset[str] = frozenset({"user", "project", "local", "managed"})
 # Where a plugin may keep its skills, relative to installPath, in priority order.
@@ -46,6 +55,8 @@ _PLUGIN_SKILL_DIRS: tuple[str, ...] = ("skills", ".claude/skills")
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 # Matches the summary line "Updated <N> skill(s)" emitted by `npx skills update`.
 _UPDATED_COUNT_RE = re.compile(r"Updated\s+(\d+)\s+skill\(s\)")
+# Matches the version in `superclaude --version` ("SuperClaude, version 4.2.0").
+_VERSION_RE = re.compile(r"\b(\d+(?:\.\d+)+(?:[-+.]?[0-9A-Za-z]+)*)")
 
 
 def run(
@@ -176,7 +187,7 @@ def brew_update() -> str:
         stdout output from the update command.
 
     Examples:
-        >>> isinstance(brew_update(), str)
+        >>> isinstance(brew_update(), str)  # doctest: +SKIP
         True
     """
     print("  Running brew update...", flush=True)
@@ -191,7 +202,7 @@ def brew_upgrade_formula() -> str:
         Combined stdout and stderr output from the upgrade command.
 
     Examples:
-        >>> isinstance(brew_upgrade_formula(), str)
+        >>> isinstance(brew_upgrade_formula(), str)  # doctest: +SKIP
         True
     """
     cmd = ["brew", "upgrade", "--formula"]
@@ -213,7 +224,7 @@ def brew_upgrade_cask() -> str:
         Combined stdout and stderr output from the upgrade command.
 
     Examples:
-        >>> isinstance(brew_upgrade_cask(), str)
+        >>> isinstance(brew_upgrade_cask(), str)  # doctest: +SKIP
         True
     """
     cmd = ["brew", "upgrade", "--cask", "--greedy"]
@@ -232,7 +243,7 @@ def brew_cleanup() -> str:
         stdout output listing removed files.
 
     Examples:
-        >>> isinstance(brew_cleanup(), str)
+        >>> isinstance(brew_cleanup(), str)  # doctest: +SKIP
         True
     """
     print("  Running brew cleanup...", flush=True)
@@ -331,7 +342,7 @@ def run_brew() -> None:
     update → upgrade formulae/casks → cleanup → summary.
 
     Examples:
-        >>> run_brew()  # prints Homebrew status to stdout
+        >>> run_brew()  # prints Homebrew status to stdout  # doctest: +SKIP
     """
     print_section("Homebrew Package Check")
 
@@ -651,8 +662,8 @@ def check_plugins() -> dict:
         ``"updates_available"`` (list of behind-count entries).
 
     Examples:
-        >>> info = check_plugins()
-        >>> set(info.keys()) == {"installed", "marketplaces", "updates_available"}
+        >>> info = check_plugins()  # doctest: +SKIP
+        >>> set(info.keys()) == {"installed", "marketplaces", "updates_available"}  # doctest: +SKIP
         True
     """
     result = {
@@ -844,27 +855,308 @@ def update_plugin(plugin_id: str, scope: str = "user") -> str:
     return f"Update failed: {output}"
 
 
-def update_superclaude() -> str:
-    """Re-install SuperClaude's slash commands via ``superclaude update``.
-
-    ``superclaude update`` is ``install --force``: it re-installs the commands
-    bundled with the *installed* package version. It does not upgrade the
-    package itself — that is ``pipx upgrade superclaude``.
-
-    Returns:
-        Status message with command output.
+def _combined_output(proc: subprocess.CompletedProcess[str]) -> str:
+    """Join a process's stripped stdout and stderr, skipping empty streams.
 
     Examples:
-        >>> "SuperClaude" in update_superclaude()
-        True
+        >>> _combined_output(subprocess.CompletedProcess([], 0, "out\\n", "err\\n"))
+        'out\\nerr'
+        >>> _combined_output(subprocess.CompletedProcess([], 1, "", ""))
+        ''
     """
-    result = run(["superclaude", "update"], capture=True)
-    output = result.stdout.strip()
-    if result.stderr.strip():
-        output += "\n" + result.stderr.strip()
-    if result.returncode == 0:
-        return f"SuperClaude updated:\n{output}"
-    return f"SuperClaude update failed:\n{output}"
+    parts = [(proc.stdout or "").strip(), (proc.stderr or "").strip()]
+    return "\n".join(p for p in parts if p)
+
+
+def _parse_superclaude_version(text: str) -> str:
+    """Extract the version from ``superclaude --version`` output.
+
+    Args:
+        text: Output of ``superclaude --version`` or ``superclaude version``.
+
+    Returns:
+        The version string, or ``""`` when none is present.
+
+    Examples:
+        >>> _parse_superclaude_version("SuperClaude, version 4.2.0")
+        '4.2.0'
+        >>> _parse_superclaude_version("timeout")
+        ''
+    """
+    match = _VERSION_RE.search(text)
+    return match.group(1) if match else ""
+
+
+def _superclaude_version(exe: str) -> str:
+    """Return the installed SuperClaude version, or ``""`` if it cannot be read.
+
+    Args:
+        exe: Path of the ``superclaude`` executable to query.
+
+    Examples:
+        >>> _superclaude_version("superclaude")  # doctest: +SKIP
+        '4.2.0'
+    """
+    proc = run([exe, "--version"])
+    if proc.returncode != 0:
+        return ""
+    return _parse_superclaude_version(_combined_output(proc))
+
+
+def _script_interpreter(script: Path) -> str:
+    """Read the Python interpreter named in a console script's shebang.
+
+    pip writes the absolute interpreter path into each entry-point script, so
+    this names the Python that owns a pip install. ``#!/usr/bin/env python3``
+    yields ``python3``.
+
+    Args:
+        script: The resolved console script.
+
+    Returns:
+        The interpreter token, or ``""`` for a binary or unreadable file.
+
+    Examples:
+        >>> _script_interpreter(Path("/nonexistent/superclaude"))
+        ''
+    """
+    try:
+        with script.open("rb") as fh:
+            first = fh.readline(1024)
+    except OSError:
+        return ""
+    if not first.startswith(b"#!"):
+        return ""
+    for token in first[2:].decode("utf-8", "replace").split():
+        if "python" in Path(token).name:
+            return token
+    return ""
+
+
+def _detect_superclaude_install(exe: str) -> dict[str, str]:
+    """Work out which tool manager owns the ``superclaude`` found on PATH.
+
+    The executable is resolved through its symlink — pipx and uv tool both
+    symlink entry points into their bin directory on Unix — to
+    ``<venv>/bin/superclaude``, and the venv root is checked for the marker its
+    manager writes: ``pipx_metadata.json`` (pipx) or ``uv-receipt.toml``
+    (uv tool). Classifying the very executable that will run is deliberate:
+    asking ``pipx list`` / ``uv tool list`` instead could find a copy that some
+    other install shadows on PATH, and upgrading that one would change nothing.
+
+    Anything else — pip into a system, Homebrew, ``--user`` or project-venv
+    Python — is ``pip``, with the owning interpreter read from the shebang.
+
+    Args:
+        exe: Path of ``superclaude`` as returned by ``shutil.which``.
+
+    Returns:
+        Dict with ``method`` (``pipx`` | ``uv`` | ``pip``), ``package`` (what to
+        pass to the manager's upgrade command: the venv name, which keeps any
+        pipx ``--suffix``) and ``location`` (the venv root, or for ``pip`` the
+        owning interpreter; ``""`` when unknown).
+
+    Examples:
+        >>> _detect_superclaude_install("/nonexistent/bin/superclaude")["method"]
+        'pip'
+    """
+    resolved = Path(exe).resolve()
+    venv = resolved.parent.parent
+    for method, marker in _TOOL_VENV_MARKERS:
+        if (venv / marker).is_file():
+            return {"method": method, "package": venv.name, "location": str(venv)}
+    return {
+        "method": "pip",
+        "package": _SUPERCLAUDE_PACKAGE,
+        "location": _script_interpreter(resolved),
+    }
+
+
+def _pip_upgrade_hint(interpreter: str) -> str:
+    """Build the manual-upgrade hint for a pip-installed SuperClaude.
+
+    up2date never runs ``pip install -U`` itself: the owning Python may be a
+    system or Homebrew interpreter that PEP 668 marks externally managed, or a
+    project venv whose other packages a blind upgrade could break.
+
+    Args:
+        interpreter: The owning interpreter, or ``""`` when unknown.
+
+    Returns:
+        A multi-line hint naming the exact commands to run.
+
+    Examples:
+        >>> print(_pip_upgrade_hint("/usr/bin/python3").splitlines()[1])
+          /usr/bin/python3 -m pip install --upgrade superclaude
+    """
+    python = interpreter or "python3"
+    return (
+        "Installed with pip, so it is not upgraded automatically "
+        "(PEP 668 / shared environment). Upgrade it yourself:\n"
+        f"  {python} -m pip install --upgrade {_SUPERCLAUDE_PACKAGE}\n"
+        f"or move it to pipx, upstream's recommended method: "
+        f"`pipx install {_SUPERCLAUDE_PACKAGE}` — then re-run up2date."
+    )
+
+
+def _upgrade_superclaude_package(install: dict[str, str]) -> tuple[str, str]:
+    """Upgrade the SuperClaude package with the manager that installed it.
+
+    Args:
+        install: Result of ``_detect_superclaude_install()``.
+
+    Returns:
+        ``(status, detail)``. ``status`` is ``"ok"`` or ``"failed"`` after an
+        upgrade ran, with its output as ``detail``; or ``"manual"`` when no
+        upgrade was attempted, with the hint to print as ``detail``.
+
+    Examples:
+        >>> _upgrade_superclaude_package({"method": "pip", "package": "superclaude",
+        ...     "location": ""})[0]
+        'manual'
+    """
+    package = install["package"]
+    if install["method"] == "pipx":
+        cmd = ["pipx", "upgrade", package]
+    elif install["method"] == "uv":
+        cmd = ["uv", "tool", "upgrade", package]
+    else:
+        return ("manual", _pip_upgrade_hint(install["location"]))
+
+    if shutil.which(cmd[0]) is None:
+        return ("manual", f"{cmd[0]} not found on PATH — run `{' '.join(cmd)}` yourself.")
+
+    print(f"  {' '.join(cmd)}", flush=True)
+    proc = run(cmd, timeout=_TOOL_UPGRADE_TIMEOUT)
+    return ("ok" if proc.returncode == 0 else "failed", _combined_output(proc))
+
+
+def update_superclaude() -> dict[str, object]:
+    """Upgrade the SuperClaude package, then re-install its slash commands.
+
+    ``superclaude update`` alone is ``install --force``: it re-installs the
+    commands (and, since 4.3.0, the agents in ``~/.claude/agents/``) bundled
+    with the *installed* package version, so it can never bring an old install
+    current. The package is therefore upgraded first with the manager that
+    owns it — ``pipx upgrade`` or ``uv tool upgrade`` — and ``superclaude
+    update`` runs from the upgraded package. A pip install gets a manual hint
+    instead of an automatic ``pip install -U``. A failed upgrade skips the
+    re-install: the commands already match the version still installed.
+
+    Returns:
+        Dict with keys ``available`` (bool — CLI on PATH), ``method``,
+        ``package``, ``location``, ``before`` / ``after`` (version strings,
+        ``""`` if unreadable), ``upgrade`` (``ok`` | ``failed`` | ``manual``),
+        ``upgrade_output``, ``hint``, ``reinstalled`` (bool), ``output``
+        (``superclaude update`` output) and ``error``.
+
+    Examples:
+        >>> result = update_superclaude()  # doctest: +SKIP
+        >>> result["before"], result["after"]  # doctest: +SKIP
+        ('4.2.0', '4.3.0')
+    """
+    result: dict[str, object] = {
+        "available": False, "method": "", "package": "", "location": "",
+        "before": "", "after": "", "upgrade": "", "upgrade_output": "",
+        "hint": "", "reinstalled": False, "output": "", "error": "",
+    }
+
+    exe = shutil.which("superclaude")
+    if exe is None:
+        result["error"] = "superclaude CLI not found on PATH — commands left as-is"
+        return result
+
+    result["available"] = True
+    install = _detect_superclaude_install(exe)
+    result.update(install)
+    before = _superclaude_version(exe)
+    result["before"] = before
+
+    status, detail = _upgrade_superclaude_package(install)
+    result["upgrade"] = status
+    if status == "manual":
+        result["hint"] = detail
+    else:
+        result["upgrade_output"] = detail
+    if status == "failed":
+        result["after"] = before
+        result["error"] = f"{install['method']} upgrade failed: {detail[:200]}"
+        return result
+
+    result["after"] = _superclaude_version(exe) if status == "ok" else before
+
+    print(f"  {_SUPERCLAUDE_PACKAGE} update", flush=True)
+    proc = run([exe, "update"])
+    result["output"] = _combined_output(proc)
+    if proc.returncode == 0:
+        result["reinstalled"] = True
+    else:
+        result["error"] = f"superclaude update failed: {result['output'][:200]}"
+    return result
+
+
+def _version_label(sc: dict[str, object]) -> str:
+    """Format the ``before → after`` version line for the SuperClaude summary.
+
+    Examples:
+        >>> _version_label({"before": "4.2.0", "after": "4.3.0", "upgrade": "ok"})
+        '4.2.0 → 4.3.0 (upgraded)'
+        >>> _version_label({"before": "4.2.0", "after": "4.2.0", "upgrade": "manual"})
+        '4.2.0 (not upgraded — see hint above)'
+    """
+    before = str(sc.get("before") or "unknown")
+    after = str(sc.get("after") or "unknown")
+    status = sc.get("upgrade")
+    if status == "manual":
+        return f"{before} (not upgraded — see hint above)"
+    if status == "failed":
+        return f"{before} → {after} (upgrade failed)"
+    if before == after and before != "unknown":
+        return f"{after} (already current)"
+    return f"{before} → {after} (upgraded)"
+
+
+def _print_superclaude_update(sc: dict[str, object]) -> None:
+    """Print the SuperClaude upgrade/re-install details and its summary.
+
+    Args:
+        sc: Result of ``update_superclaude()``.
+
+    Examples:
+        >>> _print_superclaude_update({"available": False, "error": "not found"})
+        <BLANKLINE>
+          Skipped: not found
+    """
+    if not sc["available"]:
+        print(f"\n  Skipped: {sc['error']}")
+        return
+
+    method = sc["method"]
+    if sc["upgrade"] == "manual":
+        print("\n  Package upgrade: skipped")
+        for line in str(sc["hint"]).split("\n"):
+            print(f"    {line}")
+    elif sc["upgrade_output"]:
+        label = "failed" if sc["upgrade"] == "failed" else "output"
+        print(f"\n  Package upgrade ({method}) {label}:")
+        for line in str(sc["upgrade_output"]).split("\n")[:10]:
+            print(f"    {line}")
+
+    if sc["output"]:
+        print("\n  superclaude update:")
+        for line in str(sc["output"]).split("\n"):
+            print(f"    {line}")
+
+    print_section("SuperClaude Summary")
+    where = f" ({sc['location']})" if sc.get("location") else ""
+    print(f"\n  Install method: {method}{where}")
+    print(f"  Version:        {_version_label(sc)}")
+    if sc["reinstalled"]:
+        print(f"  Commands:       re-installed for {sc['after'] or 'the installed version'}")
+    else:
+        print("  Commands:       not re-installed — left as-is")
+    if sc["error"]:
+        print(f"  Error:          {sc['error']}")
 
 
 def _print_skill_info(sk: dict) -> None:
@@ -997,8 +1289,8 @@ def update_global_skills(remove_dead: bool = True) -> dict[str, object]:
         and ``output`` (str — cleaned update output).
 
     Examples:
-        >>> result = update_global_skills(remove_dead=False)
-        >>> set(result) >= {"available", "updated", "dead", "removed"}
+        >>> result = update_global_skills(remove_dead=False)  # doctest: +SKIP
+        >>> set(result) >= {"available", "updated", "dead", "removed"}  # doctest: +SKIP
         True
     """
     result: dict[str, object] = {
@@ -1045,14 +1337,14 @@ def run_skill(prune_dead: bool = True) -> None:
     Executes the complete skills maintenance workflow:
     user skills → global agent-skill update (npx skills) → plugin skills →
     plugin update detection → marketplace pull → cache refresh →
-    SuperClaude update.
+    SuperClaude package upgrade (pipx / uv tool) → command re-install.
 
     Args:
         prune_dead: When True, remove global skills deleted upstream during
             the ``npx skills`` update step. Defaults to True.
 
     Examples:
-        >>> run_skill(prune_dead=False)  # prints skill/plugin status to stdout
+        >>> run_skill(prune_dead=False)  # prints skill/plugin status to stdout  # doctest: +SKIP
     """
     # -- 1. User Skills --
     print_section("User Skills")
@@ -1182,8 +1474,7 @@ def run_skill(prune_dead: bool = True) -> None:
             print(line.rstrip())
 
         print_section("SuperClaude Update")
-        result = update_superclaude()
-        print(f"\n  {result}")
+        _print_superclaude_update(update_superclaude())
     else:
         print("\n  SuperClaude: Not installed")
 
@@ -1197,7 +1488,7 @@ def main() -> None:
     """Parse CLI arguments and run the selected update workflow.
 
     Examples:
-        >>> main()  # with no args, runs both brew and skill updates
+        >>> main()  # with no args, runs both brew and skill updates  # doctest: +SKIP
     """
     parser = argparse.ArgumentParser(
         description="Unified updater for Homebrew and Claude Code skills/plugins"

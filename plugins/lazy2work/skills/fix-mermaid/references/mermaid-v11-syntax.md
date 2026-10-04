@@ -17,7 +17,7 @@
 13. [Block Diagram Rules](#13-block-diagram-rules)
 14. [Style and ClassDef](#14-style-and-classdef)
 15. [Common Pitfalls](#15-common-pitfalls)
-16. [Unicode and Langium Parser Issues](#16-unicode-and-langium-parser-issues)
+16. [Unicode Characters in Mermaid Syntax](#16-unicode-characters-in-mermaid-syntax)
 17. [Sequence Diagram Message Escaping](#17-sequence-diagram-message-escaping)
 18. [Sequence Diagram Reserved Words](#18-sequence-diagram-reserved-words)
 
@@ -106,10 +106,13 @@ E["A & B"]
 
 Always quote labels containing Korean, Japanese, Chinese, or other non-ASCII text
 when they also contain special characters or are used in complex node shapes.
+Fullwidth and typographic punctuation (`（）`, `：`, `→`, `—`, `“”`) is not a special
+character here: it renders unquoted on Mermaid 11.12.2 and 12.1.0 (section 16).
 
 ```
 %% SAFE (simple label, no special chars)
 A[데이터]
+D[데이터（원본）]
 
 %% MUST QUOTE (special char inside Korean label)
 B["데이터(원본)"]
@@ -582,10 +585,12 @@ classDef red fill:#f00
 
 ### Trailing whitespace / invisible characters
 
-Copy-pasting from web pages or word processors can introduce invisible Unicode characters
-(zero-width spaces, non-breaking spaces). These cause cryptic parse failures.
+Copy-pasting from web pages or word processors can introduce invisible Unicode characters.
+Zero-width characters (U+200B, U+200C, U+200D, U+2060) and soft hyphens (U+00AD) glued to
+a node ID or arrow cause cryptic "Lexical error" failures. Non-breaking and other Unicode
+spaces are harmless: Mermaid 11.12.2 and 12.1.0 treat them as whitespace. See section 16.
 
-**Fix**: If the syntax looks correct but still fails, try retyping the problematic line manually.
+**Fix**: run `scripts/fix_mermaid.py --fix`, or retype the problematic line manually.
 
 ### Tab vs spaces
 
@@ -622,249 +627,160 @@ Do NOT use `//` or `/* */` — these are not valid Mermaid comments.
 
 ---
 
-## 16. Unicode and Langium Parser Issues
+## 16. Unicode Characters in Mermaid Syntax
 
-Mermaid v11 uses the Langium parser framework, which tokenizes input as a stream of
-ASCII-oriented grammar rules. Many Unicode characters that look normal in editors
-cause cryptic "Syntax error in text" failures because the Langium lexer does not
-recognize them as valid tokens.
+Flowchart, sequence, class and state diagrams are parsed by Jison grammars in
+both v11 and v12. The Langium parser (`@mermaid-js/parser`) only covers info,
+pie, packet, gitGraph, architecture, radar, treemap and some newer diagram
+types. Those Jison grammars pass label text through unchanged, so a Unicode
+character fails only where Mermaid expects **syntax**: a node ID, an arrow, a
+separator, a label delimiter, or a bare subgraph title.
 
-### 16.1 Invisible / Zero-Width Characters
+Every rule in this section was checked with `mmdc` on Mermaid **11.12.2** and
+**12.1.0**. Each character was rendered in 13 text contexts: flowchart `[..]`,
+`(..)` and `["..."]` labels, `|..|` and `-- .. -->` edge labels, sequence
+messages, notes and `participant .. as` aliases, class relation labels and
+`class A["..."]`, and state transition labels, descriptions and
+`state ".." as` names. It was also rendered in the syntax positions listed
+below.
 
-These are **the hardest to detect** because they're invisible in most editors.
-They typically appear when copy-pasting from web pages, Word, or chat apps.
-
-| Character | Unicode | Hex Bytes (UTF-8) | Fix |
-|-----------|---------|-------------------|-----|
-| Zero-width space | U+200B | `E2 80 8B` | Delete |
-| Zero-width non-joiner | U+200C | `E2 80 8C` | Delete |
-| Zero-width joiner | U+200D | `E2 80 8D` | Delete |
-| Word joiner | U+2060 | `E2 81 A0` | Delete |
-| BOM (byte order mark) | U+FEFF | `EF BB BF` | Delete |
-| Non-breaking space | U+00A0 | `C2 A0` | Replace with ASCII space (U+0020) |
-| Narrow no-break space | U+202F | `E2 80 AF` | Replace with ASCII space |
-| Thin space | U+2009 | `E2 80 89` | Replace with ASCII space |
-| Hair space | U+200A | `E2 80 8A` | Replace with ASCII space |
-| Figure space | U+2007 | `E2 80 87` | Replace with ASCII space |
-| Soft hyphen | U+00AD | `C2 AD` | Delete |
-
-**Detection tip**: Run `grep -P '[\x{200B}-\x{200D}\x{FEFF}\x{00A0}\x{2060}]'` or
-use `cat -A` to reveal invisible characters as `M-` prefixed sequences.
+**Never convert Unicode inside label text.** All of these characters render
+there, and replacing them with ASCII adds syntax:
 
 ```
-%% WRONG — contains zero-width space between A and --> (invisible)
-A​ --> B
+%% Renders on 11.12.2 and 12.1.0
+D[데이터（원본）]
 
-%% CORRECT
-A --> B
+%% Parse error: ASCII parentheses are node-shape syntax
+D[데이터(원본)]
 ```
 
-### 16.2 Smart Quotes (Typographic Quotes)
+### 16.1 Where Unicode breaks, and what `fix_mermaid.py` does
 
-Copied from Word, Google Docs, macOS auto-correction, or web pages.
-The Langium parser only recognizes ASCII `"` (U+0022) and `'` (U+0027).
+The fixer rewrites only the syntax part of a line. Label text, edge labels,
+messages, notes, aliases, comments, front matter, class member bodies and
+multi-line state notes are never touched. Other diagram types (gantt, pie,
+mindmap, …) are left alone, apart from deleting zero-width characters in
+front of the diagram keyword.
 
-| Wrong | Unicode | Fix |
-|-------|---------|-----|
-| `"` (left double) | U+201C | `"` (U+0022) |
-| `"` (right double) | U+201D | `"` (U+0022) |
-| `'` (left single) | U+2018 | `'` (U+0027) |
-| `'` (right single) | U+2019 | `'` (U+0027) |
-| `„` (low double) | U+201E | `"` (U+0022) |
-| `«` `»` (guillemets) | U+00AB, U+00BB | `"` (U+0022) |
+| Character(s) | Fails as syntax (11.12.2 and 12.1.0) | `fix_mermaid.py` |
+|---|---|---|
+| Zero-width U+200B, U+200C, U+200D, U+2060; soft hyphen U+00AD | Glued to an ID: `A<U+200B> --> B` is a lexical error. In sequence and state diagrams it silently creates a second participant or state. In front of the diagram keyword it gives "No diagram type detected" | Deleted in syntax only (rule `invisible-char`). Kept in labels, where deleting U+200D would split an emoji such as 👩‍💻 into two |
+| Typographic dashes `—` `–` `‐` `−` | Inside an arrow: `A —> B`, `A–>>B`, `A <–> B`. `S1 –> S2` renders a state named `–>` | The dash run before `>` becomes ASCII and is clamped to a valid length: flowchart, class and state need 2 or more (`–>` → `-->`), sequence takes at most 2 (`-—>>` → `-->>`). In a flowchart, a free-standing dash that opens an edge label also becomes `--` (`A — yes —> B` → `A -- yes --> B`) (rule `typo-dash`) |
+| `→` `↔` `⇒` | As an arrow: `A → B`, `A→B: hi`. `S1 → S2` renders a state named `→` | Flowchart `→` `↔` `⇒` → `-->` `<-->` `==>`; class and state `→` → `-->`; sequence `→` → `->>` (rule `unicode-arrow`) |
+| `←` `⇐`, and `↔` `⇒` outside flowcharts | As an arrow. The ASCII look-alikes `<--`, `<==`, sequence `<-->` and `==>` fail too | **Warning only** (`unicode-arrow-manual`): swap the operands and use a right-pointing arrow (`A ← B` → `B --> A`) |
+| Fullwidth `（` `）` `【` `】` `｛` `｝` `｜` `；` `，` `＝` `＞` `＜` `：` | As flowchart syntax: a shape delimiter after an ID (`A（데이터）`), edge-label pipes (`-->｜라벨｜`), arrows (`--＞`, `＝＝>`), a statement separator (`；`), `class A，B red`, CSS (`fill：#f00`) | Converted to ASCII in flowchart syntax only (rule `fullwidth-cjk`) |
+| Fullwidth colon `：` | As the label separator: `A->>B： hi` and `Note over A： x` fail, `A --> B ： x` fails in class diagrams, and in state diagrams `S1 --> S2 ： x` renders a state named `：` | Only the separator becomes `:`; the text after it is untouched (rule `fullwidth-cjk`). Skipped when another `:` follows with no space in between (`A->>B：x: hi`), because the `：` may then be part of an ID |
+| `。` | At the end of a flowchart statement: `A --> B。` | **Warning only** (`fullwidth-period`): the ASCII `B.` renders a node named `B.`, so delete the character by hand |
+| Curly double quotes `“` `”` `„` | As label delimiters when the label needs quoting: `A[“a (b)”]`, `A(“a [b]”)`, `A -->|“yes (y)”| B`. Always in `class A[“…”]` and `state “…” as S1` | The delimiter pair becomes ASCII `"` (rule `smart-quote`). Left alone when the label renders unquoted: `A[“데이터”]` shows the curly quotes as text |
+| Any of the above in a bare subgraph title | `subgraph 처리（원본）`, `subgraph 처리–원본` and `subgraph “처리”` all fail, and so does `subgraph 처리(원본)` | The title is quoted instead of converted: `subgraph "처리（원본）"` (rule `subgraph-title-quote`) |
 
-```
-%% WRONG — smart quotes from Word/Docs
-A["데이터 처리"]
-B['Configuration']
+Typographic dashes in sequence arrows with an `x` or `)` head (`A–xB`) are
+not rewritten, because the same characters can be part of a participant
+name. The `--with-mmdc` loop reports them as parse errors.
 
-%% CORRECT — ASCII quotes
-A["데이터 처리"]
-B['Configuration']
-```
+### 16.2 Characters that need no fix
 
-### 16.3 Typographic Dashes
+These render on 11.12.2 and 12.1.0 in every position tested, so the fixer no
+longer rewrites them:
 
-| Wrong | Unicode | Fix |
-|-------|---------|-----|
-| `—` (em dash) | U+2014 | `--` |
-| `–` (en dash) | U+2013 | `-` |
-| `‐` (hyphen char) | U+2010 | `-` (U+002D) |
-| `−` (minus sign) | U+2212 | `-` (U+002D) |
+| Character(s) | Evidence |
+|---|---|
+| BOM U+FEFF | Renders anywhere, including in front of the diagram keyword and glued to an ID |
+| Non-breaking U+00A0, narrow no-break U+202F, thin U+2009, hair U+200A and figure U+2007 spaces | Treated as whitespace as indentation, between an ID and its arrow, and after `participant`. U+00A0 was also tested between `flowchart` and `TD`, around `as`, and in subgraph titles |
+| Single curly quotes `‘` `’`, guillemets `«` `»`, and curly quotes used as text | Render in every text context. Converting them inside a quoted label breaks it: `A["say “hi”"]` → `A["say "hi""]` renders as `say hi` |
+| Ellipsis `…` | Renders in every text context; it has no syntax role |
+| `×` `÷` `±` `≤` `≥` `≠` `∞` `²` `°` `µ` `™` `©` `➡` `•` `✓` `✗` | Render unquoted in node labels, edge labels, sequence messages and notes, class relation labels and state transition labels: `A[값 ≥ 100]` is fine |
 
-Em/en dashes are especially dangerous because they break arrow syntax:
+### 16.3 Why label text is never converted
 
-```
-%% WRONG — en dash looks like a regular dash but breaks the arrow
-A –> B
-A —> B
+The previous fixer converted these characters on every line. On 11.12.2 and
+12.1.0 that broke diagrams that rendered:
 
-%% CORRECT
-A --> B
-```
+| Rendering input | After an ASCII conversion | Result |
+|---|---|---|
+| `D[데이터（원본）]` | `D[데이터(원본)]` | Parse error |
+| `A -->|값｜값| B` | `A -->|값|값| B` | Parse error |
+| `A->>B: 값；값` | `A->>B: 값;값` | Parse error (`;` ends the statement) |
+| `A -- 값—값 --> B` | `A -- 값--값 --> B` | Parse error |
+| `A[값“값]`, `state "값“값" as S1` | `A[값"값]`, `state "값"값" as S1` | Parse error |
+| `S1 --> S2 : 값；값` | `S1 --> S2 : 값;값` | Renders an extra state named `;값` |
+| `A -- 값→값 --> B` | `A -- 값-->값 --> B` | Renders an extra node `값` |
 
-### 16.4 Unicode Arrows and Symbols
+**CJK input methods**: fullwidth punctuation typed by a Korean, Japanese or
+Chinese IME is harmless inside labels. It only matters when it replaces
+syntax: `：` as the message separator, `（` right after a node ID, `｜` around
+an edge label. Switch to English input for the syntax, not for label text.
 
-Unicode arrows look correct but Mermaid only recognizes ASCII arrow syntax.
+### 16.4 Detection
 
-| Wrong | Unicode | Fix |
-|-------|---------|-----|
-| `→` | U+2192 | `-->` (flowchart) or text |
-| `←` | U+2190 | `<--` or text |
-| `↔` | U+2194 | `<-->` |
-| `⇒` | U+21D2 | `==>` |
-| `⇐` | U+21D0 | `<==` |
-| `➡` | U+27A1 | `-->` |
-| `•` | U+2022 | `-` or `*` |
-| `…` | U+2026 | `...` |
-| `✓` | U+2713 | wrap in quotes: `"✓"` |
-| `✗` | U+2717 | wrap in quotes: `"✗"` |
-
-```
-%% WRONG — Unicode arrow in flowchart
-A → B
-
-%% CORRECT
-A --> B
-```
-
-### 16.5 Fullwidth CJK Punctuation
-
-Common in Korean/Japanese/Chinese input — these characters have different code points
-than their ASCII equivalents, and the Langium parser does not treat them as equivalent.
-
-| Wrong (Fullwidth) | Unicode | Fix (ASCII) | Unicode |
-|--------------------|---------|-------------|---------|
-| `（` | U+FF08 | `(` | U+0028 |
-| `）` | U+FF09 | `)` | U+0029 |
-| `【` | U+3010 | `[` | U+005B |
-| `】` | U+3011 | `]` | U+005D |
-| `｛` | U+FF5B | `{` | U+007B |
-| `｝` | U+FF5D | `}` | U+007D |
-| `：` | U+FF1A | `:` | U+003A |
-| `；` | U+FF1B | `;` | U+003B |
-| `，` | U+FF0C | `,` | U+002C |
-| `。` | U+3002 | `.` | U+002E |
-| `＝` | U+FF1D | `=` | U+003D |
-| `＞` | U+FF1E | `>` | U+003E |
-| `＜` | U+FF1C | `<` | U+003C |
-| `｜` | U+FF5C | `\|` | U+007C |
-
-```
-%% WRONG — fullwidth parentheses (from Korean IME)
-A["데이터（원본）"]
-
-%% CORRECT — ASCII parentheses inside quoted label
-A["데이터(원본)"]
-```
-
-**Korean-specific note**: When the Korean IME is active, pressing `(` may produce
-the fullwidth `（` instead of ASCII `(`. This is the most common source of
-fullwidth characters in Korean Mermaid diagrams. Always switch to English input
-when typing Mermaid syntax, or verify after pasting.
-
-### 16.6 Mathematical and Technical Symbols
-
-| Wrong | Unicode | Fix |
-|-------|---------|-----|
-| `×` (multiply) | U+00D7 | `x` or wrap in quotes |
-| `÷` (divide) | U+00F7 | `/` or wrap in quotes |
-| `±` | U+00B1 | `+/-` or wrap in quotes |
-| `≤` | U+2264 | `<=` or wrap in quotes |
-| `≥` | U+2265 | `>=` or wrap in quotes |
-| `≠` | U+2260 | `!=` or wrap in quotes |
-| `∞` | U+221E | wrap in quotes: `"∞"` |
-| `²` `³` (superscript) | U+00B2, U+00B3 | wrap in quotes |
-| `°` (degree) | U+00B0 | wrap in quotes |
-| `µ` (micro) | U+00B5 | wrap in quotes |
-| `™` `©` `®` | Various | wrap in quotes |
-
-For labels: wrap in double quotes. For message text in sequence diagrams:
-use Mermaid entity syntax (see section 17).
-
-```
-%% WRONG — bare Unicode math symbol in label
-A[값 ≥ 100]
-
-%% CORRECT — quoted label
-A["값 >= 100"]
-```
-
-### 16.7 Detection Script
-
-To scan a Mermaid file for problematic Unicode characters:
+Run the bundled linter (`python3 scripts/fix_mermaid.py file.md`). It reports
+only characters in syntax positions. For a quick manual scan:
 
 ```bash
-# Find non-ASCII characters in mermaid blocks
-grep -Pn '[^\x00-\x7F]' file.md
+# Zero-width characters and soft hyphens (they break IDs; harmless in labels)
+grep -nP '[\x{200B}-\x{200D}\x{2060}\x{00AD}]' file.md
 
-# Specifically find invisible characters
-grep -Pn '[\x{200B}-\x{200D}\x{FEFF}\x{00A0}\x{2060}\x{00AD}\x{2009}\x{200A}\x{202F}]' file.md
+# Typographic dashes or Unicode arrows used as arrows
+grep -nP '[\x{2010}\x{2013}\x{2014}\x{2212}]>|\s[\x{2190}\x{2192}\x{2194}\x{21D0}\x{21D2}]\s' file.md
 
-# Find smart quotes
-grep -Pn '[\x{201C}\x{201D}\x{2018}\x{2019}\x{201E}]' file.md
-
-# Find fullwidth CJK punctuation
-grep -Pn '[\x{FF08}\x{FF09}\x{3010}\x{3011}\x{FF5B}\x{FF5D}\x{FF1A}\x{FF1B}\x{FF0C}\x{FF1D}]' file.md
+# Fullwidth colon used as a sequence-message separator
+grep -nP '^\s*[^:\x{FF1A}]+-[-]?>>?[^:\x{FF1A}]+\x{FF1A}' file.md
 ```
 
 ---
 
 ## 17. Sequence Diagram Message Escaping
 
-In sequence diagrams, message text (after `:` in arrows) and Note text are parsed
-by the Langium lexer. Characters `{`, `}`, `[`, `]`, `"` in these positions
-cause "Syntax error in text" because the parser tries to interpret them as
-diagram syntax tokens.
-
-### Fix: Use Mermaid entity syntax
-
-| Character | Entity | Description |
-|-----------|--------|-------------|
-| `{` | `#123;` | Opening curly brace |
-| `}` | `#125;` | Closing curly brace |
-| `[` | `#91;` | Opening bracket |
-| `]` | `#93;` | Closing bracket |
-| `"` | `#34;` | Double quote |
-| `'` | `#39;` | Single quote |
-| `#` | `#35;` | Hash (prevents entity conflicts) |
-| `&` | `#38;` | Ampersand |
-| `<` | `#lt;` | Less than |
-| `>` | `#gt;` | Greater than |
-
-Entities are rendered as the original character in the diagram output.
-
-### Examples
+On Mermaid 11.12.2 and 12.1.0, braces, brackets and double quotes in message,
+note and alias text render as typed, and the `#123;`-style entities produce
+the same output. `fix_mermaid.py` therefore no longer escapes them:
 
 ```
-%% WRONG — curly braces in message text
+%% All of these render on 11.12.2 and 12.1.0
 V-->>C: 200 OK {id: 1, status: "ok"}
-
-%% CORRECT — entities for braces and quotes
-V-->>C: 200 OK #123;id: 1, status: #34;ok#34;#125;
-
-%% WRONG — brackets in message
 V->>P: paginate [page=1, size=100]
-
-%% CORRECT
-V->>P: paginate #91;page=1, size=100#93;
-
-%% WRONG — braces in Note
 Note over V: PATCH /api/users/{id}/
-
-%% CORRECT
-Note over V: PATCH /api/users/#123;id#125;/
+A->>B: POST {"a": [1, 2], "b": {"c": null}}
 ```
 
-### When to apply
+Two characters still need a Mermaid entity in message, note and
+`participant .. as` alias text:
 
-Only escape characters in these positions:
+| Character | Problem | Entity |
+|-----------|---------|--------|
+| `;` | Ends the statement: `A->>B: a; b` is a parse error (a trailing `;` is accepted) | `#59;` |
+| `#` | Starts an entity: `A->>B: issue #1 fixed` silently renders as `issue` | `#35;` |
+
+```
+%% WRONG: parse error
+A->>B: retry; then fail
+
+%% CORRECT
+A->>B: retry#59; then fail
+
+%% WRONG: renders only "issue"
+A->>B: issue #1 fixed
+
+%% CORRECT
+A->>B: issue #35;1 fixed
+```
+
+The fixer does not rewrite these automatically. A `;` shows up as a parse
+error in the `--with-mmdc` loop, but a `#` does not fail, so check messages
+containing `#` by eye.
+
+Entities are `#<decimal>;` (or a named entity such as `#lt;`) and render as
+the original character. Other useful ones: `#123;` `{`, `#125;` `}`,
+`#91;` `[`, `#93;` `]`, `#34;` `"`, `#38;` `&`, `#lt;` `<`, `#gt;` `>`.
+
+Only escape in these positions:
 - **Arrow message text**: the part after `:` in `A->>B: <this text>`
 - **Note text**: the part after `:` in `Note over A: <this text>`
-- **URL path parameters** in messages: `{id}`, `{username}`, `{run_id}`
+- **Alias text**: the part after `as` in `participant A as <this text>`
 
 Do NOT escape in:
-- Participant declarations (`participant A as Name`)
+- Participant IDs
 - Control flow keywords (`loop`, `alt`, `else`, `end`)
 - Activation markers (`+`, `-`)
 - Comments (`%%`)

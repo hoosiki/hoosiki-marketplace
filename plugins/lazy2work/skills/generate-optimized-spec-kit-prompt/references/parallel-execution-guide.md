@@ -81,7 +81,7 @@ After all N processes exit, the driver runs the spec gate over every feature —
 
 ### Concurrency
 
-The default is **all N at once** — that is the whole point of Phase 1, and these stages are short (`01_specify` caps at 30 turns, `02_clarify` at 50). Throttle with `--max-concurrent` when the account hits 429s; see §10.
+The default is **all N at once**, which is the whole point of Phase 1. These stages only write under `specs/<feature>/`, and they are turn-capped: `01_specify` at 30 turns and `02_clarify` at 500 (`get_max_turns_for_step` in `speckit_pipeline.sh`). Throttle with `--spec-jobs N` when the account hits 429s. `--max-concurrent` caps Phase 2 waves only. See §10.
 
 ## 3. Building the dependency DAG
 
@@ -330,6 +330,10 @@ Concurrent `claude -p` sessions multiply input tokens (CLAUDE.md + constitution 
 
 ## 11. Notes on adjacent stages
 
-- **`/speckit.taskstoissues`** (not part of this skill's 8-stage flow): if used, run it **sequentially**, only on `analyze`-passed tasks, and preview with `--dry-run`. It writes to external shared state (GitHub Issues); its duplicate-check is check-then-create and races under concurrency, and mis-created issues cannot be `git reset`.
+- **`/speckit.taskstoissues`** (not part of this skill's 8-stage flow). If you use it:
+  - **Run it sequentially, and only on `analyze`-passed tasks.** It writes to external shared state (GitHub Issues). Its duplicate check lists existing issues, then creates the missing ones. That is check-then-create, so it races under concurrency, and mis-created issues cannot be `git reset`.
+  - **There is no preview mode.** Neither the core command nor the bundled `github` extension's `/speckit.github.taskstoissues` has a `--dry-run` (both checked at Spec Kit v1.1.0). `$ARGUMENTS` is free text, so a `--dry-run` would only be advice to the agent.
+  - **Preview it yourself instead.** Each task becomes an issue titled `T001: <description>`, taken verbatim from `tasks.md`, so review `tasks.md` first. Also confirm that `git config --get remote.origin.url` is the intended GitHub repo.
+  - **Prefer the extension command.** In v1.1.0 the core command is slated for deprecation in favour of `/speckit.github.taskstoissues` (opt-in: `specify extension add github`), which has the same behaviour.
 - **`/speckit.converge` exit codes** report execution success, not convergence. Detect convergence with a sentinel in the output, and guard against phantom completion (`[X]` marked but unimplemented) with real build/test gates — the `pre_merge` gate enforces this by rejecting any unchecked `- [ ] T…` line.
 - **The git extension** (`/speckit.git.feature`) creates numbered feature branches. It is incompatible with this pipeline's branch scheme — leave it out of `.specify/extensions.yml`, or the `before_specify` hook will create N branches inside one working tree during Phase 1.

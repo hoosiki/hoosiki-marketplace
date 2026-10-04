@@ -41,8 +41,8 @@ description: >
 
 Repairs two classes of Markdown problems that break downstream rendering:
 
-1. **Mermaid diagram syntax** — v11.x/v12.x Langium parser compatibility (reserved
-   words, Unicode, message escaping).
+1. **Mermaid diagram syntax** — v11.x/v12.x parser compatibility (reserved
+   words, Unicode used as syntax, message escaping).
 2. **Pandoc PDF pitfalls** — blank-line violations before block elements,
    long table cells mixing bold and special symbols that trigger LaTeX
    overfull hbox, Unicode glyphs missing from CJK fonts that silently
@@ -94,7 +94,8 @@ Read `references/mermaid-v11-syntax.md` for the full rule set and examples.
    `graph` also requires one.
 3. **Special characters in node labels** — Characters like `(`, `)`, `[`, `]`, `{`, `}`,
    `<`, `>`, `|`, `:`, `;`, `#`, `&`, `"`, `'` inside labels must be wrapped in double quotes.
-   Korean and other Unicode text in labels should also be quoted.
+   Korean and other Unicode text, including fullwidth punctuation such as `（）`, renders
+   unquoted; quote it only when the label also contains one of these ASCII characters.
 4. **Arrow syntax** — Validate per diagram type:
    - Flowchart: `-->`, `---`, `-.->`, `==>`, `--text-->`, `-->|text|`
    - Sequence: `->>`, `-->>`, `-)`, `--)`, `-x`, `--x`
@@ -105,19 +106,29 @@ Read `references/mermaid-v11-syntax.md` for the full rule set and examples.
    Mermaid may misinterpret it as closing a subgraph. Wrap in quotes or rename.
 6. **Unclosed subgraph/block** — Every `subgraph` needs a matching `end`.
 7. **Empty nodes or edges** — Nodes with no ID or edges with missing endpoints.
-8. **Unicode / invisible characters (Langium parser)** — Scan every line for:
-   - **Invisible chars**: zero-width space (U+200B), BOM (U+FEFF), non-breaking space (U+00A0),
-     zero-width joiner/non-joiner (U+200D/U+200C) → **delete or replace with ASCII space**.
-   - **Smart quotes**: `"` `"` `'` `'` → replace with `"` `'`.
-   - **Typographic dashes**: em dash `—`, en dash `–` → replace with `--` or `-`.
-   - **Unicode arrows/symbols**: `→` `←` `⇒` `↔` → replace with Mermaid arrow syntax or text.
-   - **Fullwidth CJK punctuation**: `（` `）` `【` `】` `：` `；` → replace with ASCII equivalents.
-   - **Ellipsis**: `…` (U+2026) → replace with `...`.
-   - **Mathematical symbols**: `×` `÷` `±` `≤` `≥` `≠` → spell out or use entity (`#215;` etc.).
-   See `references/mermaid-v11-syntax.md` section 16 for the full replacement table.
-9. **Special characters in sequence diagram messages** — Characters `{`, `}`, `[`, `]`, `"`
-   in message text (after `:` in arrows) and Note text cause parser failures.
-   Replace with Mermaid entity syntax: `#123;` `#125;` `#91;` `#93;` `#34;`.
+8. **Unicode used as syntax** — Unicode breaks a diagram only where Mermaid expects
+   syntax. **Never convert it inside label, edge-label, message, note or alias text**:
+   every character below renders there on 11.12.2 and 12.1.0, and `D[데이터（원본）]` →
+   `D[데이터(원본)]` turns a working label into a parse error. Fix only:
+   - **Zero-width chars** (U+200B/U+200C/U+200D/U+2060) and soft hyphens (U+00AD) glued
+     to an ID or in front of the diagram keyword → delete.
+   - **Typographic dashes** `—` `–` `‐` `−` inside an arrow (`A —> B`, `A–>>B`) → ASCII
+     dashes, at least `-->` in flowchart/class/state and at most `-->>` in sequence.
+   - **Unicode arrows** used as arrows: `→` → `-->` (`->>` in sequence), `↔` → `<-->`
+     and `⇒` → `==>` in flowcharts. `←` `⇐` have no ASCII equivalent: swap the operands.
+   - **Fullwidth punctuation** used as flowchart syntax (`A（데이터）`, `-->｜라벨｜`,
+     `--＞`, a trailing `；`) → ASCII; a fullwidth `：` used as the message or label
+     separator (`A->>B： hi`) → `:`. A trailing `。` must be deleted by hand.
+   - **Curly double quotes** delimiting a label that needs quoting (`A[“a (b)”]`,
+     `class A[“…”]`, `state “…” as S1`) → ASCII `"`.
+   - **Bare subgraph titles** with any of these characters (`subgraph 처리（원본）`)
+     → quote the title: `subgraph "처리（원본）"`.
+   BOM, non-breaking and other Unicode spaces, single curly quotes, `…` and math
+   symbols such as `≥` need no fix. See `references/mermaid-v11-syntax.md` section 16.
+9. **Special characters in sequence diagram messages** — `{`, `}`, `[`, `]` and `"`
+   render as typed in message, note and alias text; do not escape them. Two
+   characters still need an entity: `;` ends the statement (`#59;`) and `#`
+   starts an entity, so `issue #1` renders as `issue` (`#35;`). See section 17.
 
 **Warning checks (may cause rendering issues):**
 
@@ -165,7 +176,8 @@ python3 scripts/fix_mermaid.py path/to/file.md --with-mmdc --json
 **What happens per iteration (max 3):**
 
 1. `process_file(apply_fix=True)` — runs the static linter (reserved words,
-   Unicode, entity escaping). Any edits are written to disk.
+   Unicode used as syntax). Any edits are written to disk; Unicode with no safe
+   fix (`←`, a trailing `。`) is reported as a warning and left for review.
 2. `validate_file` — extracts every ```` ```mermaid ```` block, writes each
    to a temp file, invokes `mmdc -i tmp.mmd -o tmp.svg -q`, captures stderr.
 3. `parse_mmdc_stderr` — matches `Parse error on line N:` and the
@@ -697,6 +709,9 @@ G is auto-fixable because there is exactly one safe correction
 ### Mermaid
 
 - **Multiple diagram types in one file**: Check each block independently.
+- **Unicode in label text**: Leave it. The linter never rewrites labels, edge labels,
+  messages, notes, aliases, comments or front matter. Its Unicode rules cover only
+  flowchart, sequence, class and state syntax.
 - **Nested quotes**: Use single quotes inside double-quoted labels, or `&quot;`.
 - **Very long labels**: Keep them quoted; don't split nodes unless asked.
 - **Code blocks inside labels**: Not supported; suggest alternatives.

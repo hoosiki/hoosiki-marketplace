@@ -14,6 +14,7 @@
 #   ./utilities/<project>/speckit_pipeline.sh <PROMPTS_PATH> --no-commit          # 단계 완료 후 커밋 생략
 #   ./utilities/<project>/speckit_pipeline.sh <PROMPTS_PATH> --skip-clarify       # 02_clarify 단계 건너뛰기
 #   ./utilities/<project>/speckit_pipeline.sh <PROMPTS_PATH> --resume             # 마지막 실패/중단 지점부터 재개
+#   ./utilities/<project>/speckit_pipeline.sh --print-models                      # 모델만 해석해 KEY=ID 로 출력하고 종료
 #
 #   <PROMPTS_PATH>: 'NNN-<slug>' 형식의 feature 폴더들을 직접 담고 있는 (절대) 경로.
 #                   예) /abs/path/to/.speckit-prompts/japanese-tutor
@@ -41,8 +42,9 @@
 # 단계별 모델·effort (토큰 최적화 — 추론군=Opus+고effort, 실행군=Sonnet):
 #   specify/clarify/checklist=opus/high · plan/analyze/converge=opus/xhigh · tasks/implement=sonnet/xhigh · commit=기본값.
 #   ★ 모델은 버전을 고정하지 않는다. 실행 시작 시 "지금 가장 최신의 opus / sonnet"을 1회 해석해 런 전체에 고정한다.
-#     해석 순서: SPECKIT_OPUS_MODEL/SPECKIT_SONNET_MODEL → Models API(/v1/models) 최신 → CLI 별칭 'opus'/'sonnet'.
-#     SPECKIT_SKIP_MODEL_RESOLVE=1 로 API 조회를 끄고 별칭만 쓸 수 있다.
+#     해석 순서: SPECKIT_OPUS_MODEL/SPECKIT_SONNET_MODEL → Models API(/v1/models) 최신 →
+#               CLI 별칭 프로브(과금 없음, 별칭 → 구체 ID) → 별칭 'opus'/'sonnet' 그대로(경고).
+#     SPECKIT_SKIP_MODEL_RESOLVE=1 로 해석 전체를, SPECKIT_SKIP_MODEL_PROBE=1 로 프로브만 끌 수 있다.
 #   env로 override: SPECIFY_MODEL/SPECIFY_EFFORT, CLARIFY_*, PLAN_*, CHECKLIST_*, TASKS_*, ANALYZE_*, IMPLEMENT_*, CONVERGE_* (예: PLAN_EFFORT=max ...).
 #   ⚠️ xhigh는 최신 Opus 계열·Sonnet 5 이상에서 지원 — 구형 모델로 해석되면 high로 폴백될 수 있음.
 #
@@ -136,6 +138,7 @@ DRY_RUN=false
 NO_COMMIT=false
 SKIP_CLARIFY=false
 RESUME=false
+PRINT_MODELS=false
 
 while [[ $# -gt 0 ]]; do
 	case $1 in
@@ -185,6 +188,10 @@ while [[ $# -gt 0 ]]; do
 		MAX_TURNS="$2"
 		shift 2
 		;;
+	--print-models)
+		PRINT_MODELS=true
+		shift
+		;;
 	-h | --help)
 		cat <<-'HELPEOF'
 			Usage: speckit_pipeline.sh <PROMPTS_PATH> [OPTIONS]
@@ -210,12 +217,17 @@ while [[ $# -gt 0 ]]; do
 			  --skip-clarify   02_clarify 건너뛰기
 			  --resume         마지막 실패/중단 지점부터 재개
 			  --max-turns N    Claude 최대 턴 수 (기본: 2000)
+			  --print-models   모델만 해석해 SPECKIT_OPUS_MODEL=… / SPECKIT_SONNET_MODEL=… 를 출력하고 종료
+			                   (speckit_parallel.sh 가 런 전체에 1회 해석할 때 쓴다. PROMPTS_PATH 불필요)
 			  (env) SPECKIT_LOG_ROOT     로그/체크포인트 루트 (기본: <project>/.speckit-logs)
 			  (env) SPECKIT_WORKTREE_MODE=1  worktree 병렬 실행 — 프리앰블에 격리 가드레일 추가
 			  (env) 단계별 모델/effort override: SPECIFY_MODEL/SPECIFY_EFFORT, CLARIFY_*, PLAN_*, CHECKLIST_*, TASKS_*, ANALYZE_*, IMPLEMENT_*, CONVERGE_*
 			        기본: specify·clarify·checklist=opus/high, plan·analyze·converge=opus/xhigh, tasks·implement=sonnet/xhigh
-			        모델은 실행 시작 시 최신 opus/sonnet 으로 1회 해석됨 (SPECKIT_OPUS_MODEL/SPECKIT_SONNET_MODEL 로 고정,
-		                                             SPECKIT_SKIP_MODEL_RESOLVE=1 로 API 조회 끄기)
+			        모델은 실행 시작 시 구체 ID 로 1회 해석되어 런 전체에 고정됨:
+			          SPECKIT_OPUS_MODEL/SPECKIT_SONNET_MODEL (고정) → Models API (ANTHROPIC_API_KEY 있을 때)
+			          → CLI 별칭 프로브 (과금 없음) → 별칭 그대로 (경고)
+			        SPECKIT_SKIP_MODEL_RESOLVE=1 해석 전체 끄기 · SPECKIT_SKIP_MODEL_PROBE=1 프로브만 끄기
+			        SPECKIT_MODEL_PROBE_TIMEOUT=N 프로브 타임아웃 초 (기본 30)
 
 			Feature 폴더: NNN-<slug>/{01_specify..09_commit}.md
 			웨이브 정의:  <PROMPTS_PATH>/waves.json
@@ -248,6 +260,29 @@ done
 # --from 의 단계 부분 정규화 (06 또는 06_analyze 모두 허용 → 06)
 [ -n "$FROM_STEP" ] && FROM_STEP="${FROM_STEP%%_*}"
 
+# Phase → 실행 단계 목록
+case "$PHASE" in
+spec) STEPS=("${STEPS_SPEC[@]}") ;;
+build) STEPS=("${STEPS_BUILD[@]}") ;;
+all) STEPS=("${STEPS_SPEC[@]}" "${STEPS_BUILD[@]}") ;;
+*)
+	echo "Unknown --phase '$PHASE' (spec | build | all)"
+	exit 1
+	;;
+esac
+
+# Prompts 디렉터리 확정: 위치 인자(절대경로) 우선, 없으면 기본값
+if [ -n "$PROMPTS_INPUT" ]; then
+	PROMPTS_DIR="$(cd "$PROMPTS_INPUT" 2>/dev/null && pwd)" || {
+		echo "Prompts path not found or not a directory: $PROMPTS_INPUT"
+		exit 1
+	}
+else
+	PROMPTS_DIR="$DEFAULT_PROMPTS_DIR"
+fi
+
+WAVES_FILE="$PROMPTS_DIR/waves.json"
+
 # ──────────────────────────────────────────────
 # Model Resolution — 버전을 고정하지 않고 "지금 가장 최신의 opus / sonnet"을 쓴다
 # ──────────────────────────────────────────────
@@ -255,14 +290,25 @@ done
 #   1) SPECKIT_OPUS_MODEL / SPECKIT_SONNET_MODEL   — 명시 고정(재현성이 필요할 때)
 #   2) Models API (GET /v1/models) 에서 'claude-<family>-*' 중 created_at 최신
 #      — ANTHROPIC_API_KEY 가 있을 때만. 실패하면 조용히 3)으로 떨어진다.
-#   3) 별칭 'opus' / 'sonnet' — claude CLI 가 스스로 최신 모델로 해석한다 (API 키 불필요)
-#        `claude --help` → "Provide an alias for the latest model (e.g. 'fable', 'opus', or 'sonnet')"
+#   3) CLI 별칭 프로브 (과금 없음) — CLI 에게 "이 별칭이 지금 무엇인가"를 직접 묻는다:
+#        claude -p /theme --model <family> --output-format stream-json --verbose ...
+#      stream-json 의 system/init 이벤트 "model" 이 CLI 가 해석한 구체 ID 다 (예: claude-opus-5-5).
+#      /theme 는 -p 에서 쓸 수 없는 내장 명령이라 "모델 턴 없이" 끝난다 (num_turns 0, total_cost_usd 0):
+#        https://code.claude.com/docs/en/agent-sdk/slash-commands#dispatch-commands-by-name
+#      CLI 자신이 해석하므로 ANTHROPIC_DEFAULT_OPUS_MODEL / ANTHROPIC_DEFAULT_SONNET_MODEL
+#      (셸 env 든 settings.json 의 env 든) 도 실제 단계 호출과 똑같이 반영된다.
+#      SPECKIT_MODEL_PROBE_TIMEOUT 초(기본 30) 안에 끝나지 않거나 파싱에 실패하면 경고 후 4).
+#   4) 별칭 'opus' / 'sonnet' 그대로 — ⚠️ 이때는 CLI 가 매 호출마다 다시 해석한다.
 #
 # ★ 실행 시작 시 한 번만 해석하고 런 전체에 고정한다.
-#   매 단계 별칭을 넘기면 실행 도중 새 모델이 나왔을 때 feature 마다 다른 모델로 갈릴 수 있다.
-#   한 번 고정하면 그 런의 모든 feature 가 동일 모델로 처리되고, 로그에 무엇이 쓰였는지 남는다.
+#   별칭은 "제공자별 권장 버전을 가리키며 시간이 지나면 바뀐다" (code.claude.com/docs/en/model-config).
+#   매 단계 별칭을 넘기면 실행 도중 별칭이 옮겨갈 때(새 모델 출시·CLI 자동 업데이트) feature 마다
+#   다른 모델로 갈린다. 구체 ID 로 고정하면 그 런의 모든 feature 가 동일 모델로 처리되고,
+#   로그에 무엇이 쓰였는지 남는다 (Models: opus -> claude-opus-… [cli-probe]).
 #
-# 해석을 끄려면: SPECKIT_SKIP_MODEL_RESOLVE=1 (별칭만 사용 → CLI 가 매 호출마다 해석)
+# 끄기: SPECKIT_SKIP_MODEL_RESOLVE=1 → 2)·3) 모두 건너뛰고 별칭만 사용
+#       SPECKIT_SKIP_MODEL_PROBE=1   → 3)만 건너뜀 (API 키가 없으면 별칭)
+# speckit_parallel.sh 는 --print-models 로 이 해석을 런 전체에 1회만 돌려 자식에게 고정값으로 내려준다.
 _detect_latest_model() {
 	python3 - "$1" <<-'PYEOF'
 		import json, os, sys, urllib.request
@@ -287,32 +333,169 @@ _detect_latest_model() {
 	PYEOF
 }
 
-# family, 명시 고정값 → 해석된 모델 ID(또는 별칭)
+# 별칭 → 구체 ID (과금 없음). 성공: 1행 = 모델 ID (2행이 있으면 경고문), exit 0
+#                             실패: 1행 = 사유, exit 1 (응답 이상) / exit 2 (CLI 를 못 띄움·타임아웃 — 다음 family 도 건너뜀)
+_probe_alias_model() {
+	python3 - "$CLAUDE_BIN" "$1" "$PROJECT_DIR" "${SPECKIT_MODEL_PROBE_TIMEOUT:-30}" <<-'PYEOF'
+		import json, os, re, signal, subprocess, sys
+
+		claude, family, cwd = sys.argv[1], sys.argv[2], sys.argv[3]
+		try:
+		    timeout = float(sys.argv[4])
+		except ValueError:
+		    timeout = 30.0
+		if timeout <= 0:
+		    timeout = 30.0
+
+		# 단계 호출과 같은 cwd·설정 소스로 띄운다 (프로젝트 settings 의 env 도 반영되도록).
+		# 만에 하나 /theme 가 모델로 넘어가도 비용이 최소가 되게 턴·도구·effort 를 묶는다.
+		cmd = [
+		    claude, "-p", "/theme",
+		    "--model", family,
+		    "--output-format", "stream-json", "--verbose",
+		    "--max-turns", "1", "--tools", "", "--effort", "low",
+		    "--strict-mcp-config", "--no-session-persistence",
+		    "--settings", '{"disableAllHooks": true}',
+		]
+
+
+		def fail(reason, code=1):
+		    print(" ".join(str(reason).split()))  # 경고 한 줄에 들어가도록 개행 제거
+		    sys.exit(code)
+
+
+		try:
+		    proc = subprocess.Popen(cmd, cwd=cwd, stdin=subprocess.DEVNULL,
+		                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+		                            start_new_session=True)
+		except OSError as exc:
+		    fail("'%s' 실행 불가: %s" % (claude, exc), 2)
+
+		try:
+		    out, err = proc.communicate(timeout=timeout)
+		except subprocess.TimeoutExpired:
+		    try:
+		        os.killpg(proc.pid, signal.SIGKILL)  # 자식(훅·셸)까지 그룹째 정리
+		    except OSError:
+		        pass
+		    try:
+		        proc.communicate(timeout=5)
+		    except Exception:
+		        pass
+		    fail("%g초 안에 응답 없음 (SPECKIT_MODEL_PROBE_TIMEOUT)" % timeout, 2)
+
+		text = out.decode("utf-8", "replace").strip()
+		try:  # stream-json(줄 단위) 이 기본. json(단일 객체/배열) 도 받아준다.
+		    doc = json.loads(text)
+		    docs = doc if isinstance(doc, list) else [doc]
+		except ValueError:
+		    docs = []
+		    for line in text.splitlines():
+		        try:
+		            docs.append(json.loads(line))
+		        except ValueError:
+		            continue
+		events = [d for d in docs if isinstance(d, dict)]
+
+		model = ""
+		for ev in events:
+		    if ev.get("type") == "system" and ev.get("subtype") == "init":
+		        model = str(ev.get("model") or "")
+		        break
+		result = next((ev for ev in events if ev.get("type") == "result"), {})
+		if not model:
+		    usage = result.get("modelUsage") or {}
+		    if len(usage) == 1:
+		        model = str(next(iter(usage)))
+
+		if not model:
+		    lines = err.decode("utf-8", "replace").strip().splitlines() or text.splitlines() or ["출력 없음"]
+		    fail("init 이벤트에서 모델을 찾지 못함 (exit %s: %s)" % (proc.returncode, lines[-1].strip()[:160]))
+		if model == family or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:@/-]*(\[[0-9A-Za-z]+\])?", model):
+		    fail("예상하지 못한 모델 값 %r" % model[:80])
+
+		print(model)
+		turns = result.get("num_turns") or 0
+		cost = result.get("total_cost_usd") or 0
+		if turns or cost:
+		    print("프로브가 모델 턴을 썼습니다 (num_turns=%s, total_cost_usd=%s) — /theme 가 더 이상 로컬 명령이 아닐 수 있습니다" % (turns, cost))
+	PYEOF
+}
+
+# 해석 결과는 전역으로 돌려준다 (경고를 모아 헤더에 찍기 위해 서브셸을 쓰지 않는다)
+RESOLVED_MODEL=""
+RESOLVED_SOURCE=""
+MODEL_WARNINGS=()
+PROBE_UNAVAILABLE="" # CLI 를 못 띄웠거나 타임아웃이면 다음 family 에서 같은 대기를 반복하지 않는다
+
+# family, 명시 고정값 → RESOLVED_MODEL / RESOLVED_SOURCE
 resolve_family_model() {
 	local family="$1"
 	local pinned="$2"
-	local detected=""
+	local detected="" out="" note=""
+	local unpinned="별칭 '$family' 를 그대로 넘깁니다 (CLI 가 매 호출마다 다시 해석 → 런 도중 모델이 갈릴 수 있음)"
+
+	RESOLVED_MODEL="$family"
+	RESOLVED_SOURCE="alias"
 
 	if [ -n "$pinned" ]; then
-		echo "$pinned"
+		RESOLVED_MODEL="$pinned"
+		RESOLVED_SOURCE="pinned"
 		return 0
 	fi
 
-	if [ "${SPECKIT_SKIP_MODEL_RESOLVE:-0}" != "1" ] \
-		&& [ -n "${ANTHROPIC_API_KEY:-}" ] \
-		&& command -v python3 >/dev/null 2>&1; then
-		detected="$(_detect_latest_model "$family" 2>/dev/null || true)"
+	if [ "${SPECKIT_SKIP_MODEL_RESOLVE:-0}" = "1" ]; then
+		MODEL_WARNINGS+=("$family: SPECKIT_SKIP_MODEL_RESOLVE=1 — $unpinned")
+		return 0
 	fi
 
-	if [ -n "$detected" ]; then
-		echo "$detected"
-	else
-		echo "$family" # 별칭 폴백 — CLI 가 최신으로 해석
+	if ! command -v python3 >/dev/null 2>&1; then
+		MODEL_WARNINGS+=("$family: python3 가 없어 해석할 수 없습니다 — $unpinned")
+		return 0
 	fi
+
+	if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+		detected="$(_detect_latest_model "$family" 2>/dev/null || true)"
+		if [ -n "$detected" ]; then
+			RESOLVED_MODEL="$detected"
+			RESOLVED_SOURCE="models-api"
+			return 0
+		fi
+	fi
+
+	if [ "${SPECKIT_SKIP_MODEL_PROBE:-0}" = "1" ]; then
+		MODEL_WARNINGS+=("$family: SPECKIT_SKIP_MODEL_PROBE=1 — $unpinned")
+		return 0
+	fi
+
+	if [ -n "$PROBE_UNAVAILABLE" ]; then
+		MODEL_WARNINGS+=("$family: CLI 별칭 프로브 건너뜀 (앞선 프로브: $PROBE_UNAVAILABLE) — $unpinned")
+		return 0
+	fi
+
+	local rc=0
+	out="$(_probe_alias_model "$family" 2>/dev/null)" || rc=$?
+	if [ "$rc" -eq 0 ] && [ -n "$out" ]; then
+		RESOLVED_MODEL="${out%%$'\n'*}"
+		RESOLVED_SOURCE="cli-probe"
+		if [ "$out" != "$RESOLVED_MODEL" ]; then
+			note="${out#*$'\n'}"
+			MODEL_WARNINGS+=("$family: $note")
+		fi
+		return 0
+	fi
+	if [ "$rc" -eq 2 ]; then
+		PROBE_UNAVAILABLE="${out:-CLI 실행 실패}"
+	fi
+	MODEL_WARNINGS+=("$family: CLI 별칭 프로브 실패 (${out:-사유 없음}) — $unpinned")
 }
 
-OPUS_MODEL="$(resolve_family_model opus "${SPECKIT_OPUS_MODEL:-}")"
-SONNET_MODEL="$(resolve_family_model sonnet "${SPECKIT_SONNET_MODEL:-}")"
+resolve_family_model opus "${SPECKIT_OPUS_MODEL:-}"
+OPUS_MODEL="$RESOLVED_MODEL"
+OPUS_SOURCE="$RESOLVED_SOURCE"
+resolve_family_model sonnet "${SPECKIT_SONNET_MODEL:-}"
+SONNET_MODEL="$RESOLVED_MODEL"
+SONNET_SOURCE="$RESOLVED_SOURCE"
 
 # 단계별 모델 — 개별 env override 가 최우선
 SPECIFY_MODEL="${SPECIFY_MODEL:-$OPUS_MODEL}"
@@ -324,28 +507,16 @@ ANALYZE_MODEL="${ANALYZE_MODEL:-$OPUS_MODEL}"
 IMPLEMENT_MODEL="${IMPLEMENT_MODEL:-$SONNET_MODEL}"
 CONVERGE_MODEL="${CONVERGE_MODEL:-$OPUS_MODEL}"
 
-# Phase → 실행 단계 목록
-case "$PHASE" in
-spec) STEPS=("${STEPS_SPEC[@]}") ;;
-build) STEPS=("${STEPS_BUILD[@]}") ;;
-all) STEPS=("${STEPS_SPEC[@]}" "${STEPS_BUILD[@]}") ;;
-*)
-	echo "Unknown --phase '$PHASE' (spec | build | all)"
-	exit 1
-	;;
-esac
-
-# Prompts 디렉터리 확정: 위치 인자(절대경로) 우선, 없으면 기본값
-if [ -n "$PROMPTS_INPUT" ]; then
-	PROMPTS_DIR="$(cd "$PROMPTS_INPUT" 2>/dev/null && pwd)" || {
-		echo "Prompts path not found or not a directory: $PROMPTS_INPUT"
-		exit 1
-	}
-else
-	PROMPTS_DIR="$DEFAULT_PROMPTS_DIR"
+# --print-models: 드라이버(speckit_parallel.sh)가 런 전체에 1회 해석할 때 쓰는 단일 출처.
+#   stdout = KEY=ID 두 줄 (별칭 폴백이면 별칭 그대로), 경고는 stderr.
+if $PRINT_MODELS; then
+	for _w in ${MODEL_WARNINGS[@]+"${MODEL_WARNINGS[@]}"}; do
+		echo -e "${YELLOW}[WARN]${NC} $_w" >&2
+	done
+	echo "SPECKIT_OPUS_MODEL=$OPUS_MODEL"
+	echo "SPECKIT_SONNET_MODEL=$SONNET_MODEL"
+	exit 0
 fi
-
-WAVES_FILE="$PROMPTS_DIR/waves.json"
 
 # ──────────────────────────────────────────────
 # Helper Functions
@@ -702,7 +873,10 @@ log_info "Claude:    $($CLAUDE_BIN --version 2>/dev/null || echo 'unknown')"
 log_info "Steps:     ${STEPS[*]}"
 log_info "Max Turns: $MAX_TURNS (plan/tasks/implement/converge), others vary per step"
 [ "$WORKTREE_MODE" == "1" ] && log_info "Mode:      parallel worktree (isolation guardrails ON)"
-log_info "Models:    opus -> $OPUS_MODEL   sonnet -> $SONNET_MODEL"
+log_info "Models:    opus -> $OPUS_MODEL [$OPUS_SOURCE]   sonnet -> $SONNET_MODEL [$SONNET_SOURCE]"
+for _w in ${MODEL_WARNINGS[@]+"${MODEL_WARNINGS[@]}"}; do
+	log_warn "$_w"
+done
 log_info "Per-step model/effort (토큰 최적화):"
 log_info "  specify=$SPECIFY_MODEL/$SPECIFY_EFFORT  clarify=$CLARIFY_MODEL/$CLARIFY_EFFORT  plan=$PLAN_MODEL/$PLAN_EFFORT  checklist=$CHECKLIST_MODEL/$CHECKLIST_EFFORT"
 log_info "  tasks=$TASKS_MODEL/$TASKS_EFFORT  analyze=$ANALYZE_MODEL/$ANALYZE_EFFORT  implement=$IMPLEMENT_MODEL/$IMPLEMENT_EFFORT  converge=$CONVERGE_MODEL/$CONVERGE_EFFORT  (commit=default)"

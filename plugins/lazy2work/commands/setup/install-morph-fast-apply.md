@@ -31,4 +31,5 @@ the `edit_file` tool, alongside `codebase_search` and `github_codebase_search`.
 - Kept as a redirect rather than deleted so that existing references to this command
   fail loudly with a pointer instead of silently installing a deprecated package
 - `ALL_TOOLS=true`, which this command used to set, has no effect on `@morphllm/morphmcp` —
-  all three tools are always exposed and visibility is managed client-side
+  every tool is exposed by default, and `DISABLED_TOOLS` is the only server-side filter
+  (see `/setup:install-morph-mcp`)

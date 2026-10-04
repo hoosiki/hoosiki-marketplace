@@ -278,7 +278,18 @@ Phase 1 needs neither workmux nor tmux — only Phase 2 does.
 
 Per-stage model/effort defaults are Opus for the reasoning stages (specify, clarify, plan, checklist, analyze, converge) and Sonnet for the execution stages (tasks, implement), overridable via env vars. `MAX_TURNS` defaults to 2000.
 
-**Models are never pinned to a version.** At run start the pipeline resolves "the newest Opus / Sonnet available right now" once and holds it for the whole run — `SPECKIT_OPUS_MODEL`/`SPECKIT_SONNET_MODEL` if pinned, else the Models API (`GET /v1/models`, newest by `created_at`, needs `ANTHROPIC_API_KEY`), else the CLI aliases `opus`/`sonnet` which `claude --model` resolves to the latest on its own. Resolving once rather than per call keeps a model released mid-run from splitting a project across two models; the resolved IDs are logged. Do not write a concrete model ID into the generated prompts or scripts.
+**Models are never pinned to a version in the generated files.** At run start the pipeline resolves "the newest Opus / Sonnet available right now" to a **concrete model ID** once and passes that ID to every stage for the whole run. The order is:
+1. `SPECKIT_OPUS_MODEL`/`SPECKIT_SONNET_MODEL`, if pinned.
+2. The Models API (`GET /v1/models`, newest by `created_at`). Used only when `ANTHROPIC_API_KEY` is set.
+3. A **non-billed CLI probe**: `claude -p /theme --model opus --output-format stream-json --verbose`. The `system/init` event names the ID the alias maps to (e.g. `claude-opus-5-5`). `/theme` is a built-in that `-p` cannot run, so it ends with no model turn ($0).
+4. The bare alias, with a warning, if the probe times out or its output cannot be parsed.
+
+Resolving once matters because aliases "update over time". Passing `--model opus` on every call would let an alias that moves mid-run split a project across two models. The log shows `Models: opus -> claude-opus-… [cli-probe]`. `speckit_parallel.sh` resolves once per driver run and hands the IDs down: env for Phase 1, `.speckit-logs/parallel/build/models.env` for the Phase 2 panes. Opt-outs:
+- `SPECKIT_SKIP_MODEL_RESOLVE=1`: aliases only.
+- `SPECKIT_SKIP_MODEL_PROBE=1`: skips step 3 only.
+- `SPECKIT_MODEL_PROBE_TIMEOUT` (default 30s): the probe timeout.
+
+Per-stage `*_MODEL` env vars still win. Do not write a concrete model ID into the generated prompts or scripts.
 
 > Note: the pipeline's headless preamble tells Claude to use `uv run` for Python commands. If the target project does not use `uv`, tell the user to adjust that line (or set it via the project's `CLAUDE.md`).
 
@@ -366,7 +377,7 @@ After generating everything, verify against:
 | Scripts live in `utilities/{prd-name}/`, **not** bare `utilities/` | The folder name is how each script resolves its project; a bare install is ambiguous once a second project exists |
 | `.workmux.yaml` references scripts via `{{ SCRIPTS_PATH }}` | Both the pane command and the `pre_merge` hook — a bare `utilities/…` path breaks per-project resolution |
 | No script resolves `waves.json` with `head -1` | Resolution must pick the file **containing the requested wave**, never "the first file found" |
-| No hardcoded model version anywhere | Prompts and scripts name no concrete model ID; the runner resolves the latest Opus/Sonnet at run start |
+| No hardcoded model version anywhere | Prompts and scripts name no concrete model ID; the runner resolves the latest Opus/Sonnet to a concrete ID once at run start (pin → Models API → non-billed CLI probe → alias) |
 | `.workmux.yaml` has a **single-pane** `speckit` layout | Two panes deadlock `-W`/`--max-concurrent` |
 | `pre_merge` passes an explicit `SPECKIT_VERIFY_CMD` | Verified green against the untouched baseline; no `&&`-chained lint/type checks |
 | That env var is passed via `env VAR=...`, not `VAR=...` | `VAR=value cmd` is shell syntax and dies if the hook is exec'd without a shell |

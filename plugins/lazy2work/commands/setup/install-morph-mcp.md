@@ -51,14 +51,19 @@ If installation fails:
 
 ## Notes
 
-- Three tools are exposed, and **all of them are always exposed** — upstream no longer
-  supports narrowing the set from the server side. Manage tool visibility on the client:
+- Seven tools are exposed by default as of `@morphllm/morphmcp` 0.8.213 — the package
+  README still lists only the first three, but the shipped server registers all seven:
 
   | Tool | What it does |
   |------|--------------|
   | `edit_file` | Applies code changes at high throughput |
   | `codebase_search` | Natural-language code exploration, backed by WarpGrep |
   | `github_codebase_search` | Searches any public GitHub repo by URL or `owner/repo` |
+  | `reflex_list` / `reflex_predict` / `reflex_summary` / `reflex_traces` | Morph Reflex tools |
+
+- To narrow the set server-side, pass a comma-separated `DISABLED_TOOLS` (e.g.
+  `-e DISABLED_TOOLS=reflex_list,reflex_predict,reflex_summary,reflex_traces`); the server
+  rejects an unknown tool name with an error. Otherwise manage visibility on the client
 
 - **Existing installs may carry a stale `ENABLED_TOOLS` value.** Earlier versions of this
   command set `ENABLED_TOOLS=edit_file,warpgrep_codebase_search`. That variable is no

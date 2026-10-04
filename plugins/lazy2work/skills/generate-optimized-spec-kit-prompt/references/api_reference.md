@@ -712,19 +712,41 @@ Iterates the `NNN-<slug>` feature folders under `.speckit-prompts/{prd-name}/` a
 | `build` | `03_plan` → `04_checklist` → `05_tasks` → `06_analyze` → `07_implement` → `08_converge` | `implement` |
 | `all` (default) | `01` → `08` | `implement` |
 
-Env: `SPECKIT_LOG_ROOT` (log/checkpoint root), `SPECKIT_WORKTREE_MODE=1` (adds worktree isolation guardrails to the prompt preamble).
+Env:
+- `SPECKIT_LOG_ROOT`: the log/checkpoint root.
+- `SPECKIT_WORKTREE_MODE=1`: adds worktree isolation guardrails to the prompt preamble.
+- `SPECKIT_OPUS_MODEL` / `SPECKIT_SONNET_MODEL`, `SPECKIT_SKIP_MODEL_RESOLVE`, `SPECKIT_SKIP_MODEL_PROBE`, `SPECKIT_MODEL_PROBE_TIMEOUT`: model resolution, described below.
 
 Every `claude -p` call runs unattended with `--permission-mode bypassPermissions --dangerously-skip-permissions` (no permission prompts, no first-run acceptance dialog). This refuses to run as root/sudo — run it as a normal user, ideally in an isolated environment (container/VM/dev container), since `bypassPermissions` offers no protection against prompt injection or unintended actions.
 
 The runner **pins the feature directory** on every stage: it exports `SPECIFY_FEATURE_DIRECTORY=specs/{NNN}-{slug}` and `SPECIFY_FEATURE={NNN}-{slug}`, and restates both in the prompt preamble. Spec Kit 0.12+ reads that variable ahead of `.specify/feature.json`, which is what makes N concurrent `specify` runs in one working tree safe — without it every process scans `specs/` and computes the same `max+1`. The preamble also forbids branch creation and, for legacy Spec Kit (≤0.11), spells out `create-new-feature.sh --number NNN --short-name {slug} --allow-existing-branch`.
 
-**Models are resolved at run start, never pinned to a version.** The runner asks "what is the newest Opus / Sonnet right now?" once, then holds that answer for the whole run:
+**Models are resolved at run start, never pinned to a version.** The runner asks "what is the newest Opus / Sonnet right now?" once. It turns the answer into a **concrete model ID** and passes that ID as `--model` to every stage for the whole run:
 
-1. `SPECKIT_OPUS_MODEL` / `SPECKIT_SONNET_MODEL` — explicit pin, for reproducible re-runs.
-2. **Models API** (`GET /v1/models`) — newest `claude-opus-*` / `claude-sonnet-*` by `created_at`. Used only when `ANTHROPIC_API_KEY` is set; any failure falls through silently (5s timeout). Honors `ANTHROPIC_BASE_URL`.
-3. **CLI alias** `opus` / `sonnet` — `claude --model` resolves an alias to the latest model itself, so this works with no API key.
+1. `SPECKIT_OPUS_MODEL` / `SPECKIT_SONNET_MODEL`: an explicit pin, for reproducible re-runs.
+2. **Models API** (`GET /v1/models`): the newest `claude-opus-*` / `claude-sonnet-*` by `created_at`.
+   - Used only when `ANTHROPIC_API_KEY` is set.
+   - Any failure falls through silently (5s timeout).
+   - Honors `ANTHROPIC_BASE_URL`.
+3. **CLI alias probe (non-billed)**: asks the installed CLI what the alias maps to right now.
+   ```bash
+   claude -p /theme --model opus --output-format stream-json --verbose \
+     --max-turns 1 --tools "" --effort low --strict-mcp-config \
+     --no-session-persistence --settings '{"disableAllHooks": true}'
+   ```
+   - **Source of the ID.** The `model` field of the `system/init` event is the concrete ID, e.g. `claude-opus-5-5` (it keeps a `[1m]` suffix if the alias has one).
+   - **Why it is free.** `/theme` is a built-in command that is unavailable in `-p`. It "returns … as the result without a model turn" (`num_turns: 0`, `total_cost_usd: 0`, `modelUsage: {}`).
+   - **Where it runs.** It runs from the project root with the same settings sources as the stages. Any `ANTHROPIC_DEFAULT_OPUS_MODEL` / `ANTHROPIC_DEFAULT_SONNET_MODEL` override is therefore reflected exactly as the stages would see it.
+   - **Failure handling.** The probe is killed after `SPECKIT_MODEL_PROBE_TIMEOUT` seconds (default 30). A timeout, a missing CLI, or unparseable output falls through to 4 with a warning. A timeout or missing CLI also skips the second family's probe.
+4. **Bare alias** `opus` / `sonnet`, with a warning. Only here does the CLI re-resolve the alias on every call.
 
-Resolving **once** matters: passing the bare alias on every call would let a model released mid-run split a project across two models. One resolution per run keeps every feature on the same model and records which one in the log (`Models: opus -> … sonnet -> …`). Set `SPECKIT_SKIP_MODEL_RESOLVE=1` to skip the API lookup and use aliases only.
+Resolving **once** matters. Per [model-config](https://code.claude.com/docs/en/model-config), aliases "point to the recommended version for your provider and update over time." Passing the bare alias on every call would therefore let an alias that moves mid-run split a project across two models. One resolution per run keeps every feature on the same model and records which one in the log, e.g. `Models: opus -> claude-opus-5-5 [cli-probe]   sonnet -> claude-sonnet-5-5 [cli-probe]`. The bracket names the source: `pinned`, `models-api`, `cli-probe`, or `alias`.
+
+Opt-outs:
+- `SPECKIT_SKIP_MODEL_RESOLVE=1` skips steps 2–3 and uses aliases only.
+- `SPECKIT_SKIP_MODEL_PROBE=1` skips step 3 only.
+
+`speckit_pipeline.sh --print-models` resolves, prints `SPECKIT_OPUS_MODEL=…` / `SPECKIT_SONNET_MODEL=…`, and exits. Warnings go to stderr and no prompts path is needed. This is the single source of truth that the parallel driver uses.
 
 Per-stage defaults (override via env vars `SPECIFY_MODEL`/`SPECIFY_EFFORT`, `CLARIFY_*`, `PLAN_*`, `CHECKLIST_*`, `TASKS_*`, `ANALYZE_*`, `IMPLEMENT_*`, `CONVERGE_*` — a per-stage `*_MODEL` wins over the resolved family) — reasoning group = Opus (incl. converge), execution group = Sonnet. `MAX_TURNS` defaults to 2000 (override with `--max-turns`):
 
@@ -760,6 +782,12 @@ Logs land in `$SPECKIT_LOG_ROOT/<timestamp>/`; a checkpoint file enables `--resu
 
 Options: `--prompts <path>` (default: autodetect the single `.speckit-prompts/*/waves.json`), `--stage N`, `--from-stage N`, `--wave NAME`, `--max-concurrent N` (Phase 2, default 4), `--spec-jobs N` (Phase 1, default 0 = all features), `--base <branch>`, `--rebase`, `--no-merge`, `--no-commit`, `--dry-run`.
 
+**Models are resolved once per driver run.** `spec` and `build` call `speckit_pipeline.sh --print-models` before launching anything. Every process then receives the same concrete IDs:
+- **Phase 1**: as exported `SPECKIT_OPUS_MODEL` / `SPECKIT_SONNET_MODEL`.
+- **Phase 2**: through `.speckit-logs/parallel/build/models.env`, because tmux panes do not reliably inherit the driver's environment.
+
+This means N concurrent features never probe N times, and never split across models. `--dry-run` skips resolution. To hold the same IDs across separate driver runs, export the pins yourself; the IDs are in the log.
+
 **Phase 1 (`spec`)** uses no workmux and no worktrees. It launches one background `claude -p` per feature in the main working tree, each with its own `SPECIFY_FEATURE_DIRECTORY`, and with `--no-commit` so no agent touches the git index. When they join it runs the spec gate and makes a single commit of `specs/`. Failed features are reported and skipped, not merged away.
 
 **Phase 2 (`build`)** creates one worktree per **wave** via `workmux add --foreach "wave:…" --branch-template "build/{{ wave }}"` (workmux serializes worktree creation, avoiding `.git/worktrees/` races) and blocks on `--wait`. Success is reported through status files at `.speckit-logs/parallel/build/<wave>.status` because `--wait` does not propagate exit codes. Waves merge sequentially in `waves.json` order using the config's `merge_strategy` (`merge`; pass `--rebase` to override).
@@ -768,7 +796,12 @@ Pre-flight it enforces: an executable `speckit_pipeline.sh`, `.specify/feature.j
 
 ### `utilities/{prd-name}/wm_stage_runner.sh` — in-worktree pane script
 
-Runs as the **single pane** of each wave's worktree window. Derives the wave from the branch name (tmux panes do not reliably inherit the driver's environment, so the branch is the channel), delegates to `speckit_pipeline.sh` with `SPECKIT_WORKTREE_MODE=1`, writes the status file into the **main** repo, and exits so the window closes and the driver advances.
+Runs as the **single pane** of each wave's worktree window. In order, it:
+1. Derives the wave from the branch name. Tmux panes do not reliably inherit the driver's environment, so the branch is the channel.
+2. Loads the driver's resolved model IDs from `.speckit-logs/parallel/build/models.env` in the main repo. It does not `source` the file: it accepts only the two `SPECKIT_*_MODEL` keys and model-ID characters, and the file wins over any stale pane env.
+3. Delegates to `speckit_pipeline.sh` with `SPECKIT_WORKTREE_MODE=1`.
+4. Writes the status file into the **main** repo.
+5. Exits so the window closes and the driver advances.
 
 ```
 build/{wave}   → --phase build --wave {wave}    (features run in waves.json order)

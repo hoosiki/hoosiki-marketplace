@@ -533,6 +533,306 @@ class TestCheckSuperclaude:
         assert "build" in result["commands"]
 
 
+# ── SuperClaude package upgrade ─────────────────────────────────
+
+
+def _cp(stdout: str = "", returncode: int = 0, stderr: str = "") -> subprocess.CompletedProcess[str]:
+    """Build a CompletedProcess for a mocked run() call."""
+    return subprocess.CompletedProcess([], returncode=returncode, stdout=stdout, stderr=stderr)
+
+
+def _make_tool_install(root: Path, method: str, venv_name: str = "superclaude") -> Path:
+    """Lay out a pipx/uv tool venv plus the bin-dir symlink pointing into it.
+
+    Returns the symlink path, i.e. what ``shutil.which("superclaude")`` returns.
+    """
+    marker = {"pipx": "pipx_metadata.json", "uv": "uv-receipt.toml"}[method]
+    venv = root / method / "venvs" / venv_name
+    (venv / "bin").mkdir(parents=True)
+    (venv / marker).write_text("{}", encoding="utf-8")
+    target = venv / "bin" / "superclaude"
+    target.write_text("#!" + str(venv / "bin" / "python") + "\n", encoding="utf-8")
+    bin_dir = root / "local-bin"
+    bin_dir.mkdir(exist_ok=True)
+    link = bin_dir / "superclaude"
+    link.symlink_to(target)
+    return link
+
+
+def _make_pip_install(root: Path, interpreter: str = "/opt/homebrew/opt/python@3.14/bin/python3.14") -> Path:
+    """Create a pip-style console script whose shebang names its interpreter."""
+    bin_dir = root / "pybin"
+    bin_dir.mkdir(parents=True)
+    script = bin_dir / "superclaude"
+    script.write_text(f"#!{interpreter}\nimport sys\n", encoding="utf-8")
+    return script
+
+
+def _which(paths: dict[str, str]):
+    """Return a shutil.which stand-in that only knows the given executables."""
+    return lambda name: paths.get(name)
+
+
+class TestParseSuperclaudeVersion:
+    """Tests for _parse_superclaude_version()."""
+
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            ("SuperClaude, version 4.2.0", "4.2.0"),
+            ("SuperClaude version 4.3.0\n", "4.3.0"),
+            ("SuperClaude, version 4.4.0rc1", "4.4.0rc1"),
+            ("command not found", ""),
+            ("", ""),
+        ],
+        ids=["click-version-option", "version-subcommand", "pre-release", "no-version", "empty"],
+    )
+    def test_extracts_version(self, text: str, expected: str) -> None:
+        """_parse_superclaude_version pulls the version out of CLI output."""
+        assert up2date._parse_superclaude_version(text) == expected
+
+
+class TestDetectSuperclaudeInstall:
+    """Tests for _detect_superclaude_install()."""
+
+    def test_detects_pipx_venv_through_symlink(self, tmp_path: Path) -> None:
+        """A bin-dir symlink into a venv carrying pipx_metadata.json is pipx."""
+        link = _make_tool_install(tmp_path, "pipx")
+        result = up2date._detect_superclaude_install(str(link))
+        assert (result["method"], result["package"]) == ("pipx", "superclaude")
+
+    def test_detects_uv_tool_venv_through_symlink(self, tmp_path: Path) -> None:
+        """A bin-dir symlink into a venv carrying uv-receipt.toml is uv tool."""
+        link = _make_tool_install(tmp_path, "uv")
+        result = up2date._detect_superclaude_install(str(link))
+        assert (result["method"], result["package"]) == ("uv", "superclaude")
+
+    def test_package_is_venv_name_so_pipx_suffix_survives(self, tmp_path: Path) -> None:
+        """The upgrade target is the venv name, which carries a pipx --suffix."""
+        link = _make_tool_install(tmp_path, "pipx", venv_name="superclaude_beta")
+        assert up2date._detect_superclaude_install(str(link))["package"] == "superclaude_beta"
+
+    def test_plain_script_is_pip_with_shebang_interpreter(self, tmp_path: Path) -> None:
+        """A console script outside any tool venv is pip, owned by its shebang's Python."""
+        script = _make_pip_install(tmp_path)
+        result = up2date._detect_superclaude_install(str(script))
+        assert result == {
+            "method": "pip",
+            "package": "superclaude",
+            "location": "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        }
+
+    def test_env_shebang_yields_the_named_python(self, tmp_path: Path) -> None:
+        """`#!/usr/bin/env python3` resolves to `python3`, not to `env`."""
+        script = _make_pip_install(tmp_path, interpreter="/usr/bin/env python3")
+        assert up2date._detect_superclaude_install(str(script))["location"] == "python3"
+
+
+class TestUpdateSuperclaude:
+    """Tests for update_superclaude() — upgrade the package, then re-install."""
+
+    def test_skips_when_cli_absent(self, monkeypatch: pytest.MonkeyPatch, mock_run: MagicMock) -> None:
+        """No superclaude on PATH: nothing runs and the result says why."""
+        monkeypatch.setattr(up2date.shutil, "which", _which({}))
+        result = up2date.update_superclaude()
+        assert result["available"] is False
+        assert "not found" in result["error"]
+        mock_run.assert_not_called()
+
+    def test_pipx_upgrades_then_reinstalls(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mock_run: MagicMock
+    ) -> None:
+        """pipx install: `pipx upgrade superclaude` runs before `superclaude update`."""
+        link = _make_tool_install(tmp_path, "pipx")
+        monkeypatch.setattr(up2date.shutil, "which", _which({"superclaude": str(link), "pipx": "/x/pipx"}))
+        mock_run.side_effect = [
+            _cp("SuperClaude, version 4.2.0"),
+            _cp("upgraded package superclaude from 4.2.0 to 4.3.0"),
+            _cp("SuperClaude, version 4.3.0"),
+            _cp("✅ Installed 31 commands"),
+        ]
+
+        result = up2date.update_superclaude()
+
+        cmds = [c.args[0] for c in mock_run.call_args_list]
+        assert cmds[1] == ["pipx", "upgrade", "superclaude"]
+        assert cmds[3] == [str(link), "update"]
+        assert (result["before"], result["after"]) == ("4.2.0", "4.3.0")
+        assert result["reinstalled"] is True
+
+    def test_pipx_upgrade_uses_tool_upgrade_timeout(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mock_run: MagicMock
+    ) -> None:
+        """The network-bound upgrade gets the long timeout, like brew and npx."""
+        link = _make_tool_install(tmp_path, "pipx")
+        monkeypatch.setattr(up2date.shutil, "which", _which({"superclaude": str(link), "pipx": "/x/pipx"}))
+        mock_run.side_effect = [_cp("4.2.0"), _cp(), _cp("4.3.0"), _cp()]
+        up2date.update_superclaude()
+        assert mock_run.call_args_list[1].kwargs["timeout"] == up2date._TOOL_UPGRADE_TIMEOUT
+
+    def test_uv_tool_upgrades_then_reinstalls(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mock_run: MagicMock
+    ) -> None:
+        """uv tool install: `uv tool upgrade superclaude` runs before the re-install."""
+        link = _make_tool_install(tmp_path, "uv")
+        monkeypatch.setattr(up2date.shutil, "which", _which({"superclaude": str(link), "uv": "/x/uv"}))
+        mock_run.side_effect = [
+            _cp("SuperClaude, version 4.2.0"),
+            _cp("Updated superclaude v4.2.0 -> v4.3.0"),
+            _cp("SuperClaude, version 4.3.0"),
+            _cp("✅ Installed 31 commands"),
+        ]
+
+        result = up2date.update_superclaude()
+
+        cmds = [c.args[0] for c in mock_run.call_args_list]
+        assert cmds[1] == ["uv", "tool", "upgrade", "superclaude"]
+        assert cmds[3] == [str(link), "update"]
+        assert (result["method"], result["after"]) == ("uv", "4.3.0")
+
+    def test_already_current_still_reinstalls(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mock_run: MagicMock
+    ) -> None:
+        """An upgrade that finds nothing newer still re-installs the commands."""
+        link = _make_tool_install(tmp_path, "pipx")
+        monkeypatch.setattr(up2date.shutil, "which", _which({"superclaude": str(link), "pipx": "/x/pipx"}))
+        mock_run.side_effect = [
+            _cp("SuperClaude, version 4.3.0"),
+            _cp("superclaude is already at latest version 4.3.0"),
+            _cp("SuperClaude, version 4.3.0"),
+            _cp("✅ Installed 31 commands"),
+        ]
+
+        result = up2date.update_superclaude()
+
+        assert (result["before"], result["after"], result["reinstalled"]) == ("4.3.0", "4.3.0", True)
+
+    def test_pip_install_prints_hint_and_never_runs_pip(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mock_run: MagicMock
+    ) -> None:
+        """A pip install is not upgraded automatically (PEP 668) — only a hint."""
+        script = _make_pip_install(tmp_path)
+        monkeypatch.setattr(up2date.shutil, "which", _which({"superclaude": str(script)}))
+        mock_run.side_effect = [_cp("SuperClaude, version 4.2.0"), _cp("✅ Installed 31 commands")]
+
+        result = up2date.update_superclaude()
+
+        cmds = [c.args[0] for c in mock_run.call_args_list]
+        assert cmds == [[str(script), "--version"], [str(script), "update"]]
+        assert result["upgrade"] == "manual"
+        assert "python3.14 -m pip install --upgrade superclaude" in result["hint"]
+        assert result["after"] == "4.2.0"
+
+    def test_missing_manager_falls_back_to_hint(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mock_run: MagicMock
+    ) -> None:
+        """A pipx venv with no pipx on PATH gets a hint instead of a crash."""
+        link = _make_tool_install(tmp_path, "pipx")
+        monkeypatch.setattr(up2date.shutil, "which", _which({"superclaude": str(link)}))
+        mock_run.side_effect = [_cp("SuperClaude, version 4.2.0"), _cp("ok")]
+
+        result = up2date.update_superclaude()
+
+        assert result["upgrade"] == "manual"
+        assert "pipx upgrade superclaude" in result["hint"]
+        assert mock_run.call_count == 2
+
+    def test_upgrade_failure_skips_reinstall(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mock_run: MagicMock
+    ) -> None:
+        """A failed upgrade is reported and the commands are left untouched."""
+        link = _make_tool_install(tmp_path, "pipx")
+        monkeypatch.setattr(up2date.shutil, "which", _which({"superclaude": str(link), "pipx": "/x/pipx"}))
+        mock_run.side_effect = [
+            _cp("SuperClaude, version 4.2.0"),
+            _cp(returncode=1, stderr="Could not find a version that satisfies superclaude"),
+        ]
+
+        result = up2date.update_superclaude()
+
+        assert result["upgrade"] == "failed"
+        assert "Could not find a version" in result["error"]
+        assert result["reinstalled"] is False
+        assert (result["before"], result["after"]) == ("4.2.0", "4.2.0")
+        assert mock_run.call_count == 2
+
+    def test_reinstall_failure_is_reported(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mock_run: MagicMock
+    ) -> None:
+        """A non-zero `superclaude update` surfaces as an error, not success."""
+        link = _make_tool_install(tmp_path, "uv")
+        monkeypatch.setattr(up2date.shutil, "which", _which({"superclaude": str(link), "uv": "/x/uv"}))
+        mock_run.side_effect = [_cp("4.3.0"), _cp(), _cp("4.3.0"), _cp(returncode=1, stderr="boom")]
+
+        result = up2date.update_superclaude()
+
+        assert result["reinstalled"] is False
+        assert "boom" in result["error"]
+
+
+class TestPrintSuperclaudeUpdate:
+    """Tests for _print_superclaude_update()."""
+
+    def _result(self, **overrides: object) -> dict[str, object]:
+        """Return a successful pipx result, with any field overridden."""
+        base: dict[str, object] = {
+            "available": True,
+            "method": "pipx",
+            "package": "superclaude",
+            "location": "/x/venvs/superclaude",
+            "before": "4.2.0",
+            "after": "4.3.0",
+            "upgrade": "ok",
+            "upgrade_output": "upgraded package superclaude from 4.2.0 to 4.3.0",
+            "hint": "",
+            "reinstalled": True,
+            "output": "✅ Installed 31 commands",
+            "error": "",
+        }
+        base.update(overrides)
+        return base
+
+    def test_summary_shows_before_and_after(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """The summary reports the version change as `before → after`."""
+        up2date._print_superclaude_update(self._result())
+        out = capsys.readouterr().out
+        assert "SuperClaude Summary" in out
+        assert "4.2.0 → 4.3.0 (upgraded)" in out
+
+    def test_summary_marks_unchanged_version_current(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """No version change after a clean upgrade reads as already current."""
+        up2date._print_superclaude_update(self._result(before="4.3.0", after="4.3.0"))
+        assert "4.3.0 (already current)" in capsys.readouterr().out
+
+    def test_skip_notice_when_cli_absent(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """An unavailable CLI prints a skip notice and no summary."""
+        up2date._print_superclaude_update(
+            {"available": False, "error": "superclaude CLI not found on PATH"}
+        )
+        out = capsys.readouterr().out
+        assert "Skipped: superclaude CLI not found on PATH" in out
+        assert "SuperClaude Summary" not in out
+
+    def test_failed_upgrade_says_commands_untouched(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """A failed upgrade is labelled and the re-install is reported as skipped."""
+        up2date._print_superclaude_update(
+            self._result(upgrade="failed", after="4.2.0", reinstalled=False, error="pipx upgrade failed")
+        )
+        out = capsys.readouterr().out
+        assert "4.2.0 → 4.2.0 (upgrade failed)" in out
+        assert "not re-installed" in out
+
+    def test_manual_hint_is_printed(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """A pip install's manual-upgrade hint reaches the output."""
+        hint = "python3 -m pip install --upgrade superclaude"
+        up2date._print_superclaude_update(
+            self._result(method="pip", upgrade="manual", hint=hint, after="4.2.0")
+        )
+        out = capsys.readouterr().out
+        assert hint in out
+        assert "4.2.0 (not upgraded" in out
+
+
 # ── Global agent skills (npx skills) ─────────────────────────────
 
 

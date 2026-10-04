@@ -114,10 +114,29 @@ mkdir -p "$RUN_DIR"
 STATUS_FILE="$RUN_DIR/$WAVE.status"
 echo "RUNNING" >"$STATUS_FILE"
 
+# 모델 — 드라이버(speckit_parallel.sh build)가 런 시작 시 1회 해석한 구체 ID 를 그대로 쓴다.
+#   pane 은 드라이버 env 상속이 보장되지 않으므로 파일이 채널이고, 드라이버가 해석한 값이 우선한다
+#   (모든 웨이브·스테이지가 같은 모델로 돈다). 파일이 없으면 speckit_pipeline.sh 가 스스로 해석한다.
+#   파일은 source 하지 않는다 — 정해진 키와 모델 ID 문자만 받아들인다.
+MODELS_FILE="$RUN_DIR/models.env"
+_model_re='^[A-Za-z0-9][A-Za-z0-9._:@/-]*(\[[0-9A-Za-z]+\])?$'
+if [ -f "$MODELS_FILE" ]; then
+	while IFS='=' read -r _key _val; do
+		case "$_key" in
+		SPECKIT_OPUS_MODEL | SPECKIT_SONNET_MODEL) ;;
+		*) continue ;;
+		esac
+		if [[ "$_val" =~ $_model_re ]]; then
+			export "$_key=$_val"
+		fi
+	done <"$MODELS_FILE"
+fi
+
 echo "▶ [$WAVE] phase=build branch=$BRANCH"
 echo "  worktree: $WT_ROOT"
 echo "  prompts:  $PROMPTS_DIR"
 echo "  status:   $STATUS_FILE"
+echo "  models:   opus=${SPECKIT_OPUS_MODEL:-<파이프라인이 해석>}  sonnet=${SPECKIT_SONNET_MODEL:-<파이프라인이 해석>}"
 echo ""
 
 # speckit_pipeline.sh 에 위임한다 (단계 정의·모델/effort·프리앰블의 단일 출처).

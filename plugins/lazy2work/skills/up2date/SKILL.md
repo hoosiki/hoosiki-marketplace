@@ -59,7 +59,11 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/up2date.py --skill
   `installPath`, checking `skills/` first and falling back to `.claude/skills/`
   for plugins that nest them there. An install with neither is listed under a
   "Skipped … no skills dir" line instead of vanishing from the count
-- `~/.claude/commands/sc/` SuperClaude command list → `superclaude update`
+- `~/.claude/commands/sc/` SuperClaude command list → **package upgrade first**,
+  with the manager that owns the `superclaude` on PATH (`pipx upgrade superclaude`
+  or `uv tool upgrade superclaude`), **then** `superclaude update` to re-install
+  the commands from the upgraded package. The summary reports `before → after`
+  versions
 
 Add `--no-skill-prune` to update global skills **without** removing the dead ones:
 
@@ -80,9 +84,23 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/up2date.py --skill --no-skill-prune
 - Updated plugins land in the cache but do **not** affect the running session —
   Claude Code must be restarted to load them
 - Plugin updates are skipped with a notice if the `claude` executable is absent
-- SuperClaude updates use `superclaude update`, which re-installs the slash
-  commands of the **installed** package version (`install --force`). It does not
-  upgrade the package — run `pipx upgrade superclaude` first to get a newer release
+- `superclaude update` alone is `install --force`: it re-installs the commands
+  (and, since 4.3.0, 20 agents into `~/.claude/agents/`) of the **installed**
+  package version and never upgrades the package. up2date therefore upgrades the
+  package first. The install method is detected by resolving the `superclaude`
+  symlink on PATH into its venv and checking for `pipx_metadata.json` (pipx) or
+  `uv-receipt.toml` (uv tool), so the copy that actually runs is the one upgraded.
+  A `uv tool` install keeps the version constraints it was installed with, and a
+  pinned pipx package is left at its pin
+- A **pip** install (system, Homebrew, `--user` or project-venv Python) is never
+  upgraded automatically, because of PEP 668 and the risk to a shared environment.
+  The script prints the exact `<python> -m pip install --upgrade superclaude`
+  command (interpreter taken from the script's shebang) and recommends moving to
+  pipx. The existing commands are still re-installed. A missing `pipx`/`uv`
+  executable also falls back to a printed hint
+- If the package upgrade fails, `superclaude update` is skipped and the commands are
+  left as they are, since they already match the version that is still installed.
+  If no `superclaude` CLI is on PATH, the step is skipped with a notice
 - User skills (`~/.claude/skills/`) are manually managed; only status checks are performed
 - The plugin skill scan covers two layouts, in order: `<installPath>/skills/`
   (most plugins) and `<installPath>/.claude/skills/` (e.g. `ui-ux-pro-max`).

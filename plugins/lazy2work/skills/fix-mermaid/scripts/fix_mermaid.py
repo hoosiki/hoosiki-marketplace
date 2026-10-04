@@ -3,8 +3,17 @@
 
 Scans Markdown files for ```mermaid code blocks and detects/fixes:
   1. Sequence diagram reserved word conflicts (participant IDs)
-  2. Special characters in sequence diagram message text ({, }, [, ], ")
-  3. Unicode issues (smart quotes, fullwidth CJK, invisible chars, typographic dashes)
+  2. Unicode characters used as diagram *syntax* — zero-width characters in
+     IDs, typographic dashes and Unicode arrows used as arrows, fullwidth
+     punctuation used as delimiters or separators, curly quotes used as label
+     delimiters, and Unicode punctuation in bare subgraph titles
+  3. Unicode that has no safe automatic fix (left-pointing arrows, the
+     ideographic full stop in syntax) — reported as warnings, never rewritten
+
+Label and message text is never rewritten. Mermaid 11.12.2 and 12.1.0 render
+every one of these characters inside labels, edge labels, messages, notes and
+aliases, and converting them to ASCII there turns working diagrams into parse
+errors (``D[데이터（원본）]`` → ``D[데이터(원본)]``).
 
 Usage:
     python fix_mermaid.py <file_or_dir> [--fix] [--json]
@@ -23,7 +32,7 @@ import json
 import logging
 import re
 import sys
-import unicodedata
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -73,27 +82,49 @@ SAFE_RENAMES: dict[str, str] = {
 }
 
 # ---------------------------------------------------------------------------
-# Unicode replacement maps
+# Regex patterns
 # ---------------------------------------------------------------------------
 
-SMART_QUOTES: dict[str, str] = {
-    "\u201c": '"',  # left double
-    "\u201d": '"',  # right double
-    "\u2018": "'",  # left single
-    "\u2019": "'",  # right single
-    "\u201e": '"',  # low double
-    "\u00ab": '"',  # guillemet left
-    "\u00bb": '"',  # guillemet right
-}
+PARTICIPANT_RE = re.compile(r"^\s*participant\s+(\S+)\s+as\s+", re.IGNORECASE)
 
+
+# ---------------------------------------------------------------------------
+# Unicode rules
+# ---------------------------------------------------------------------------
+#
+# Every rule here was decided by rendering small cases with mmdc on Mermaid
+# 11.12.2 and 12.1.0 (references/mermaid-v11-syntax.md §16). Inside label and
+# message text every character below renders as-is, so the rules only touch
+# the *syntax* of a line: node IDs, arrows, separators, label delimiters.
+#
+# Dropped after that evidence (they render identically to ASCII everywhere):
+# U+FEFF BOM, the Unicode spaces U+00A0/U+202F/U+2009/U+200A/U+2007, single
+# curly quotes, guillemets, U+2026 ellipsis, and the sequence-message entity
+# escaping of { } [ ] ".
+
+INVISIBLE_CHARS: frozenset[str] = frozenset({
+    "\u200b",  # zero-width space
+    "\u200c",  # zero-width non-joiner
+    "\u200d",  # zero-width joiner
+    "\u2060",  # word joiner
+    "\u00ad",  # soft hyphen
+})
+
+# Typographic dashes are rewritten only inside an arrow (a dash run that ends
+# in ">"); the run is then clamped to a length the diagram's grammar accepts.
 TYPOGRAPHIC_DASHES: dict[str, str] = {
-    "\u2014": "--",  # em dash
+    "\u2014": "--",  # em dash (what autocorrect makes of "--")
     "\u2013": "-",   # en dash
-    "\u2010": "-",   # hyphen char
+    "\u2010": "-",   # hyphen
     "\u2212": "-",   # minus sign
 }
 
-FULLWIDTH_CJK: dict[str, str] = {
+# Fullwidth punctuation is rewritten only where it is flowchart syntax
+# (shape delimiters after an ID, edge-label pipes, arrows, `;`, `,` and CSS
+# `:`), plus the fullwidth colon used as the label separator of a sequence,
+# class or state line. U+3002 is not here: `B。` → `B.` renders a node named
+# "B.", so it is reported as a warning instead.
+FULLWIDTH_PUNCT: dict[str, str] = {
     "\uff08": "(",  # fullwidth (
     "\uff09": ")",  # fullwidth )
     "\u3010": "[",  # 【
@@ -103,57 +134,56 @@ FULLWIDTH_CJK: dict[str, str] = {
     "\uff1a": ":",  # fullwidth :
     "\uff1b": ";",  # fullwidth ;
     "\uff0c": ",",  # fullwidth ,
-    "\u3002": ".",  # 。
     "\uff1d": "=",  # fullwidth =
     "\uff1e": ">",  # fullwidth >
     "\uff1c": "<",  # fullwidth <
     "\uff5c": "|",  # fullwidth |
 }
+FULLWIDTH_COLON = "\uff1a"
+IDEOGRAPHIC_FULL_STOP = "\u3002"
 
-INVISIBLE_CHARS: set[str] = {
-    "\u200b",  # zero-width space
-    "\u200c",  # zero-width non-joiner
-    "\u200d",  # zero-width joiner
-    "\u2060",  # word joiner
-    "\ufeff",  # BOM
-    "\u00ad",  # soft hyphen
-}
+# Curly double quotes are rewritten only when they delimit a whole label that
+# fails unquoted (see SMART_QUOTE_LABEL_RE).
+SMART_OPEN_QUOTES = "\u201c\u201e"   # “ „
+SMART_CLOSE_QUOTES = "\u201d\u201c"  # ” “
+SMART_QUOTES = "\u201c\u201d\u201e"
+# Characters that make an unquoted flowchart label fail to parse.
+LABEL_NEEDS_QUOTES = set('()[]{}|"')
 
-UNICODE_SPACES: dict[str, str] = {
-    "\u00a0": " ",  # non-breaking space
-    "\u202f": " ",  # narrow no-break space
-    "\u2009": " ",  # thin space
-    "\u200a": " ",  # hair space
-    "\u2007": " ",  # figure space
-}
-
-UNICODE_ARROWS: dict[str, str] = {
+# Unicode arrows are rewritten only where an arrow is expected.
+FLOWCHART_ARROWS: dict[str, str] = {
     "\u2192": "-->",   # →
-    "\u2190": "<--",   # ←
     "\u2194": "<-->",  # ↔
     "\u21d2": "==>",   # ⇒
-    "\u21d0": "<==",   # ⇐
-    "\u2026": "...",   # …
 }
+EDGE_ARROWS: dict[str, str] = {"\u2192": "-->"}   # class and state diagrams
+SEQUENCE_ARROWS: dict[str, str] = {"\u2192": "->>"}
+# No ASCII arrow renders for these without swapping the operands.
+UNSUPPORTED_ARROWS = "\u2190\u21d0\u2194\u21d2"  # ← ⇐ ↔ ⇒
 
-# Mermaid entity escapes for message text
-ENTITY_MAP: dict[str, str] = {
-    "{": "#123;",
-    "}": "#125;",
-    "[": "#91;",
-    "]": "#93;",
-    '"': "#34;",
-}
-
-# ---------------------------------------------------------------------------
-# Regex patterns
-# ---------------------------------------------------------------------------
-
-PARTICIPANT_RE = re.compile(r"^\s*participant\s+(\S+)\s+as\s+", re.IGNORECASE)
-ARROW_MSG_RE = re.compile(r"^(\s*\S+\s*-[-]?>>?\+?\s*-?\s*\S+\s*:\s*)(.*)")
-NOTE_MSG_RE = re.compile(
-    r"^(\s*Note\s+(?:right of|left of|over)\s+[^:]+:\s*)(.*)", re.IGNORECASE,
+# Characters that make a bare (unquoted, unbracketed) subgraph title fail.
+_SUBGRAPH_TITLE_HAZARDS: frozenset[str] = frozenset(
+    set(INVISIBLE_CHARS) | set(TYPOGRAPHIC_DASHES) | set(FULLWIDTH_PUNCT)
+    | {IDEOGRAPHIC_FULL_STOP} | set(SMART_QUOTES) | set(FLOWCHART_ARROWS) | set(UNSUPPORTED_ARROWS),
 )
+
+_DASH_ARROW_RE = re.compile("<?[-\u2010\u2013\u2014\u2212]+(?=>)")
+# A free-standing typographic dash that opens a flowchart edge label.
+_EDGE_LABEL_DASH_RE = re.compile("(?<=\\s)[\u2010\u2013\u2014\u2212]+(?=\\s.*>)")
+_INLINE_EDGE_OPEN_RE = re.compile(r"(?<![-=.])(?:--|==|-\.)(?=\s)")
+_INLINE_EDGE_CLOSE_RE = re.compile(r"\s(?:--|==|\.-)")
+_SEQ_TEXT_KEYWORD_RE = re.compile(
+    r"\s*(?:loop|alt|else|opt|par_over|par|and|critical|option|break|rect|box|title"
+    r"|accTitle|accDescr|links?|properties|details)\b",
+    re.IGNORECASE,
+)
+_SEQ_PARTICIPANT_RE = re.compile(r"\s*(?:create\s+)?(?:participant|actor)\s", re.IGNORECASE)
+_SEQ_NOTE_RE = re.compile(r"\s*note\s", re.IGNORECASE)
+SMART_QUOTE_LABEL_RE = re.compile(
+    "(?<=[\\[({|>/\\\\])([\u201c\u201e])([^\"\u201c\u201d\u201e\\n]*)([\u201d\u201c])(?=[\\])}|/\\\\])",
+)
+
+Span = tuple[int, int]
 
 
 # ---------------------------------------------------------------------------
@@ -161,7 +191,22 @@ NOTE_MSG_RE = re.compile(
 # ---------------------------------------------------------------------------
 
 class Issue:
-    """Represents a single detected problem."""
+    """Represents a single detected problem.
+
+    Attributes:
+        line: 1-based line number in the Markdown file.
+        rule: Comma-separated rule name(s).
+        before: The stripped line before the fix.
+        after: The stripped line after the fix (equal to ``before`` for warnings).
+        block: 1-based index of the mermaid block.
+        severity: ``"error"`` when auto-fixed, ``"warning"`` when it needs a human.
+
+    Examples:
+        >>> Issue(3, "typo-dash", "A –> B", "A --> B").to_dict()["severity"]
+        'error'
+        >>> Issue(3, "unicode-arrow-manual", "A ← B", "A ← B", severity="warning").severity
+        'warning'
+    """
 
     def __init__(
         self,
@@ -170,116 +215,641 @@ class Issue:
         before: str,
         after: str,
         block: int = 0,
+        severity: str = "error",
     ) -> None:
+        """Initialize an Issue.
+
+        Args:
+            line: 1-based line number in the Markdown file.
+            rule: Comma-separated rule name(s).
+            before: The stripped line before the fix.
+            after: The stripped line after the fix.
+            block: 1-based index of the mermaid block.
+            severity: ``"error"`` (auto-fixed) or ``"warning"`` (manual).
+
+        Examples:
+            >>> Issue(1, "invisible-char", "A\\u200b --> B", "A --> B", block=2).block
+            2
+        """
         self.line = line
         self.rule = rule
         self.before = before
         self.after = after
         self.block = block
+        self.severity = severity
 
     def to_dict(self) -> dict[str, str | int]:
-        """Convert to JSON-serializable dict."""
+        """Convert to a JSON-serializable dict.
+
+        Returns:
+            Dict with block, line, rule, severity, before and after.
+
+        Examples:
+            >>> sorted(Issue(1, "r", "a", "b").to_dict())
+            ['after', 'before', 'block', 'line', 'rule', 'severity']
+        """
         return {
             "block": self.block,
             "line": self.line,
             "rule": self.rule,
+            "severity": self.severity,
             "before": self.before,
             "after": self.after,
         }
 
 
 # ---------------------------------------------------------------------------
-# Unicode fixes (applied to all lines inside mermaid blocks)
+# Label-text detection: which parts of a line are text, not syntax
 # ---------------------------------------------------------------------------
 
-def fix_unicode(line: str) -> tuple[str, list[str]]:
-    """Replace problematic Unicode characters with ASCII equivalents.
+def _is_id_char(ch: str) -> bool:
+    """Return True if ``ch`` can end a flowchart node ID.
+
+    Args:
+        ch: A single character.
+
+    Returns:
+        True for letters, digits and underscore (any script).
+
+    Examples:
+        >>> _is_id_char("A"), _is_id_char("가"), _is_id_char("-")
+        (True, True, False)
+    """
+    return ch.isalnum() or ch == "_"
+
+
+def _quote_end(line: str, start: int) -> int:
+    """Return the index just past the ASCII double quote closing ``line[start]``.
+
+    Args:
+        line: The line being scanned.
+        start: Index of an opening ``"``.
+
+    Returns:
+        Index after the closing quote, or ``len(line)`` if it is unclosed.
+
+    Examples:
+        >>> _quote_end('A["x"] --> B', 2)
+        5
+    """
+    close = line.find('"', start + 1)
+    return len(line) if close == -1 else close + 1
+
+
+def _bracket_end(line: str, start: int) -> int:
+    """Return the index just past the bracket matching ``line[start]``.
+
+    Nesting is counted across ``()``, ``[]`` and ``{}`` together, and quoted
+    strings are skipped, so ``A(["x (y)"])`` is one span.
+
+    Args:
+        line: The line being scanned.
+        start: Index of an opening ``(``, ``[`` or ``{``.
+
+    Returns:
+        Index after the matching closer, or ``len(line)`` if unbalanced.
+
+    Examples:
+        >>> line = 'A(["x (y)"]) --> B'
+        >>> line[1:_bracket_end(line, 1)]
+        '(["x (y)"])'
+    """
+    depth = 0
+    i = start
+    while i < len(line):
+        ch = line[i]
+        if ch == '"':
+            i = _quote_end(line, i)
+            continue
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+        i += 1
+    return len(line)
+
+
+def _quote_spans(line: str) -> list[Span]:
+    """Return the spans of ASCII double-quoted strings in ``line``.
 
     Args:
         line: A single line of mermaid code.
 
     Returns:
-        Tuple of (fixed line, list of applied rule names).
+        List of ``(start, end)`` index pairs, end exclusive.
+
+    Examples:
+        >>> _quote_spans('state "a b" as S1')
+        [(6, 11)]
+    """
+    spans: list[Span] = []
+    i = line.find('"')
+    while i != -1:
+        end = _quote_end(line, i)
+        spans.append((i, end))
+        i = line.find('"', end)
+    return spans
+
+
+def _first_separator(line: str) -> int:
+    """Return the index of the first ``:`` or ``：`` outside quotes and brackets.
+
+    Args:
+        line: A single line of a sequence, class or state diagram.
+
+    Returns:
+        The index, or -1 if the line has no separator.
+
+    Examples:
+        >>> _first_separator('A --> B : uses "x:y"')
+        8
+        >>> _first_separator("A->>B\\uff1a hi")
+        5
+        >>> _first_separator("S1 --> S2")
+        -1
+    """
+    i = 0
+    while i < len(line):
+        ch = line[i]
+        if ch == '"':
+            i = _quote_end(line, i)
+            continue
+        if ch in "([{":
+            i = _bracket_end(line, i)
+            continue
+        if ch in (":", FULLWIDTH_COLON):
+            return i
+        i += 1
+    return -1
+
+
+def _flowchart_text_spans(line: str) -> list[Span]:
+    """Return the label-text spans of a flowchart line.
+
+    Text is: quoted strings, node-shape contents (``[..]``, ``(..)``,
+    ``{..}``, ``>..]`` and every nested form), edge labels (``|..|`` and
+    ``-- .. -->`` / ``== .. ==>`` / ``-. .. .->``), ``@{..}`` metadata, bare
+    subgraph titles, and the rest of ``title`` / ``accTitle`` / ``accDescr`` /
+    ``click`` lines. Unclosed constructs extend to the end of the line, which
+    only ever protects more.
+
+    Args:
+        line: A single flowchart line.
+
+    Returns:
+        List of ``(start, end)`` index pairs, end exclusive.
+
+    Examples:
+        >>> line = "A[데이터（원본）] -->|라벨（1）| B"
+        >>> [line[s:e] for s, e in _flowchart_text_spans(line)]
+        ['[데이터（원본）]', '|라벨（1）|']
+        >>> line = "A -- 값—값 --> B"
+        >>> [line[s:e] for s, e in _flowchart_text_spans(line)]
+        [' 값—값']
+        >>> [line[s:e] for s, e in _flowchart_text_spans("A（데이터） --> B")]
+        []
+    """
+    n = len(line)
+    keyword = re.match(r"\s*(?:(?:accTitle|accDescr)\b|click\s+\S+)", line)
+    if keyword:
+        return [(keyword.end(), n)]
+    subgraph = re.match(r"\s*subgraph\s+", line)
+    if subgraph and _is_bare_subgraph_title(line[subgraph.end():]):
+        return [(subgraph.end(), n)]
+
+    spans: list[Span] = []
+    i = 0
+    while i < n:
+        ch = line[i]
+        if ch == '"':
+            end = _quote_end(line, i)
+        elif line.startswith("@{", i):
+            end = _bracket_end(line, i + 1)
+        elif ch in "([{":
+            end = _bracket_end(line, i)
+        elif ch == ">" and i > 0 and _is_id_char(line[i - 1]):
+            close = line.find("]", i + 1)
+            end = n if close == -1 else close + 1
+        elif ch == "|":
+            close = line.find("|", i + 1)
+            end = n if close == -1 else close + 1
+        else:
+            opener = _INLINE_EDGE_OPEN_RE.match(line, i)
+            closer = _INLINE_EDGE_CLOSE_RE.search(line, opener.end()) if opener else None
+            if opener and closer:
+                spans.append((opener.end(), closer.start()))
+                i = closer.start() + 1
+            else:
+                i += 1
+            continue
+        spans.append((i, end))
+        i = end
+    return spans
+
+
+def _is_bare_subgraph_title(rest: str) -> bool:
+    """Return True if the text after ``subgraph`` is an unquoted, unbracketed title.
+
+    Args:
+        rest: The part of the line after ``subgraph`` and its whitespace.
+
+    Returns:
+        True for ``subgraph Title text``; False for ``subgraph id [Title]``
+        and ``subgraph "Title"``.
+
+    Examples:
+        >>> _is_bare_subgraph_title("처리（원본）")
+        True
+        >>> _is_bare_subgraph_title('S ["처리（원본）"]')
+        False
+    """
+    return bool(rest.strip()) and not rest.lstrip().startswith('"') and "[" not in rest
+
+
+def _rewrite_outside(
+    line: str,
+    spans: list[Span],
+    rewrite: Callable[[str], str],
+) -> str:
+    """Apply ``rewrite`` to every part of ``line`` that is not inside ``spans``.
+
+    Args:
+        line: The line to rewrite.
+        spans: Protected ``(start, end)`` ranges, sorted and non-overlapping.
+        rewrite: Callable ``str -> str`` applied to each unprotected segment.
+
+    Returns:
+        The rewritten line.
+
+    Examples:
+        >>> _rewrite_outside("ab[cd]ef", [(2, 6)], str.upper)
+        'AB[cd]EF'
+    """
+    out: list[str] = []
+    pos = 0
+    for start, end in sorted(spans):
+        if start < pos:
+            continue
+        out.append(rewrite(line[pos:start]))
+        out.append(line[start:end])
+        pos = end
+    out.append(rewrite(line[pos:]))
+    return "".join(out)
+
+
+def _outside_text(line: str, spans: list[Span]) -> str:
+    """Return ``line`` with the protected ``spans`` removed.
+
+    Args:
+        line: The line.
+        spans: Protected ``(start, end)`` ranges.
+
+    Returns:
+        The syntax part of the line only.
+
+    Examples:
+        >>> _outside_text("ab[cd]ef", [(2, 6)])
+        'abef'
+    """
+    return "".join(ch for i, ch in enumerate(line) if not any(s <= i < e for s, e in spans))
+
+
+# ---------------------------------------------------------------------------
+# Unicode fixes for the syntax part of a line
+# ---------------------------------------------------------------------------
+
+def _drop_invisible(segment: str) -> str:
+    """Delete zero-width characters and soft hyphens.
+
+    Args:
+        segment: Syntax text (never label text).
+
+    Returns:
+        The segment without INVISIBLE_CHARS.
+
+    Examples:
+        >>> _drop_invisible("A\\u200b --> B\\u00ad")
+        'A --> B'
+    """
+    return "".join(ch for ch in segment if ch not in INVISIBLE_CHARS)
+
+
+def _fix_dash_arrows(segment: str, family: str) -> str:
+    """Rewrite typographic dashes inside arrows, clamped to a valid length.
+
+    Only dash runs that end in ``>`` and contain a typographic dash are
+    touched. Flowchart, class and state links need at least two dashes, so
+    ``–>`` becomes ``-->``; sequence arrows take at most two, so ``-—>>``
+    becomes ``-->>``. In a flowchart, a free-standing typographic dash that
+    opens an edge label (``A — yes —> B``, autocorrected ``-- yes -->``)
+    becomes ``--`` as well.
+
+    Args:
+        segment: Syntax text (never label text).
+        family: Diagram family from ``diagram_family``.
+
+    Returns:
+        The segment with arrow dashes in ASCII.
+
+    Examples:
+        >>> _fix_dash_arrows("A \\u2013> B", "flowchart")
+        'A --> B'
+        >>> _fix_dash_arrows("A-\\u2014>>B", "sequence")
+        'A-->>B'
+        >>> _fix_dash_arrows("A\\u2013>>B", "sequence")
+        'A->>B'
+        >>> _fix_dash_arrows("A \\u2014 yes \\u2014> B", "flowchart")
+        'A -- yes --> B'
+        >>> _fix_dash_arrows("Front\\u2013end", "flowchart")
+        'Front\\u2013end'
+    """
+    if family == "flowchart":
+        segment = _EDGE_LABEL_DASH_RE.sub("--", segment)
+
+    def repl(match: re.Match[str]) -> str:
+        run = match.group(0)
+        if not any(ch in TYPOGRAPHIC_DASHES for ch in run):
+            return run
+        head = "<" if run.startswith("<") else ""
+        dashes = "".join(TYPOGRAPHIC_DASHES.get(ch, ch) for ch in run.lstrip("<"))
+        too_long = family == "sequence" and len(dashes) > 2
+        too_short = family != "sequence" and len(dashes) < 2
+        return head + ("--" if too_long or too_short else dashes)
+
+    return _DASH_ARROW_RE.sub(repl, segment)
+
+
+def _fix_arrow_chars(segment: str, mapping: dict[str, str]) -> str:
+    """Replace Unicode arrow characters with the family's ASCII arrow.
+
+    Args:
+        segment: Syntax text (never label text).
+        mapping: Character → ASCII arrow for this diagram family.
+
+    Returns:
+        The rewritten segment.
+
+    Examples:
+        >>> _fix_arrow_chars("A \\u2192 B", FLOWCHART_ARROWS)
+        'A --> B'
+        >>> _fix_arrow_chars("A\\u2192B", SEQUENCE_ARROWS)
+        'A->>B'
+    """
+    for ch, repl in mapping.items():
+        segment = segment.replace(ch, repl)
+    return segment
+
+
+def _fix_fullwidth(segment: str) -> str:
+    """Replace fullwidth punctuation with ASCII (flowchart syntax only).
+
+    Args:
+        segment: Flowchart syntax text (never label text).
+
+    Returns:
+        The rewritten segment.
+
+    Examples:
+        >>> _fix_fullwidth("A\\uff08데이터\\uff09 --\\uff1e B")
+        'A(데이터) --> B'
+    """
+    for ch, repl in FULLWIDTH_PUNCT.items():
+        segment = segment.replace(ch, repl)
+    return segment
+
+
+def _convert_separator(line: str) -> str:
+    """Turn a fullwidth colon used as the label separator into ``:``.
+
+    A ``：`` followed by an ASCII ``:`` with no whitespace in between
+    (``A->>B：x: hi``) may be part of an ID, so it is left alone.
+
+    Args:
+        line: A sequence, class or state line.
+
+    Returns:
+        The line with its separator in ASCII.
+
+    Examples:
+        >>> _convert_separator("A->>B\\uff1a \\uac12\\uff1b")
+        'A->>B: \\uac12\\uff1b'
+        >>> _convert_separator("A->>B\\uff1ax: hi")
+        'A->>B\\uff1ax: hi'
+    """
+    sep = _first_separator(line)
+    if sep == -1 or line[sep] != FULLWIDTH_COLON:
+        return line
+    rest = line[sep + 1:]
+    colon = rest.find(":")
+    if colon > 0 and not any(ch.isspace() for ch in rest[:colon]):
+        return line
+    return line[:sep] + ":" + rest
+
+
+def _fix_smart_quote_labels(line: str, always: bool) -> str:
+    """Turn curly quotes that delimit a whole label into ASCII quotes.
+
+    ``A[“a (b)”]`` fails because the parentheses are unquoted; ``A["a (b)"]``
+    renders. When the label would render without quoting (``A[“데이터”]``),
+    the curly quotes are part of the text and stay, unless ``always`` is set
+    (class labels, which must be quoted).
+
+    Args:
+        line: A flowchart or class line.
+        always: Convert even when the label text needs no quoting.
+
+    Returns:
+        The line with delimiter quotes in ASCII.
+
+    Examples:
+        >>> _fix_smart_quote_labels("A[\\u201ca (b)\\u201d] --> B", always=False)
+        'A["a (b)"] --> B'
+        >>> _fix_smart_quote_labels("A[\\u201c\\ub370\\uc774\\ud130\\u201d] --> B", always=False)
+        'A[\\u201c\\ub370\\uc774\\ud130\\u201d] --> B'
+    """
+    quoted = _quote_spans(line)
+
+    def repl(match: re.Match[str]) -> str:
+        if any(s <= match.start() < e for s, e in quoted):
+            return match.group(0)
+        inner = match.group(2)
+        if not always and not LABEL_NEEDS_QUOTES.intersection(inner):
+            return match.group(0)
+        return f'"{inner}"'
+
+    return SMART_QUOTE_LABEL_RE.sub(repl, line)
+
+
+def _fix_subgraph_title(line: str) -> str:
+    """Quote a bare subgraph title that contains Unicode punctuation.
+
+    A bare title (``subgraph 처리（원본）``) fails on any of these characters,
+    and converting them to ASCII does not help (``subgraph 처리(원본)`` fails
+    too), so the title is wrapped in double quotes instead. A title that is
+    entirely wrapped in curly quotes gets ASCII quotes.
+
+    Args:
+        line: A flowchart line.
+
+    Returns:
+        The line with its title quoted, or unchanged.
+
+    Examples:
+        >>> _fix_subgraph_title("    subgraph \\ucc98\\ub9ac\\uff08\\uc6d0\\ubcf8\\uff09")
+        '    subgraph "\\ucc98\\ub9ac\\uff08\\uc6d0\\ubcf8\\uff09"'
+        >>> _fix_subgraph_title("    subgraph \\u201c\\ucc98\\ub9ac\\u201d")
+        '    subgraph "\\ucc98\\ub9ac"'
+        >>> _fix_subgraph_title("    subgraph \\ucc98\\ub9ac \\ub2e8\\uacc4")
+        '    subgraph \\ucc98\\ub9ac \\ub2e8\\uacc4'
+    """
+    match = re.match(r"(\s*subgraph\s+)(.*?)(\s*)$", line)
+    if not match or not _is_bare_subgraph_title(match.group(2)):
+        return line
+    head, title, tail = match.groups()
+    if '"' in title or not _SUBGRAPH_TITLE_HAZARDS.intersection(title):
+        return line
+    if len(title) > 1 and title[0] in SMART_OPEN_QUOTES and title[-1] in SMART_CLOSE_QUOTES:
+        title = title[1:-1]
+    return f'{head}"{title}"{tail}'
+
+
+def _sequence_syntax_end(line: str) -> tuple[int, bool]:
+    """Return where the syntax part of a sequence line ends.
+
+    Args:
+        line: A sequence-diagram line.
+
+    Returns:
+        ``(end, is_message)``: index where text starts (``len(line)`` if
+        none) and whether the syntax part may hold an arrow.
+
+    Examples:
+        >>> _sequence_syntax_end("A->>B: hi")
+        (6, True)
+        >>> _sequence_syntax_end("participant A as Alice")
+        (17, False)
+        >>> _sequence_syntax_end("loop every minute")
+        (4, False)
+    """
+    keyword = _SEQ_TEXT_KEYWORD_RE.match(line)
+    if keyword:
+        return keyword.end(), False
+    if _SEQ_PARTICIPANT_RE.match(line):
+        alias = re.search(r"\sas\s", line, re.IGNORECASE)
+        meta = line.find("@{")
+        ends = [i for i in (alias.end() if alias else -1, meta) if i != -1]
+        return (min(ends) if ends else len(line)), False
+    sep = _first_separator(line)
+    end = len(line) if sep == -1 else sep + 1
+    return end, not _SEQ_NOTE_RE.match(line)
+
+
+def _manual_unicode(segment: str, family: str) -> list[str]:
+    """Return warning rule names for Unicode syntax with no safe auto-fix.
+
+    Args:
+        segment: The syntax part of a line, after auto-fixes.
+        family: Diagram family from ``diagram_family``.
+
+    Returns:
+        Warning rule names (possibly empty).
+
+    Examples:
+        >>> _manual_unicode("A \\u2190 B", "flowchart")
+        ['unicode-arrow-manual']
+        >>> _manual_unicode("A --> B\\u3002", "flowchart")
+        ['fullwidth-period']
     """
     rules: list[str] = []
-    original = line
-
-    # Invisible characters: delete
-    for ch in INVISIBLE_CHARS:
-        if ch in line:
-            line = line.replace(ch, "")
-            rules.append("invisible-char")
-
-    # Unicode spaces → ASCII space
-    for ch, repl in UNICODE_SPACES.items():
-        if ch in line:
-            line = line.replace(ch, repl)
-            rules.append("unicode-space")
-
-    # Smart quotes → ASCII quotes
-    for ch, repl in SMART_QUOTES.items():
-        if ch in line:
-            line = line.replace(ch, repl)
-            rules.append("smart-quote")
-
-    # Typographic dashes → ASCII dashes
-    for ch, repl in TYPOGRAPHIC_DASHES.items():
-        if ch in line:
-            line = line.replace(ch, repl)
-            rules.append("typo-dash")
-
-    # Fullwidth CJK punctuation → ASCII
-    for ch, repl in FULLWIDTH_CJK.items():
-        if ch in line:
-            line = line.replace(ch, repl)
-            rules.append("fullwidth-cjk")
-
-    # Unicode arrows → Mermaid arrows (only in non-arrow contexts)
-    for ch, repl in UNICODE_ARROWS.items():
-        if ch in line:
-            line = line.replace(ch, repl)
-            rules.append("unicode-arrow")
-
-    if line != original:
-        return line, list(set(rules))
-    return line, []
+    if any(ch in UNSUPPORTED_ARROWS for ch in segment):
+        rules.append("unicode-arrow-manual")
+    if family == "flowchart" and IDEOGRAPHIC_FULL_STOP in segment:
+        rules.append("fullwidth-period")
+    return rules
 
 
-# ---------------------------------------------------------------------------
-# Message entity escaping
-# ---------------------------------------------------------------------------
-
-def escape_message_text(text: str) -> str:
-    """Replace {, }, [, ], \" in message text with Mermaid entities.
+def fix_unicode(line: str, family: str = "flowchart") -> tuple[str, list[str], list[str]]:
+    """Fix Unicode characters used as Mermaid syntax, leaving label text alone.
 
     Args:
-        text: Message text portion (after : in arrows/notes).
+        line: A single line of mermaid code (not a comment or front matter).
+        family: Diagram family from ``diagram_family``. ``"other"`` diagrams
+            are never rewritten.
 
     Returns:
-        Escaped text safe for Mermaid parsing.
+        Tuple of (fixed line, auto-fix rule names, warning rule names).
+
+    Examples:
+        >>> fix_unicode("    D[\\ub370\\uc774\\ud130\\uff08\\uc6d0\\ubcf8\\uff09]")
+        ('    D[\\ub370\\uc774\\ud130\\uff08\\uc6d0\\ubcf8\\uff09]', [], [])
+        >>> fix_unicode("    A\\uff08\\ub370\\uc774\\ud130\\uff09 \\u2014> B")[:2]
+        ('    A(\\ub370\\uc774\\ud130) --> B', ['typo-dash', 'fullwidth-cjk'])
+        >>> fix_unicode("    A->>B\\uff1a \\uac12\\uff1b\\uac12", "sequence")[:2]
+        ('    A->>B: \\uac12\\uff1b\\uac12', ['fullwidth-cjk'])
+        >>> fix_unicode("    A \\u2190 B")
+        ('    A \\u2190 B', [], ['unicode-arrow-manual'])
+        >>> fix_unicode('    state "\\uac12\\u2190\\uac12" as S1', "state")
+        ('    state "\\uac12\\u2190\\uac12" as S1', [], [])
     """
-    for ch, entity in ENTITY_MAP.items():
-        text = text.replace(ch, entity)
-    return text
+    if family == "other":
+        return line, [], []
+    rules: list[str] = []
 
+    def apply(name: str, new: str) -> None:
+        nonlocal line
+        if new != line:
+            rules.append(name)
+            line = new
 
-def fix_message_line(line: str) -> tuple[str, bool]:
-    """Escape special chars in arrow/note message text.
+    if family == "flowchart":
+        apply("smart-quote", _fix_smart_quote_labels(line, always=False))
+        apply("subgraph-title-quote", _fix_subgraph_title(line))
+        # Spans are recomputed after every pass: an ASCII edge-label opener
+        # produced by the dash pass protects that label from later passes.
+        # The dash pass runs again last to catch `—＞` once `＞` is ASCII.
+        passes: list[tuple[str, Callable[[str], str]]] = [
+            ("invisible-char", _drop_invisible),
+            ("typo-dash", lambda s: _fix_dash_arrows(s, family)),
+            ("unicode-arrow", lambda s: _fix_arrow_chars(s, FLOWCHART_ARROWS)),
+            ("fullwidth-cjk", _fix_fullwidth),
+            ("typo-dash", lambda s: _fix_dash_arrows(s, family)),
+        ]
+        for name, rewrite in passes:
+            apply(name, _rewrite_outside(line, _flowchart_text_spans(line), rewrite))
+        warnings = _manual_unicode(_outside_text(line, _flowchart_text_spans(line)), family)
+        return line, list(dict.fromkeys(rules)), warnings
 
-    Args:
-        line: A single line inside a mermaid block.
-
-    Returns:
-        Tuple of (fixed line, whether changes were made).
-    """
-    for regex in (ARROW_MSG_RE, NOTE_MSG_RE):
-        match = regex.match(line)
-        if match:
-            prefix = match.group(1)
-            message = match.group(2)
-            if any(ch in message for ch in "{}[]\""):
-                return prefix + escape_message_text(message), True
-    return line, False
+    # sequence, class, state: the syntax part is everything before the label text
+    if family != "sequence" or not (_SEQ_TEXT_KEYWORD_RE.match(line) or _SEQ_PARTICIPANT_RE.match(line)):
+        apply("fullwidth-cjk", _convert_separator(line))
+    if family == "class" and re.match(r"\s*class\s+[^\s\[]+\[", line):
+        apply("smart-quote", _fix_smart_quote_labels(line, always=True))
+    if family == "state":
+        apply("smart-quote", re.sub(
+            "^(\\s*state\\s+)[\u201c\u201e]([^\"\u201c\u201d\u201e]*)[\u201d\u201c](?=\\s+as\\s)",
+            r'\1"\2"', line))
+    if family == "sequence":
+        end, is_message = _sequence_syntax_end(line)
+    else:
+        sep = _first_separator(line)
+        end, is_message = (len(line) if sep == -1 else sep), True
+    head, tail = line[:end], line[end:]
+    protect = _quote_spans(head) if family != "sequence" else []
+    new_head = _rewrite_outside(head, protect, _drop_invisible)
+    apply("invisible-char", new_head + tail)
+    head = new_head
+    if is_message:
+        arrows = SEQUENCE_ARROWS if family == "sequence" else EDGE_ARROWS
+        new_head = _rewrite_outside(head, protect, lambda s: _fix_dash_arrows(s, family))
+        apply("typo-dash", new_head + tail)
+        head = new_head
+        new_head = _rewrite_outside(head, protect, lambda s: _fix_arrow_chars(s, arrows))
+        apply("unicode-arrow", new_head + tail)
+        head = new_head
+    warnings = _manual_unicode(_outside_text(head, _quote_spans(head)), family) if is_message else []
+    return line, rules, warnings
 
 
 # ---------------------------------------------------------------------------
@@ -324,6 +894,131 @@ def diagram_header(block_lines: list[str]) -> str:
             continue
         return stripped
     return ""
+
+
+def diagram_family(header: str) -> str:
+    """Map a diagram declaration to the family the Unicode rules understand.
+
+    Args:
+        header: The declaration line from ``diagram_header``.
+
+    Returns:
+        ``"flowchart"``, ``"sequence"``, ``"class"``, ``"state"``, or
+        ``"other"`` (never rewritten by the Unicode rules).
+
+    Examples:
+        >>> diagram_family("graph TD"), diagram_family("sequenceDiagram")
+        ('flowchart', 'sequence')
+        >>> diagram_family("stateDiagram-v2"), diagram_family("\\u200bclassDiagram")
+        ('state', 'class')
+        >>> diagram_family("gantt")
+        'other'
+    """
+    words = "".join(ch for ch in header if ch not in INVISIBLE_CHARS and ch != "\ufeff").split()
+    keyword = words[0] if words else ""
+    if keyword in ("flowchart", "graph", "flowchart-elk"):
+        return "flowchart"
+    if keyword == "sequenceDiagram":
+        return "sequence"
+    if keyword in ("classDiagram", "classDiagram-v2"):
+        return "class"
+    if keyword in ("stateDiagram", "stateDiagram-v2"):
+        return "state"
+    return "other"
+
+
+def _text_only_lines(block_lines: list[str], family: str) -> set[int]:
+    """Return indices of block lines that hold only text or configuration.
+
+    These are never rewritten: YAML front matter, ``%%`` comments, class
+    member bodies, multi-line state notes and ``accDescr { ... }`` blocks.
+
+    Args:
+        block_lines: Lines inside a mermaid block.
+        family: Diagram family from ``diagram_family``.
+
+    Returns:
+        Set of 0-based line indices.
+
+    Examples:
+        >>> sorted(_text_only_lines(["---", "title: x", "---", "classDiagram", "class A {", "+f（）", "}"], "class"))
+        [0, 1, 2, 5, 6]
+    """
+    skip: set[int] = set()
+    i = 0
+    while i < len(block_lines) and not block_lines[i].strip():
+        i += 1
+    if i < len(block_lines) and block_lines[i].strip() == "---":
+        skip.add(i)
+        i += 1
+        while i < len(block_lines) and block_lines[i].strip() != "---":
+            skip.add(i)
+            i += 1
+        skip.add(i)
+    closer: re.Pattern[str] | None = None
+    for j, line in enumerate(block_lines):
+        stripped = line.strip()
+        if j in skip:
+            continue
+        if closer is not None:
+            skip.add(j)
+            if closer.search(stripped):
+                closer = None
+        elif stripped.startswith("%%"):
+            skip.add(j)
+        elif re.match(r"accDescr\s*\{", stripped) and "}" not in stripped:
+            closer = re.compile(r"\}")
+        elif family == "class" and re.match(r"class\s+\S+.*\{$", stripped):
+            closer = re.compile(r"^\}")
+        elif family == "state" and re.match(r"note\s+(?:left|right)\s+of\s+[^:]+$", stripped, re.IGNORECASE):
+            closer = re.compile(r"^end\s+note$", re.IGNORECASE)
+    return skip
+
+
+def fix_block_unicode(
+    block_lines: list[str],
+    block_start: int,
+    block_num: int,
+) -> tuple[list[str], list[Issue]]:
+    """Apply the Unicode rules to every syntax line of one mermaid block.
+
+    Args:
+        block_lines: Lines inside the mermaid block (without the fences).
+        block_start: 0-based file index of the block's first line.
+        block_num: 1-based block index.
+
+    Returns:
+        Tuple of (fixed lines, issues). Auto-fixes have severity ``error``,
+        Unicode that needs a human has severity ``warning``.
+
+    Examples:
+        >>> lines, issues = fix_block_unicode(["flowchart TD", "    A \\u2013> B[\\uac12\\u2013\\uac12]"], 0, 1)
+        >>> lines[1], issues[0].rule
+        ('    A --> B[\\uac12\\u2013\\uac12]', 'typo-dash')
+    """
+    family = diagram_family(diagram_header(block_lines))
+    skipped = _text_only_lines(block_lines, family)
+    header = next((j for j, ln in enumerate(block_lines) if j not in skipped and ln.strip()), -1)
+    fixed_block: list[str] = []
+    issues: list[Issue] = []
+    for j, bline in enumerate(block_lines):
+        line_num = block_start + j + 1
+        if j in skipped:
+            fixed_block.append(bline)
+            continue
+        if j == header:
+            fixed = _drop_invisible(bline)
+            fix_rules, warn_rules = (["invisible-char"] if fixed != bline else []), []
+        else:
+            fixed, fix_rules, warn_rules = fix_unicode(bline, family)
+        if fix_rules:
+            issues.append(Issue(line_num, ",".join(fix_rules), bline.strip(), fixed.strip(), block_num))
+        if warn_rules:
+            issues.append(Issue(
+                line_num, ",".join(warn_rules), fixed.strip(), fixed.strip(), block_num, severity="warning",
+            ))
+        fixed_block.append(fixed)
+    return fixed_block, issues
 
 
 # ---------------------------------------------------------------------------
@@ -408,7 +1103,9 @@ def process_file(filepath: Path, apply_fix: bool = False) -> list[Issue]:
         apply_fix: If True, write fixes back to file.
 
     Returns:
-        List of issues found.
+        List of issues found: auto-fixes (severity ``error``) and Unicode
+        that needs manual review (severity ``warning``). The file is only
+        rewritten when a fix changed it.
     """
     content = filepath.read_text(encoding="utf-8")
     lines = content.split("\n")
@@ -446,40 +1143,11 @@ def process_file(filepath: Path, apply_fix: bool = False) -> list[Issue]:
             if rename_map:
                 block_lines = apply_renames(block_lines, rename_map)
 
-            # Phase 2: Unicode + message escaping (line by line).
-            # Message escaping is sequence-only: in other diagram types the
-            # arrow regex also matches lines like `A --> B@{shape: diam}` or
-            # `A --> B["Check: OK"]` and the escape breaks them.
-            is_sequence = diagram_header(block_lines) == "sequenceDiagram"
-            fixed_block: list[str] = []
-            for j, bline in enumerate(block_lines):
-                line_num = block_start + j + 1  # 1-based
-
-                # Unicode fixes
-                fixed, unicode_rules = fix_unicode(bline)
-                if unicode_rules:
-                    all_issues.append(Issue(
-                        line=line_num,
-                        rule=",".join(unicode_rules),
-                        before=bline.strip(),
-                        after=fixed.strip(),
-                        block=block_num,
-                    ))
-                    bline = fixed
-
-                # Message entity escaping (sequence diagrams only)
-                escaped, changed = fix_message_line(bline) if is_sequence else (bline, False)
-                if changed:
-                    all_issues.append(Issue(
-                        line=line_num,
-                        rule="message-escape",
-                        before=bline.strip(),
-                        after=escaped.strip(),
-                        block=block_num,
-                    ))
-                    bline = escaped
-
-                fixed_block.append(bline)
+            # Phase 2: Unicode in diagram syntax (label text is never touched).
+            # Sequence-message entity escaping of { } [ ] " was retired: both
+            # Mermaid 11.12.2 and 12.1.0 render those characters unescaped.
+            fixed_block, unicode_issues = fix_block_unicode(block_lines, block_start, block_num)
+            all_issues.extend(unicode_issues)
 
             result_lines.extend(fixed_block)
             result_lines.append(line)  # closing ```
@@ -493,7 +1161,7 @@ def process_file(filepath: Path, apply_fix: bool = False) -> list[Issue]:
 
         i += 1
 
-    if apply_fix and all_issues:
+    if apply_fix and result_lines != lines:
         filepath.write_text("\n".join(result_lines), encoding="utf-8")
 
     return all_issues
@@ -515,7 +1183,7 @@ class FixSuggestion:
     Examples:
         >>> s = FixSuggestion(rule="reserved-word", hint="rename 'end' → 'ENDP'")
         >>> s.rule
-        "reserved-word"
+        'reserved-word'
     """
 
     rule: str
@@ -573,7 +1241,7 @@ def suggest_fix_for_mmdc_error(error: MmdcError) -> FixSuggestion | None:
     Examples:
         >>> err = MmdcError(line=3, got="end", expected=["participant"], context="")
         >>> suggest_fix_for_mmdc_error(err).rule
-        "reserved-word"
+        'reserved-word'
     """
     got_lower = error.got.lower()
     if got_lower in _RESERVED_WORD_TOKENS and "participant" in error.expected:
@@ -680,7 +1348,11 @@ def _print_feedback_summary(filepath: Path, report: FeedbackReport) -> None:
     """
     print(f"\n=== {filepath} ===")
     print(f"  iterations: {report.iterations}")
-    print(f"  static fixes applied: {len(report.static_issues)}")
+    fixes = [i for i in report.static_issues if i.severity == "error"]
+    warnings = {(i.line, i.rule) for i in report.static_issues if i.severity == "warning"}
+    print(f"  static fixes applied: {len(fixes)}")
+    if warnings:
+        print(f"  warnings (manual review): {len(warnings)}")
     if report.final_errors:
         print(f"  mmdc errors remaining: {len(report.final_errors)}")
         for err in report.final_errors:
@@ -768,17 +1440,21 @@ def main() -> int:
     elif not all_issues:
         print("OK: No Mermaid issues found.")
     else:
+        errors = [d for d in all_issues if d["severity"] == "error"]
+        warnings = [d for d in all_issues if d["severity"] == "warning"]
         action = "Fixed" if apply_fix else "Found"
-        print(f"{action} {len(all_issues)} issue(s):\n")
-        print(f"{'Block':>5} | {'Line':>4} | {'Rule':<20} | Before")
-        print("-" * 80)
+        print(f"{action} {len(errors)} issue(s), {len(warnings)} warning(s):\n")
+        print(f"{'Sev':<7} | {'Block':>5} | {'Line':>4} | {'Rule':<20} | Before")
+        print("-" * 88)
         for d in all_issues:
             before = str(d["before"])
             if len(before) > 50:
                 before = before[:50] + "..."
-            print(f"{d['block']:>5} | {d['line']:>4} | {d['rule']:<20} | {before}")
+            print(f"{d['severity']:<7} | {d['block']:>5} | {d['line']:>4} | {d['rule']:<20} | {before}")
 
-        if not apply_fix:
+        if warnings:
+            print("\nWarnings need manual review (no safe automatic fix).")
+        if errors and not apply_fix:
             print("\nRun with --fix to apply corrections.")
 
     if with_mmdc:

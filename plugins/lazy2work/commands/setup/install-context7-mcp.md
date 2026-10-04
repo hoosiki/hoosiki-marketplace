@@ -47,7 +47,8 @@ Context7 provides up-to-date, version-specific documentation for libraries and f
 If installation fails:
 - Hosted: verify the key at https://context7.com/dashboard and check network access
   to https://mcp.context7.com
-- Local: ensure `npx` is installed (comes with Node.js) and Node.js is 18+ (`node --version`)
+- Local: ensure `npx` is installed (comes with Node.js) and Node.js is 20.18.1+
+  (`node --version`); `@upstash/context7-mcp` declares `engines.node >=20.18.1`
 
 ## Notes
 

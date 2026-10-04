@@ -39,6 +39,10 @@
 # Phase 2 는 브랜치 이름으로 웨이브를 전달한다 (tmux pane 은 드라이버 env 를 상속하지 않는다):
 #   build/<wave-name>      → 그 웨이브의 feature 들을 waves.json 순서대로 03~08 실행
 #
+# 모델: spec/build 시작 시 1회 해석해(speckit_pipeline.sh --print-models) 런 전체에 고정한다.
+#   Phase 1 은 env 로, Phase 2 는 .speckit-logs/parallel/build/models.env 로 구체 ID 를 내려준다.
+#   고정하려면 SPECKIT_OPUS_MODEL / SPECKIT_SONNET_MODEL 을 export 한 뒤 실행.
+#
 # ⚠️ 사전 준비 (한 번):
 #   git rm --cached .specify/feature.json 2>/dev/null; echo '.specify/feature.json' >> .gitignore
 #   echo '.speckit-logs/' >> .gitignore
@@ -312,6 +316,61 @@ preflight_workmux() {
 	if ! git diff --quiet || ! git diff --cached --quiet; then
 		warn "작업 트리에 커밋되지 않은 변경이 있습니다 — 병합 단계에서 막힐 수 있습니다"
 	fi
+}
+
+# ──────────────────────────────────────────────
+# 모델 — 런 전체에 1회 해석 (단일 출처: speckit_pipeline.sh --print-models)
+#
+# Phase 1 의 N개 프로세스가 각자 해석하면 CLI 를 N×2 번 띄우고, 그 사이 별칭이 옮겨가면
+# feature 마다 다른 모델로 갈린다. 드라이버가 한 번 해석해 구체 ID 를 내려준다:
+#   Phase 1 → export SPECKIT_OPUS_MODEL / SPECKIT_SONNET_MODEL (백그라운드 자식이 상속)
+#   Phase 2 → $RUN_ROOT/build/models.env  (tmux pane 은 드라이버 env 상속이 보장되지 않는다
+#             → wm_stage_runner.sh 가 이 파일을 읽어 같은 값을 export 한다)
+# 이미 SPECKIT_OPUS_MODEL / SPECKIT_SONNET_MODEL 로 고정해 두었다면 그 값이 그대로 내려간다.
+# ──────────────────────────────────────────────
+MODELS_FILE="$RUN_ROOT/build/models.env"
+
+resolve_run_models() {
+	local out line key val
+	if $DRY_RUN; then
+		log "모델: 실제 실행 시작 시 1회 해석해 모든 feature·웨이브에 고정합니다 (--dry-run 은 건너뜀)"
+		return 0
+	fi
+	# 경고(stderr)는 그대로 터미널에 보인다. 실패해도 치명적이지 않다 — 자식이 스스로 해석한다.
+	out="$(bash "$SCRIPT_DIR/speckit_pipeline.sh" --print-models)" || {
+		warn "모델 해석 실패 — 각 프로세스가 스스로 해석합니다 (런 도중 모델이 갈릴 수 있음)"
+		return 0
+	}
+	while IFS= read -r line; do
+		key="${line%%=*}"
+		val="${line#*=}"
+		case "$key" in
+		SPECKIT_OPUS_MODEL | SPECKIT_SONNET_MODEL) ;;
+		*) continue ;;
+		esac
+		if [ -n "$val" ]; then
+			export "$key=$val"
+		fi
+	done <<<"$out"
+	log "모델 (드라이버가 1회 해석 → 모든 프로세스 공통): opus -> ${SPECKIT_OPUS_MODEL:-?}   sonnet -> ${SPECKIT_SONNET_MODEL:-?}"
+	if [ "${SPECKIT_OPUS_MODEL:-}" = "opus" ] || [ "${SPECKIT_SONNET_MODEL:-}" = "sonnet" ]; then
+		warn "별칭 그대로인 family 는 CLI 가 매 호출마다 다시 해석합니다 — 재현성이 필요하면 SPECKIT_*_MODEL 로 고정하세요"
+	fi
+}
+
+# Phase 2 의 pane 들에 넘길 파일. 해석에 실패했으면 지난 런의 파일이 남지 않게 지운다.
+write_models_file() {
+	$DRY_RUN && return 0
+	mkdir -p "$(dirname "$MODELS_FILE")"
+	rm -f "$MODELS_FILE"
+	if [ -z "${SPECKIT_OPUS_MODEL:-}" ] && [ -z "${SPECKIT_SONNET_MODEL:-}" ]; then
+		return 0
+	fi
+	{
+		echo "# speckit_parallel.sh 가 $(date '+%Y-%m-%d %H:%M:%S') 에 해석 — wm_stage_runner.sh 가 읽는다"
+		if [ -n "${SPECKIT_OPUS_MODEL:-}" ]; then echo "SPECKIT_OPUS_MODEL=$SPECKIT_OPUS_MODEL"; fi
+		if [ -n "${SPECKIT_SONNET_MODEL:-}" ]; then echo "SPECKIT_SONNET_MODEL=$SPECKIT_SONNET_MODEL"; fi
+	} >"$MODELS_FILE"
 }
 
 # ──────────────────────────────────────────────
@@ -662,6 +721,7 @@ if [ "$CMD" = "spec" ]; then
 
 	head_ "Phase 1 (spec) — 01_specify + 02_clarify"
 	log "코드베이스를 읽지 않는 단계라 worktree 없이 한 워킹트리에서 전부 동시에 돌립니다"
+	resolve_run_models
 
 	spec_ok=true
 	run_spec_phase "${ALL_FEATURES[@]}" || spec_ok=false
@@ -709,6 +769,8 @@ if [ "$CMD" = "build" ]; then
 	preflight_workmux
 	require_final_waves
 	resolve_stages
+	resolve_run_models
+	write_models_file
 
 	# 웨이브 하나만 실행
 	if [ -n "$ONLY_WAVE" ]; then

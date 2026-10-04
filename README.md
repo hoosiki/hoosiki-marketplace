@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.50.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.51.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -40,7 +40,7 @@ runs both of these for you across every installed plugin.
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.50.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
+| [**lazy2work**](plugins/lazy2work/) | 1.51.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
 
 ---
 
@@ -53,7 +53,7 @@ runs both of these for you across every installed plugin.
 - [Claude Code](https://claude.ai) 1.0.33+
 - [SuperClaude](https://github.com/SuperClaude-Org/SuperClaude_Framework.git)
 - Python 3.10+ (for skills scripts and webhook hooks)
-- Node.js 18+ (for MCP setup commands that use `npx`)
+- Node.js 20.18.1+ (for MCP setup commands that use `npx`; the `npx skills` routes in `install-tavily-skill` and `up2date` need 22.20+)
 
 Optional, per skill:
 
@@ -63,13 +63,13 @@ Optional, per skill:
 
 | Skill | Command | Description |
 |-------|---------|-------------|
-| **up2date** | `/lazy2work:up2date` | Unified updater — checks and updates Homebrew packages, Claude Code skills/plugins, and SuperClaude commands in one go (`--brew` for Homebrew only, `--skill` for skills only). Plugin updates are delegated to Claude Code's own CLI (**`claude plugin marketplace update`** → **`claude plugin update <p> --scope <scope> --yes`**), so the plugin cache and registry are never hand-edited. The `--skill` path also runs **`npx skills@latest update -g -y`** to refresh global agent skills (e.g. mattpocock/skills) and **prunes skills deleted upstream** by parsing the updater's warning and calling `npx skills remove` (opt out with `--no-skill-prune`). The `--brew` path adds `brew autoremove` and a **Caskroom `.pkg` sweep** for the installers `brew cleanup` leaves behind. The skill inventory reads both `<installPath>/skills/` and `<installPath>/.claude/skills/`, and names any plugin it had to skip |
+| **up2date** | `/lazy2work:up2date` | Unified updater — checks and updates Homebrew packages, Claude Code skills/plugins, and SuperClaude commands in one go (`--brew` for Homebrew only, `--skill` for skills only). Plugin updates are delegated to Claude Code's own CLI (**`claude plugin marketplace update`** → **`claude plugin update <p> --scope <scope> --yes`**), so the plugin cache and registry are never hand-edited. The `--skill` path also runs **`npx skills@latest update -g -y`** to refresh global agent skills (e.g. mattpocock/skills) and **prunes skills deleted upstream** by parsing the updater's warning and calling `npx skills remove` (opt out with `--no-skill-prune`). The `--brew` path adds `brew autoremove` and a **Caskroom `.pkg` sweep** for the installers `brew cleanup` leaves behind. The skill inventory reads both `<installPath>/skills/` and `<installPath>/.claude/skills/`, and names any plugin it had to skip. SuperClaude is **upgraded with the tool that installed it** (`pipx upgrade` / `uv tool upgrade`; a pip install gets a manual hint instead) before `superclaude update` re-installs its commands, and a summary shows the before → after version |
 | **analyze-arxiv** | `/lazy2work:analyze-arxiv` | Study arXiv papers — fetches paper content, generates structured summaries, and creates prerequisite knowledge documents for deeper understanding |
 | **constitution-generator** | `/lazy2work:constitution-generator` | Generate optimized `/speckit.constitution` prompts — gathers project info (tech stack, project stage, conventions), detects brownfield patterns, and outputs a **minimal-but-enforceable** constitution: 6–12 non-negotiable principles in MUST/NO language, each with a `(Rationale: …)`, prototype-stage gate stripping, and a validation checklist |
 | **generate-optimized-spec-kit-prompt** | `/lazy2work:generate-optimized-spec-kit-prompt` | Generate complete Spec Kit prompts for the full 8-stage flow (specify → clarify → plan → checklist → tasks → analyze → implement → converge, + commit) from a PRD + pre-sliced issue files — 1 issue = 1 feature (no re-slicing), Mermaid diagrams, `/speckit.tasks` command-only (no hand-authored tasks), and auto-accept prompts for clarify/checklist/analyze/converge. Also plans the run for **maximum parallelism**: a dependency DAG (`DEPENDENCIES.md` with a Mermaid diagram), **vertical waves** (`waves.json` — one wave = one dependency chain), a two-phase runbook (`PARALLEL_EXECUTION.md`), and 5 runner scripts — Phase 1 runs every feature as background processes in one working tree, Phase 2 runs the trunk chain then the branch chains in parallel workmux worktrees. Waves are **computed from predicted file overlap**, not from dependencies alone: one subagent per issue predicts the files that feature will touch, and the scheduler keeps two features that would collide out of sibling waves, so a stage merge does not fail halfway through |
 | **pyright-setup** | `/lazy2work:pyright-setup` | Auto-configure Pyright for Python projects — detects Python version from venv, adds `[tool.pyright]` to pyproject.toml, resolves "Import could not be resolved" LSP errors in Neovim/VS Code |
 | **apply-all-sc-save** | `/lazy2work:apply-all-sc-save` | Broadcast `/sc:save` to all Claude Code panes in the current tmux session — auto-detects Claude panes, excludes self, supports `--dry-run`, `--all-sessions`, and custom commands |
-| **fix-mermaid** | `/lazy2work:fix-mermaid` | Fix Markdown rendering issues that break Mermaid diagrams or pandoc PDF conversion — Mermaid v11/v12 syntax (reserved words, Unicode/Langium issues, message escaping) **and** pandoc PDF pitfalls (blank-line compliance before lists/tables/fences as auto-fixed errors, long-mixed-cell overflow as warnings, always-on Unicode glyph map covering U+2212/U+2717/U+2718, **currency-dollar auto-escape** for `$100`/`$76.4억` that prevents `Bad math environment delimiter` errors, **unsafe-inline-code warnings** for `` `pass^k` ``-style content that collides with the `\seqsplit` wrapper and causes `Missing number, treated as zero`, **closing-dollar-trailing-space auto-fix** for `$\mathcal{H}_1 = $ rest` patterns that violate pandoc's `tex_math_dollars` rule and cause `\symcal allowed only in math mode`, plus opt-in **`--latin1-normalize`** for Latin-1 Supplement diacritics like `á é ñ ü ß`). Three bundled Python scripts (`fix_mermaid.py`, `fix_pandoc_blanks.py`, `validate_mermaid.py`) with lint / `--fix` / `--json` modes, plus optional **`--with-mmdc` feedback loop** that renders each diagram with Mermaid CLI and iterates targeted fixes until clean |
+| **fix-mermaid** | `/lazy2work:fix-mermaid` | Fix Markdown rendering issues that break Mermaid diagrams or pandoc PDF conversion — Mermaid v11/v12 syntax (reserved words, Unicode used as diagram syntax) **and** pandoc PDF pitfalls (blank-line compliance before lists/tables/fences as auto-fixed errors, long-mixed-cell overflow as warnings, always-on Unicode glyph map covering U+2212/U+2717/U+2718, **currency-dollar auto-escape** for `$100`/`$76.4억` that prevents `Bad math environment delimiter` errors, **unsafe-inline-code warnings** for `` `pass^k` ``-style content that collides with the `\seqsplit` wrapper and causes `Missing number, treated as zero`, **closing-dollar-trailing-space auto-fix** for `$\mathcal{H}_1 = $ rest` patterns that violate pandoc's `tex_math_dollars` rule and cause `\symcal allowed only in math mode`, plus opt-in **`--latin1-normalize`** for Latin-1 Supplement diacritics like `á é ñ ü ß`). Three bundled Python scripts (`fix_mermaid.py`, `fix_pandoc_blanks.py`, `validate_mermaid.py`) with lint / `--fix` / `--json` modes, plus optional **`--with-mmdc` feedback loop** that renders each diagram with Mermaid CLI and iterates targeted fixes until clean |
 | **hamilton-harness** | `/lazy2work:hamilton-harness` | Build Hamilton data pipelines through a spec-driven workflow — 4 modes (prompt→YAML, validate, stub+viz, modify), Pydantic schemas, Mermaid/Graphviz/Hamilton rendering, 3 domain examples (ETL/ML/RAG). Artifacts land under **`spec_build/`** (renamed from `build/` in v1.27.0 to avoid colliding with Python packaging / Sphinx / CMake build directories). Self-contained — no plugin-level hooks or rules needed |
 | **make-ppt-html** | `/lazy2work:make-ppt-html` | Convert any document (research note, report, README, storyboard) into a presentation-quality **reveal.js 6.0.2 + Tailwind CSS** single-file HTML deck with a **light↔dark theme toggle** (button + `D` key + localStorage). Follows bundled design guidelines — assertion-style slide titles, 60-30-10 single-accent color system, WCAG-verified contrast pairs, Pretendard, speaker notes, `?print-pdf` export — and ships a browser-verified `template.html` that pre-solves the reveal×Tailwind integration traps (Meyer-reset border-style kill, `Reveal.sync()` background re-theming, print-mode toggle hiding, dark-variant class pairing) |
 | **from-grill-me-to-linear** | `/lazy2work:from-grill-me-to-linear` | Publish grill-me/grill-with-docs outputs (PRD + vertical-slice issue files) into a Linear team as a **Project→Milestone→Issue→Sub-issue** hierarchy via the linear-server MCP — filters non-issue noise (user stories, decisions, glossary → project brief/links), preserves the dependency DAG with `blocked-by` relations (no false milestone serialization), and enforces **dry-run approval + idempotent upsert** (query-reuse-update so re-runs never duplicate labels or issues). Requires the Linear MCP integration |
@@ -232,6 +232,22 @@ Expected output:
 
   Status: Installed
   Commands: 31
+
+============================================================
+  SuperClaude Update
+============================================================
+  pipx upgrade superclaude
+  superclaude update
+
+  ...
+
+============================================================
+  SuperClaude Summary
+============================================================
+
+  Install method: pipx (~/.local/pipx/venvs/superclaude)
+  Version:        4.2.0 → 4.3.0 (upgraded)
+  Commands:       re-installed for 4.3.0
 
 ============================================================
   Update Complete
@@ -680,7 +696,7 @@ Notes:
 
 The skill bundles **three scripts** covering different Markdown rendering pitfalls:
 
-- `fix_mermaid.py` — Mermaid diagram syntax (reserved words, Unicode, message escaping) with optional mmdc feedback loop
+- `fix_mermaid.py` — Mermaid diagram syntax (reserved words, Unicode used as syntax) with optional mmdc feedback loop
 - `fix_pandoc_blanks.py` — Pandoc PDF rendering pitfalls (blank-line compliance, long-mixed-cell warnings, Unicode glyph map, currency-dollar auto-escape, unsafe-inline-code warnings)
 - `validate_mermaid.py` — Mermaid CLI wrapper that extracts blocks, renders each via `mmdc`, and surfaces parse errors as structured data (consumed by `fix_mermaid.py --with-mmdc`)
 
@@ -710,9 +726,8 @@ What it detects and fixes:
 | Category | Examples |
 |----------|---------|
 | **Reserved words** | `participant OPT as Optuna` → `participant OPTA as Optuna` (13 reserved words) |
-| **Message escaping** | `V-->>C: 200 OK {id}` → `V-->>C: 200 OK #123;id#125;` |
-| **Unicode issues** | Smart quotes `""` → `""`, fullwidth CJK `（）` → `()`, invisible chars removed |
-| **Typographic dashes** | Em dash `—` → `--`, en dash `–` → `-` |
+| **Unicode used as syntax** | `A —> B` → `A --> B`, `A->>B： hi` → `A->>B: hi`, `A[“a (b)”]` → `A["a (b)"]`, zero-width chars in IDs removed. Label text such as `D[데이터（원본）]` is never rewritten |
+| **Warnings** | `A ← B` (swap the operands), a trailing `。` |
 
 **With mmdc feedback loop** — runs the Mermaid CLI after static fixes, parses every `Parse error on line N`, and iterates targeted fixes until clean (max 3 iterations, early-exit when errors stop changing):
 
@@ -830,7 +845,7 @@ Run with --fix to apply blank-line corrections.
 
 Reference documentation:
 
-- `references/mermaid-v11-syntax.md` — 18 sections covering all diagram types, arrow syntax, Unicode replacement tables, reserved words, entity escaping
+- `references/mermaid-v11-syntax.md` — 18 sections covering all diagram types, arrow syntax, where Unicode breaks syntax, reserved words, `;`/`#` message escaping
 - `references/pandoc-pdf-pitfalls.md` — 8 sections covering blank-line compliance, long-mixed-cell overflow, font fallback, Unicode glyph missing in CJK fonts, unescaped currency dollar sign, unsafe LaTeX characters in inline code, closing dollar preceded by whitespace, and a pre-conversion checklist
 
 </details>
@@ -1154,9 +1169,9 @@ One-command MCP server installers accessible via `/lazy2work:setup:*`:
 | `install-serena-mcp` | Install [Serena MCP](https://github.com/oraios/serena) for semantic code intelligence | `uv`, Python 3.11–3.14 |
 | `install-context7-mcp` | Install [Context7 MCP](https://github.com/upstash/context7) for library docs lookup | `CONTEXT7_API_KEY` (or `npx`) |
 | `install-sequential-thinking-mcp` | Install Sequential Thinking MCP for structured reasoning | `npx` |
-| `install-morph-mcp` | Install [Morph MCP](https://morphllm.com) for fast file editing | `MORPH_API_KEY` |
+| `install-morph-mcp` | Install [Morph MCP](https://morphllm.com) for fast file editing, codebase search, and Reflex tools | `MORPH_API_KEY` |
 | `install-morph-fast-apply` | **Deprecated** — redirects to `install-morph-mcp` (upstream package moved) | — |
-| `install-tavily-skill` | Install [Tavily Skills](https://github.com/tavily-ai/skills) pack (8 skills, plugin or `npx`) | `claude` or `npx` |
+| `install-tavily-skill` | Install [Tavily Skills](https://github.com/tavily-ai/skills) pack (8 skills, plugin or `npx`) | `tvly` (Tavily CLI, Python 3.10+) plus `claude` or `npx` (Node.js 22.20+) |
 
 #### API Key Setup
 
@@ -1413,7 +1428,8 @@ hoosiki-marketplace/
 │       └── LICENSE
 ├── tests/
 │   ├── test_log_prompt.py
-│   └── test_up2date.py            ← 85 tests (run from the repo root)
+│   ├── test_speckit_waves.py
+│   └── test_up2date.py            ← 93 tests (run from the repo root)
 └── README.md
 ```
 
@@ -1432,6 +1448,18 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.51.0 (2026-10-04)
+
+- **fix-mermaid: the fixer never turns a rendering diagram into a failing one** — the Unicode rules rewrote characters wherever they appeared, so `D[데이터（원본）]` became `D[데이터(원본)]`, a parse error. Every character the fixer handled was re-tested in 13 text contexts (flowchart node and edge labels, sequence messages, aliases and notes, class and state labels) on Mermaid 11.12.2 and 12.1.0, with identical results on both. All of them render inside label text, so label text is never rewritten now. Rewrites happen only where a character acts as syntax: fullwidth brackets, pipes and `＞` in flowchart syntax, `：` as the sequence/class/state separator, curly quotes as label delimiters, dashes and `→ ↔ ⇒` inside arrows, and zero-width characters glued to IDs. In a 1068-block fixture the old rules broke 101 rendering blocks; every block the new rules rewrite renders
+- **fix-mermaid: obsolete rules retired, unfixable ones downgraded to warnings** — BOM, the Unicode spaces, `‘ ’ « » …` and the `{}[]"` message escaping all render as-is, so they are no longer rewritten. `← ⇐` and a trailing `。` have no safe rewrite (the old `<--` and `.` outputs fail or create a phantom node), so they are reported as warnings. The docs now name `;` and `#` as the message characters that actually need entities, quote bare subgraph titles that contain brackets, and correct the claim that these diagram types use a Langium grammar — they use Jison
+- **up2date: SuperClaude is upgraded, not just re-installed** — `superclaude update` only re-copies the files of the installed version, so a pipx install at 4.2.0 stayed there while upstream shipped 4.3.0. The step now follows the `superclaude` executable to its venv, identifies its manager from `pipx_metadata.json` or `uv-receipt.toml`, runs `pipx upgrade` / `uv tool upgrade`, and then `superclaude update`. A pip install is never upgraded automatically (PEP 668, shared environments); the run prints the exact command instead. A failed upgrade skips the re-install, a missing CLI is skipped with a notice instead of a `FileNotFoundError`, and a new "SuperClaude Summary" shows `4.2.0 → 4.3.0 (upgraded)`. Note that from 4.3.0, `superclaude update` also installs SuperClaude's agent files into `~/.claude/agents/`. 24 new tests
+- **up2date: doctests no longer run real updates** — the `Examples:` blocks of `main()`, `run_brew()`, `run_skill()`, `brew_update()`, `brew_upgrade_formula()`, `brew_upgrade_cask()`, `brew_cleanup()`, `update_global_skills()` and `check_plugins()` executed, so `pytest --doctest-modules` on `up2date.py` performed a full Homebrew and skill update. With the new SuperClaude step it upgraded the package for real. Every state-changing example is now `# doctest: +SKIP`; the module's doctests take about 2 s instead of 45 s, and only read-only examples still execute
+- **generate-optimized-spec-kit-prompt: model aliases resolve to a concrete ID once per run, at no cost** — without `ANTHROPIC_API_KEY`, every stage was handed the bare `opus`/`sonnet` alias, so a mid-run alias move could split features across models. The `sonnet` alias has already moved once, from `claude-sonnet-5` on 2026-09-26 to `claude-sonnet-5-5`. A probe `claude -p /theme --model <alias> --output-format stream-json` reads the concrete ID from the `system/init` event; `/theme` cannot run headless, so the probe ends with zero turns and zero cost. Resolution is now pin → Models API → probe → alias, with `SPECKIT_SKIP_MODEL_PROBE` and `SPECKIT_MODEL_PROBE_TIMEOUT`. The parallel driver resolves once with the new `--print-models` and hands the IDs to Phase 1 children through env, and to Phase 2 tmux panes through `models.env`, which the stage runner reads key by key without `source`-ing it
+- **generate-optimized-spec-kit-prompt: three doc errors fixed** — the clarify turn cap is 500, not 50. The Phase 1 throttle is `--spec-jobs` (`--max-concurrent` only caps Phase 2). And `/speckit.taskstoissues` has no `--dry-run`, so the guide now says to review `tasks.md` and the git remote first
+- **setup commands: current prerequisites** — `install-tavily-skill` now installs the Tavily CLI (`tvly`) that the skills shell out to, explains keyless limits versus `tvly init`/`TAVILY_API_KEY`, and needs Node.js 22.20+ for the `npx skills` route. `install-context7-mcp` needs Node.js 20.18.1+ for the local server. `install-morph-mcp` lists the seven tools `@morphllm/morphmcp` 0.8.213 really registers (its README still says three) and the comma-separated `DISABLED_TOOLS` filter. The other four commands were verified current
+- **README: mirrors the changes** — the fix-mermaid rule table and summaries, the up2date row and sample output (now with the SuperClaude Update and Summary sections), the Node.js prerequisite, the Morph and Tavily skill rows, and the tests tree (`test_speckit_waves.py` was missing; `test_up2date.py` holds 93 tests)
+- **Version bump**: 1.50.0 → 1.51.0
 
 ### v1.50.0 (2026-10-04)
 

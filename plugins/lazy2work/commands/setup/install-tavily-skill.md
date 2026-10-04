@@ -7,9 +7,12 @@ crawling as Claude Code skills.
 
 ## Prerequisites
 
-- A Tavily account (sign up at https://tavily.com if needed)
-- Authentication: either `TAVILY_API_KEY` env var or OAuth login via browser
-- For the `npx` method: Node.js 18+ and `npx`
+- The Tavily CLI (`tvly`) — every skill shells out to it (`allowed-tools: Bash(tvly *)`),
+  so the skills do nothing without it. Installed in step 4; needs Python 3.10+
+- A Tavily account (sign up at https://tavily.com if needed) — `tavily-search` and
+  `tavily-extract` run keyless under a rate-limit cap; `tavily-map`, `tavily-crawl`, and
+  `tavily-research` require authentication (`tvly login` or `TAVILY_API_KEY`)
+- For the `npx` method: Node.js 22.20+ and `npx`
 
 ## Instructions
 
@@ -17,9 +20,11 @@ crawling as Claude Code skills.
    ```bash
    ls ~/.agents/skills/ 2>/dev/null | grep -i '^tavily-'
    claude plugin list 2>/dev/null | grep -i tavily
+   command -v tvly
    ```
-   - If the 8 skills below are already present, output: `tavily skills already installed`
-     and stop here
+   - If the 8 skills below are already present **and** `tvly` is on `PATH`, output:
+     `tavily skills already installed` and stop here
+   - If the skills are present but `tvly` is missing, skip to step 4
 
 2. **Install — pick one method**
 
@@ -61,15 +66,25 @@ crawling as Claude Code skills.
    | `tavily-dynamic-search` | Programmatic search with context isolation |
    | `tavily-best-practices` | Best practices reference for integrations |
 
-4. **Configure Authentication**
-   - If `TAVILY_API_KEY` is not set:
-     - **Option A (Recommended)**: OAuth will auto-trigger on first skill use
+4. **Install and Authenticate the Tavily CLI**
+   The skills run `tvly` commands, so the CLI is required whichever method was used:
+   ```bash
+   command -v tvly || uv tool install tavily-cli   # or: pip install tavily-cli
+   ```
+   - If `TAVILY_API_KEY` is not set, authenticate (required for `tavily-map`,
+     `tavily-crawl`, and `tavily-research`):
+     - **Option A (Recommended)**: `tvly init --skip-skills` — browser OAuth plus a live
+       search check; `--skip-skills` stops it reinstalling the skills from step 2
      - **Option B**: Set API key manually: `export TAVILY_API_KEY=your_api_key_here`
+   - Skipping authentication is valid: `tavily-search` and `tavily-extract` work keyless
+     up to a rate-limit cap
 
 ## Error Handling
 
 If installation fails:
-- Ensure Node.js 18+ is installed: `node --version` (method 2b only)
+- Ensure Node.js 22.20+ is installed: `node --version` (method 2b only; the `skills`
+  CLI declares `engines.node >=22.20.0`)
+- If `tvly` is not found after step 4, ensure `~/.local/bin` is on your `PATH`
 - Check network connectivity to GitHub and the npm registry
 - For method 2a, confirm the marketplace was added: `claude plugin marketplace list`
 - Check https://github.com/tavily-ai/skills for updated instructions
@@ -85,4 +100,8 @@ If installation fails:
   updating
 - The `skills` CLI is `vercel-labs/skills` on npm; `npx -y skills@latest --help` lists
   current flags
+- Upstream's own guided route is `tvly init`, which authenticates, detects Claude Code,
+  and installs these skills itself, pinned to the CLI release (refresh with `tvly update`
+  then `tvly init`). This command installs the skills via the plugin or `npx` route and
+  uses `tvly` only for authentication
 - Source repository: https://github.com/tavily-ai/skills (MIT License)
