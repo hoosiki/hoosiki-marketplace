@@ -82,7 +82,7 @@ Characters that break parsing must be inside double quotes.
 
 ### Problematic characters
 
-`(`, `)`, `[`, `]`, `{`, `}`, `<`, `>`, `|`, `:`, `;`, `#`, `&`, `@`, `$`, `!`, `?`
+`(`, `)`, `[`, `]`, `{`, `}`, `<`, `>`, `|`, `:`, `;`, `#`, `&`, `@`, `$`, `?`, `!`
 
 ### Fix: Wrap in double quotes
 
@@ -665,7 +665,7 @@ front of the diagram keyword.
 
 | Character(s) | Fails as syntax (11.12.2 and 12.1.0) | `fix_mermaid.py` |
 |---|---|---|
-| Zero-width U+200B, U+200C, U+200D, U+2060; soft hyphen U+00AD | Glued to an ID: `A<U+200B> --> B` is a lexical error. In sequence and state diagrams it silently creates a second participant or state. In front of the diagram keyword it gives "No diagram type detected" | Deleted in syntax only (rule `invisible-char`). Kept in labels, where deleting U+200D would split an emoji such as 👩‍💻 into two |
+| Zero-width U+200B, U+200C, U+200D, U+2060; soft hyphen U+00AD | Glued to an ID: `A<U+200B> --> B` is a lexical error. In sequence and state diagrams it silently creates a second participant or state. In front of the diagram keyword it gives "No diagram type detected" | Deleted in syntax only (rule `invisible-char`). Kept in labels, where deleting U+200D would split a ZWJ emoji sequence such as 👩 + U+200D + 💻 (woman technologist) into two |
 | Typographic dashes `—` `–` `‐` `−` | Inside an arrow: `A —> B`, `A–>>B`, `A <–> B`. `S1 –> S2` renders a state named `–>` | The dash run before `>` becomes ASCII and is clamped to a valid length: flowchart, class and state need 2 or more (`–>` → `-->`), sequence takes at most 2 (`-—>>` → `-->>`). In a flowchart, a free-standing dash that opens an edge label also becomes `--` (`A — yes —> B` → `A -- yes --> B`) (rule `typo-dash`) |
 | `→` `↔` `⇒` | As an arrow: `A → B`, `A→B: hi`. `S1 → S2` renders a state named `→` | Flowchart `→` `↔` `⇒` → `-->` `<-->` `==>`; class and state `→` → `-->`; sequence `→` → `->>` (rule `unicode-arrow`) |
 | `←` `⇐`, and `↔` `⇒` outside flowcharts | As an arrow. The ASCII look-alikes `<--`, `<==`, sequence `<-->` and `==>` fail too | **Warning only** (`unicode-arrow-manual`): swap the operands and use a right-pointing arrow (`A ← B` → `B --> A`) |
