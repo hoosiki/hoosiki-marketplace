@@ -1,8 +1,9 @@
 ---
 name: fix-mermaid
 description: >
-  Fix Markdown rendering issues that block pandoc/lualatex PDF generation or
-  Mermaid diagram display. Covers:
+  Fix Mermaid diagram and pandoc PDF errors in Markdown. Repairs rendering
+  issues that block pandoc/lualatex PDF generation or Mermaid diagram display.
+  Covers:
   (A) Mermaid syntax errors — reserved words, Unicode pitfalls, message escaping,
       "Syntax error in text mermaid version X.X.X", broken diagrams in
       GitHub/Obsidian/MkDocs.

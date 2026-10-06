@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.51.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.52.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -40,7 +40,7 @@ runs both of these for you across every installed plugin.
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.51.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
+| [**lazy2work**](plugins/lazy2work/) | 1.52.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
 
 ---
 
@@ -1448,6 +1448,11 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.52.0 (2026-10-07)
+
+- **fix-mermaid: description leads with what Hermes can route on** — Hermes Agent's system-prompt skill index shows only the first 57 characters of a description, and the old opening ("Fix Markdown rendering issues that block pandoc/lualatex …") cut off before the word "Mermaid", so requests like "mermaid 오류" might not reach the skill there. The first sentence is now `Fix Mermaid diagram and pandoc PDF errors in Markdown.`, followed by the unchanged description. Claude Code reads the full description, so routing there is unaffected. Install in Hermes with `hermes skills install skills-sh/hoosiki/hoosiki-marketplace/plugins/lazy2work/skills/fix-mermaid`
+- **Version bump**: 1.51.0 → 1.52.0
 
 ### v1.51.0 (2026-10-04)
 
