@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.",
-    "version": "1.53.0"
+    "version": "1.54.0"
   },
   "plugins": [
     {
       "name": "lazy2work",
       "source": "./plugins/lazy2work",
-      "description": "One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills for arXiv analysis, package updates, Hamilton spec-driven pipelines, document-to-reveal.js presentation building, and PRD/SpecKit-to-Linear hierarchy publishing.",
-      "version": "1.53.0",
+      "description": "One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills for arXiv analysis, package updates, Hamilton spec-driven pipelines, document-to-reveal.js presentation building, PRD/SpecKit-to-Linear hierarchy publishing, and tmux session snapshots into tmuxp configs.",
+      "version": "1.54.0",
       "author": {
         "name": "Junsang Park"
       },
@@ -24,7 +24,8 @@
         "paper-analysis",
         "package-updater",
         "data-pipeline",
-        "presentation-builder"
+        "presentation-builder",
+        "tmux-session"
       ],
       "keywords": [
         "superclaude",
@@ -52,7 +53,10 @@
         "speckit",
         "conflict-aware-waves",
         "impact-prediction",
-        "merge-conflict"
+        "merge-conflict",
+        "tmux",
+        "tmuxp",
+        "session-snapshot"
       ]
     }
   ]

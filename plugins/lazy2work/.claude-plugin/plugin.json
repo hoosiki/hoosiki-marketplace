@@ -1,7 +1,7 @@
 {
   "name": "lazy2work",
-  "version": "1.53.0",
-  "description": "One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills for arXiv analysis, package updates, Hamilton spec-driven pipelines, document-to-reveal.js presentation building, and PRD/SpecKit-to-Linear hierarchy publishing.",
+  "version": "1.54.0",
+  "description": "One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, and productivity skills for arXiv analysis, package updates, Hamilton spec-driven pipelines, document-to-reveal.js presentation building, PRD/SpecKit-to-Linear hierarchy publishing, and tmux session snapshots into tmuxp configs.",
   "author": {
     "name": "Junsang Park",
     "url": "https://github.com/hoosiki"
@@ -35,7 +35,10 @@
     "speckit",
     "conflict-aware-waves",
     "impact-prediction",
-    "merge-conflict"
+    "merge-conflict",
+    "tmux",
+    "tmuxp",
+    "session-snapshot"
   ],
   "category": "productivity",
   "tags": [
@@ -44,6 +47,7 @@
     "paper-analysis",
     "package-updater",
     "data-pipeline",
-    "presentation-builder"
+    "presentation-builder",
+    "tmux-session"
   ]
 }

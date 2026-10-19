@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.53.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.54.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -40,7 +40,7 @@ runs both of these for you across every installed plugin.
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.53.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
+| [**lazy2work**](plugins/lazy2work/) | 1.54.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, PRD/SpecKit→Linear hierarchy publishers, and a tmux session snapshotter |
 
 ---
 
@@ -58,8 +58,9 @@ runs both of these for you across every installed plugin.
 Optional, per skill:
 
 - [`workmux`](https://github.com/raine/workmux) 0.1.224+ and `tmux` — only for `generate-optimized-spec-kit-prompt`'s **Phase 2** wave worktrees (`utilities/{prd-name}/speckit_parallel.sh build`). Phase 1 and the sequential runner need neither. Install with `brew install raine/workmux/workmux`.
+- `tmux` and [`tmuxp`](https://github.com/tmux-python/tmuxp) — for `snapshot-tmux`. tmuxp checks the snapshot before it is written (the check is skipped with a notice if tmuxp is missing) and loads it later. Install with `brew install tmuxp`.
 
-### Skills (12)
+### Skills (13)
 
 | Skill | Command | Description |
 |-------|---------|-------------|
@@ -69,6 +70,7 @@ Optional, per skill:
 | **generate-optimized-spec-kit-prompt** | `/lazy2work:generate-optimized-spec-kit-prompt` | Generate complete Spec Kit prompts for the full 8-stage flow (specify → clarify → plan → checklist → tasks → analyze → implement → converge, + commit) from a PRD + pre-sliced issue files — 1 issue = 1 feature (no re-slicing), Mermaid diagrams, `/speckit.tasks` command-only (no hand-authored tasks), and auto-accept prompts for clarify/checklist/analyze/converge. Also plans the run for **maximum parallelism**: a dependency DAG (`DEPENDENCIES.md` with a Mermaid diagram), **vertical waves** (`waves.json` — one wave = one dependency chain), a two-phase runbook (`PARALLEL_EXECUTION.md`), and 5 runner scripts — Phase 1 runs every feature as background processes in one working tree, Phase 2 runs the trunk chain then the branch chains in parallel workmux worktrees. Waves are **computed from predicted file overlap**, not from dependencies alone: one subagent per issue predicts the files that feature will touch, and the scheduler keeps two features that would collide out of sibling waves, so a stage merge does not fail halfway through |
 | **pyright-setup** | `/lazy2work:pyright-setup` | Auto-configure Pyright for Python projects — detects Python version from venv, adds `[tool.pyright]` to pyproject.toml, resolves "Import could not be resolved" LSP errors in Neovim/VS Code |
 | **apply-all-sc-save** | `/lazy2work:apply-all-sc-save` | Broadcast `/sc:save` to all Claude Code panes in the current tmux session — auto-detects Claude panes, excludes self, exits tmux copy mode before sending, reports and skips a pane that fails instead of aborting, supports `--dry-run`, `--all-sessions`, and custom commands |
+| **snapshot-tmux** | `/lazy2work:snapshot-tmux` | Snapshot the current tmux session into a tmuxp config (`~/.config/tmux/tmux_init.yaml`) so `claude-research` or `tmuxp load` rebuilds it — windows, pane splits, working directories and pane commands. Unchanged windows stay byte for byte, Claude panes are written without the launcher's per-run `--rc`, tmuxp validates the result before it is written, and the previous file is backed up |
 | **fix-mermaid** | `/lazy2work:fix-mermaid` | Fix Markdown rendering issues that break Mermaid diagrams or pandoc PDF conversion — Mermaid v11/v12 syntax (reserved words, Unicode used as diagram syntax) **and** pandoc PDF pitfalls (blank-line compliance before lists/tables/fences as auto-fixed errors, long-mixed-cell overflow as warnings, always-on Unicode glyph map covering U+2212/U+2717/U+2718, **currency-dollar auto-escape** for `$100`/`$76.4억` that prevents `Bad math environment delimiter` errors, **unsafe-inline-code warnings** for `` `pass^k` ``-style content that collides with the `\seqsplit` wrapper and causes `Missing number, treated as zero`, **closing-dollar-trailing-space auto-fix** for `$\mathcal{H}_1 = $ rest` patterns that violate pandoc's `tex_math_dollars` rule and cause `\symcal allowed only in math mode`, plus opt-in **`--latin1-normalize`** for Latin-1 Supplement diacritics like `á é ñ ü ß`). Three bundled Python scripts (`fix_mermaid.py`, `fix_pandoc_blanks.py`, `validate_mermaid.py`) with lint / `--fix` / `--json` modes, plus optional **`--with-mmdc` feedback loop** that renders each diagram with Mermaid CLI and iterates targeted fixes until clean |
 | **hamilton-harness** | `/lazy2work:hamilton-harness` | Build Hamilton data pipelines through a spec-driven workflow — 4 modes (prompt→YAML, validate, stub+viz, modify), Pydantic schemas, Mermaid/Graphviz/Hamilton rendering, 3 domain examples (ETL/ML/RAG). Artifacts land under **`spec_build/`** (renamed from `build/` in v1.27.0 to avoid colliding with Python packaging / Sphinx / CMake build directories). Self-contained — no plugin-level hooks or rules needed |
 | **make-ppt-html** | `/lazy2work:make-ppt-html` | Convert any document (research note, report, README, storyboard) into a presentation-quality **reveal.js 6.0.2 + Tailwind CSS** single-file HTML deck with a **light↔dark theme toggle** (button + `D` key + localStorage). Follows bundled design guidelines — assertion-style slide titles, 60-30-10 single-accent color system, WCAG-verified contrast pairs, Pretendard, speaker notes, `?print-pdf` export — and ships a browser-verified `template.html` that pre-solves the reveal×Tailwind integration traps (Meyer-reset border-style kill, `Reveal.sync()` background re-theming, print-mode toggle hiding, dark-variant class pairing) |
@@ -701,6 +703,81 @@ Notes:
 - A pane scrolled back in **copy mode** would swallow the keys, so the script exits the mode first. That resets the pane's scroll position. A pane still in a mode afterwards is skipped and listed in the failure summary
 - Exit status 1 means at least one pane did not get the command
 - Requires tmux to be running
+
+</details>
+
+<details>
+<summary><strong>snapshot-tmux — Usage Examples</strong></summary>
+
+**Preview what would change in `~/.config/tmux/tmux_init.yaml`:**
+
+```
+/lazy2work:snapshot-tmux --dry-run
+```
+
+**Write the snapshot (the previous file is backed up first):**
+
+```
+/lazy2work:snapshot-tmux
+```
+
+**Leave a scratch window out:**
+
+```
+/lazy2work:snapshot-tmux --exclude-window zsh
+```
+
+**Update another config from a named session:**
+
+```
+/lazy2work:snapshot-tmux --session work --config ~/.config/tmux/work.yaml
+```
+
+Workflow:
+
+1. Reads every window of the session: its name and layout, and for each pane the working directory and the real argv of the foreground program. A pane at an idle prompt becomes a blank pane
+2. Writes Claude Code as `claude ...` and drops the per-run `--rc <name>` that `claude-research` injects on every launch
+3. Names even splits `even-horizontal` / `even-vertical` and keeps hand-resized splits as tmux's layout string, without pane IDs
+4. Keeps everything above `windows:` as written, and keeps each unchanged window's block byte for byte, comments included. Changed and new windows get blocks in the same comment style
+5. Prints the status of each window, warnings and a diff, validates the result with tmuxp, backs up the old file to `~/.local/state/snapshot-tmux/`, and writes through the symlink
+
+Example output when the session already matches the config:
+
+```
+Snapshot of tmux session 'claude-research': 3 window(s), 4 pane(s)
+   1 research             kept     2 panes  /Users/me/research
+   2 marketplace          kept     1 pane   /Users/me/hoosiki-marketplace
+   3 docker               kept     1 pane   /Users/me/docker
+
+No changes: /Users/me/.config/tmux/tmux_init.yaml already matches the session.
+```
+
+After opening a window and closing another:
+
+```
+Snapshot of tmux session 'claude-research': 3 window(s), 4 pane(s)
+   1 research             kept     2 panes  /Users/me/research
+   2 marketplace          kept     1 pane   /Users/me/hoosiki-marketplace
+   3 zsh                  new      1 pane   /Users/me
+   - docker               removed  (no longer in the session)
+
+Warnings:
+  - window 'zsh': pane 1 runs a plain shell, not Claude Code. A launcher that sends /sc:load to pane 1 of every window (claude-research does) will type it into this pane.
+
+(diff)
+
+tmuxp validation: ok
+
+Wrote /Users/me/dotfiles/tmux/tmux_init.yaml (via /Users/me/.config/tmux/tmux_init.yaml)
+Backup: /Users/me/.local/state/snapshot-tmux/tmux_init.yaml.20261019-133409
+```
+
+Restore with `claude-research` once the session is gone, or with `tmuxp load ~/.config/tmux/tmux_init.yaml`.
+
+Notes:
+- Claude Code conversations, scrollback and shell history are not restored. Each Claude pane starts a new conversation, and `claude-research` then sends `/sc:load`
+- A captured command runs again on every load, so any command other than Claude, an editor or a monitor is listed for review
+- Requires tmux. tmuxp is needed for the validation step and for loading
 
 </details>
 
@@ -1399,6 +1476,9 @@ hoosiki-marketplace/
 │       │   ├── apply-all-sc-save/
 │       │   │   ├── SKILL.md
 │       │   │   └── scripts/
+│       │   ├── snapshot-tmux/
+│       │   │   ├── SKILL.md
+│       │   │   └── scripts/
 │       │   ├── fix-mermaid/
 │       │   │   ├── SKILL.md
 │       │   │   ├── scripts/
@@ -1442,6 +1522,7 @@ hoosiki-marketplace/
 ├── tests/
 │   ├── test_log_prompt.py
 │   ├── test_save_all_claude.py    ← 14 tests
+│   ├── test_snapshot_tmux.py      ← 61 tests
 │   ├── test_speckit_waves.py
 │   └── test_up2date.py            ← 93 tests (run from the repo root)
 └── README.md
@@ -1462,6 +1543,17 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.54.0 (2026-10-19)
+
+- **New skill: snapshot-tmux** — reads the current tmux session and rewrites the `windows:` section of a tmuxp config (default `~/.config/tmux/tmux_init.yaml`), so `claude-research` or `tmuxp load` rebuilds the same windows, pane splits, working directories and pane commands. Run it with `--dry-run` first. Other options are `--session`, `--config`, `--exclude-window` (repeatable), `--keep-rc`, `--no-backup` and `--no-validate`
+- **snapshot-tmux: the commands it writes are the ones that ran** — `ps -o args` joins argv with spaces, so an argument like `my host` cannot be told from two words. The script reads the real argv instead (sysctl `KERN_PROCARGS2` on macOS, `/proc` on Linux) from the terminal's foreground process group leader, and quotes only as much as the shell needs (`nvim -c "'0"`). Claude Code is always written as `claude ...`, whether it was started as a native-installer version path or as `node …/claude-code/cli.js`. `--rc` / `--remote-control <name>` is dropped, because `claude-research` leaves a command that already carries `--rc` untouched and would keep a stale window name forever. A pane started directly with a command (no shell) is captured too, and a pane at an idle prompt becomes a blank pane
+- **snapshot-tmux: only real changes show up in the diff** — everything above `windows:` is kept as written, and a window tmuxp would already build identically keeps its block byte for byte, comments included (only its `# ── Window N` number is fixed if windows moved). Changed and new windows get blocks in the same comment style, reusing the existing pane description when the command is the same. Even splits are written as `even-horizontal` / `even-vertical`; a hand-resized split is written as tmux's own layout string. tmux 3.8 layouts are JSON and carry pane IDs (`"I":"%12"`) and active/last markers that change on every rebuild, so those are stripped (`select-layout` needs only the pane index `i`) and custom layouts are compared by geometry. Verified end to end on scratch tmux servers: snapshot → `tmuxp load` into a fresh server (a 100/35 split, a pane running `sleep`, a `less` pane, focus and directories all restored) → snapshot again gives "No changes"
+- **snapshot-tmux: it writes safely** — the result is checked with tmuxp's own schema validation and expansion, run under tmuxp's interpreter (found from the `tmuxp` shebang), and nothing is written if tmuxp rejects it. The previous file is backed up to `$XDG_STATE_HOME/snapshot-tmux/` (newest 10 kept). That is outside the dotfiles repo, where `tmux_init.yaml` is git-ignored and so has no history. When the config is a symlink, the link's target is replaced atomically and the link stays
+- **snapshot-tmux: it says what to check before relying on the snapshot** — a window whose pane 1 is not Claude (`claude-research` types `/sc:load` into pane 1 of every window), commands other than Claude, editors and monitors that will run again on every load, config keys such as `options` that a regenerated window no longer carries, and a session name that differs from the config's `session_name`
+- **tests: `tests/test_snapshot_tmux.py`** — 61 cases: argv parsing, foreground selection, command normalization and quoting, YAML scalars, layout detection for JSON and legacy layouts, config splitting and parsing (including tmuxp's blank-pane spellings), rendering (a byte-for-byte round trip, new/removed/changed windows, renumbering, focus, pane directories, layouts that differ only in pane IDs), session capture, symlink-preserving writes with backups, and tmuxp validation. Full suite: 194 passed
+- **README: mirrors the changes** — the `snapshot-tmux` skill row and usage section, the tmuxp prerequisite, `Skills (13)`, the repository and tests trees, and the plugin description in both manifests (plus `tmux`, `tmuxp`, `session-snapshot` keywords and a `tmux-session` tag)
+- **Version bump**: 1.53.0 → 1.54.0
 
 ### v1.53.0 (2026-10-19)
 
