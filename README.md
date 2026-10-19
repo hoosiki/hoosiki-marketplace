@@ -2,7 +2,7 @@
 
 > Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.52.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.53.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
@@ -40,7 +40,7 @@ runs both of these for you across every installed plugin.
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.52.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
+| [**lazy2work**](plugins/lazy2work/) | 1.53.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, and PRD/SpecKit→Linear hierarchy publishers |
 
 ---
 
@@ -68,7 +68,7 @@ Optional, per skill:
 | **constitution-generator** | `/lazy2work:constitution-generator` | Generate optimized `/speckit.constitution` prompts — gathers project info (tech stack, project stage, conventions), detects brownfield patterns, and outputs a **minimal-but-enforceable** constitution: 6–12 non-negotiable principles in MUST/NO language, each with a `(Rationale: …)`, prototype-stage gate stripping, and a validation checklist |
 | **generate-optimized-spec-kit-prompt** | `/lazy2work:generate-optimized-spec-kit-prompt` | Generate complete Spec Kit prompts for the full 8-stage flow (specify → clarify → plan → checklist → tasks → analyze → implement → converge, + commit) from a PRD + pre-sliced issue files — 1 issue = 1 feature (no re-slicing), Mermaid diagrams, `/speckit.tasks` command-only (no hand-authored tasks), and auto-accept prompts for clarify/checklist/analyze/converge. Also plans the run for **maximum parallelism**: a dependency DAG (`DEPENDENCIES.md` with a Mermaid diagram), **vertical waves** (`waves.json` — one wave = one dependency chain), a two-phase runbook (`PARALLEL_EXECUTION.md`), and 5 runner scripts — Phase 1 runs every feature as background processes in one working tree, Phase 2 runs the trunk chain then the branch chains in parallel workmux worktrees. Waves are **computed from predicted file overlap**, not from dependencies alone: one subagent per issue predicts the files that feature will touch, and the scheduler keeps two features that would collide out of sibling waves, so a stage merge does not fail halfway through |
 | **pyright-setup** | `/lazy2work:pyright-setup` | Auto-configure Pyright for Python projects — detects Python version from venv, adds `[tool.pyright]` to pyproject.toml, resolves "Import could not be resolved" LSP errors in Neovim/VS Code |
-| **apply-all-sc-save** | `/lazy2work:apply-all-sc-save` | Broadcast `/sc:save` to all Claude Code panes in the current tmux session — auto-detects Claude panes, excludes self, supports `--dry-run`, `--all-sessions`, and custom commands |
+| **apply-all-sc-save** | `/lazy2work:apply-all-sc-save` | Broadcast `/sc:save` to all Claude Code panes in the current tmux session — auto-detects Claude panes, excludes self, exits tmux copy mode before sending, reports and skips a pane that fails instead of aborting, supports `--dry-run`, `--all-sessions`, and custom commands |
 | **fix-mermaid** | `/lazy2work:fix-mermaid` | Fix Markdown rendering issues that break Mermaid diagrams or pandoc PDF conversion — Mermaid v11/v12 syntax (reserved words, Unicode used as diagram syntax) **and** pandoc PDF pitfalls (blank-line compliance before lists/tables/fences as auto-fixed errors, long-mixed-cell overflow as warnings, always-on Unicode glyph map covering U+2212/U+2717/U+2718, **currency-dollar auto-escape** for `$100`/`$76.4억` that prevents `Bad math environment delimiter` errors, **unsafe-inline-code warnings** for `` `pass^k` ``-style content that collides with the `\seqsplit` wrapper and causes `Missing number, treated as zero`, **closing-dollar-trailing-space auto-fix** for `$\mathcal{H}_1 = $ rest` patterns that violate pandoc's `tex_math_dollars` rule and cause `\symcal allowed only in math mode`, plus opt-in **`--latin1-normalize`** for Latin-1 Supplement diacritics like `á é ñ ü ß`). Three bundled Python scripts (`fix_mermaid.py`, `fix_pandoc_blanks.py`, `validate_mermaid.py`) with lint / `--fix` / `--json` modes, plus optional **`--with-mmdc` feedback loop** that renders each diagram with Mermaid CLI and iterates targeted fixes until clean |
 | **hamilton-harness** | `/lazy2work:hamilton-harness` | Build Hamilton data pipelines through a spec-driven workflow — 4 modes (prompt→YAML, validate, stub+viz, modify), Pydantic schemas, Mermaid/Graphviz/Hamilton rendering, 3 domain examples (ETL/ML/RAG). Artifacts land under **`spec_build/`** (renamed from `build/` in v1.27.0 to avoid colliding with Python packaging / Sphinx / CMake build directories). Self-contained — no plugin-level hooks or rules needed |
 | **make-ppt-html** | `/lazy2work:make-ppt-html` | Convert any document (research note, report, README, storyboard) into a presentation-quality **reveal.js 6.0.2 + Tailwind CSS** single-file HTML deck with a **light↔dark theme toggle** (button + `D` key + localStorage). Follows bundled design guidelines — assertion-style slide titles, 60-30-10 single-accent color system, WCAG-verified contrast pairs, Pretendard, speaker notes, `?print-pdf` export — and ships a browser-verified `template.html` that pre-solves the reveal×Tailwind integration traps (Meyer-reset border-style kill, `Reveal.sync()` background re-theming, print-mode toggle hiding, dark-variant class pairing) |
@@ -669,10 +669,10 @@ Fixes common issues:
 Workflow:
 
 1. Detects current tmux session and own pane ID (`$TMUX_PANE`)
-2. Scans all panes for `pane_current_command == "claude"`
+2. Scans all panes for a Claude `pane_current_command`: `claude` or a version string such as `2.1.286`
 3. Excludes the current pane (self) to avoid recursive invocation
-4. Sends `/sc:save` + Enter to each discovered Claude pane via `tmux send-keys`
-5. Reports how many panes received the command
+4. Takes each pane out of copy mode (or any other tmux mode) with `tmux copy-mode -q`, then sends `/sc:save` + Enter via `tmux send-keys`
+5. Reports the result per pane. A pane that fails or times out is reported and skipped, the remaining panes still get the command, and the script exits 1
 
 Example output:
 
@@ -684,9 +684,22 @@ Found 2 Claude pane(s):
 Done.
 ```
 
+When a pane fails (here it was closed between the scan and the send), the others still get the command:
+
+```
+Scanning session 'claude-research' for Claude panes (excluding self: %3)...
+Found 3 Claude pane(s):
+  sent '/sc:save' to claude-research:1.1
+  failed claude-research:2.1: can't find pane: claude-research:2.1
+  sent '/sc:save' to claude-research:3.1
+Done, but 1 pane(s) did not get the command: claude-research:2.1
+```
+
 Notes:
 - Target Claude instances must be in an **idle state** (waiting for user input)
 - If Claude is mid-execution, keys are buffered and execute when idle
+- A pane scrolled back in **copy mode** would swallow the keys, so the script exits the mode first. That resets the pane's scroll position. A pane still in a mode afterwards is skipped and listed in the failure summary
+- Exit status 1 means at least one pane did not get the command
 - Requires tmux to be running
 
 </details>
@@ -1428,6 +1441,7 @@ hoosiki-marketplace/
 │       └── LICENSE
 ├── tests/
 │   ├── test_log_prompt.py
+│   ├── test_save_all_claude.py    ← 14 tests
 │   ├── test_speckit_waves.py
 │   └── test_up2date.py            ← 93 tests (run from the repo root)
 └── README.md
@@ -1448,6 +1462,15 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.53.0 (2026-10-19)
+
+- **apply-all-sc-save: a pane in copy mode no longer swallows the command** — `tmux send-keys` delivers to whatever owns the pane's input, so a pane scrolled back in copy mode got `/sc:save` as copy-mode keystrokes (with vi keys, `/` opens the search prompt) and Claude never saw it, while the script still printed `sent`. Each pane is now checked with `#{pane_in_mode}` and taken out of the mode with `tmux copy-mode -q` before the keys go out. That resets the pane's scroll position. A pane still in a mode afterwards is skipped
+- **apply-all-sc-save: one failing pane no longer aborts the broadcast** — any tmux error (a pane closed between the scan and the send, for example) called `sys.exit(1)` inside `_run_tmux`, so every pane after it was silently skipped, and a 5 s timeout escaped as an uncaught `subprocess.TimeoutExpired` traceback. tmux failures now raise a `TmuxError`. `send_command()` catches it per pane, prints `failed <target>: <reason>` and returns `False`, so the remaining panes still get the command. The run ends with `Done, but N pane(s) did not get the command: …` and exit status 1. A failure during the initial scan still exits 1 with `tmux error: …`
+- **tests: `tests/test_save_all_claude.py`** — 14 cases: pane detection (`claude` and version strings only), `_run_tmux` turning a timeout or a non-zero exit into `TmuxError`, `send_command` leaving copy mode before `send-keys`, leaving a normal pane alone, skipping a pane stuck in a mode, returning `False` on a tmux failure and making no calls in a dry run, and `main()` still sending to later panes after a failure and exiting 1. Full suite: 133 passed
+- **fix-mermaid: the reference no longer blocks Hermes hub installs** — `hermes skills install` refused the skill ("community source + caution verdict") because its scanner raised two HIGH findings in `references/mermaid-v11-syntax.md`: a character list whose `` !`, ` `` run matched the inline shell-exec pattern, and a literal U+200D inside a ZWJ emoji example. `!` is now listed last and the emoji is spelled out as `👩 + U+200D + 💻`. Only MEDIUM findings remain, which Hermes' `scan_skill` rates "safe". No behaviour change
+- **README: mirrors the changes** — the apply-all-sc-save row, workflow, failure output and notes. The workflow had still described detection as `pane_current_command == "claude"`, which predates version-string detection. `test_save_all_claude.py` is now in the tests tree
+- **Version bump**: 1.52.0 → 1.53.0
 
 ### v1.52.0 (2026-10-07)
 
