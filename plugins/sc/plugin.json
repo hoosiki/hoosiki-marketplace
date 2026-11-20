@@ -1,0 +1,21 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "sc",
+  "version": "1.0.0",
+  "description": "Hermes workflow skills (/sc:*) adapted from SuperClaude Framework 4.3.0",
+  "author": {
+    "name": "Junsang Park",
+    "url": "https://github.com/hoosiki"
+  },
+  "homepage": "https://github.com/hoosiki/hoosiki-marketplace/tree/main/plugins/sc",
+  "repository": "https://github.com/hoosiki/hoosiki-marketplace",
+  "license": "MIT",
+  "keywords": [
+    "hermes",
+    "workflow",
+    "pdca",
+    "code-review",
+    "research",
+    "delegation"
+  ]
+}

@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.",
-    "version": "1.54.0"
+    "version": "1.55.0"
   },
   "plugins": [
     {

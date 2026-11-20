@@ -1,12 +1,13 @@
 # hoosiki-marketplace
 
-> Curated Claude Code plugins by Junsang Park — productivity tools, MCP installers, and workflow automation.
+> Curated Claude Code plugins and a Hermes Agent plugin by Junsang Park — productivity tools, MCP installers, and workflow automation.
 
-[![Version](https://img.shields.io/badge/version-1.54.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
+[![Version](https://img.shields.io/badge/version-1.55.0-green.svg)](https://github.com/hoosiki/hoosiki-marketplace)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](plugins/lazy2work/LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![C++](https://img.shields.io/badge/C++-20-00599C.svg?logo=cplusplus&logoColor=white)](https://isocpp.org)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Plugin-blueviolet.svg)](https://claude.ai)
+[![Hermes Agent](https://img.shields.io/badge/Hermes_Agent-Plugin-orange.svg)](plugins/sc/)
 
 ## Quick Start
 
@@ -36,11 +37,19 @@ claude plugin update lazy2work@hoosiki-marketplace --scope user --yes
 running session — **restart Claude Code** to load the new version. `/lazy2work:up2date --skill`
 runs both of these for you across every installed plugin.
 
+**Hermes Agent** — the `sc` plugin installs straight from this repository, per profile:
+
+```bash
+hermes plugins install hoosiki/hoosiki-marketplace#plugins/sc --enable
+hermes -p engineer plugins install hoosiki/hoosiki-marketplace#plugins/sc --enable   # a named profile
+```
+
 ## Available Plugins
 
-| Plugin | Version | Description |
-|--------|---------|-------------|
-| [**lazy2work**](plugins/lazy2work/) | 1.54.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, PRD/SpecKit→Linear hierarchy publishers, and a tmux session snapshotter |
+| Plugin | For | Version | Description |
+|--------|-----|---------|-------------|
+| [**lazy2work**](plugins/lazy2work/) | Claude Code | 1.54.0 | One-command SuperClaude environment setup — MCP server installers, webhook notification hooks, productivity skills, Hamilton spec-driven pipelines, a document→reveal.js presentation builder, PRD/SpecKit→Linear hierarchy publishers, and a tmux session snapshotter |
+| [**sc**](plugins/sc/) | Hermes Agent | 1.0.0 | 36 workflow skills (`/sc:<name>`) adapted from SuperClaude Framework 4.3.0 — planning, build, investigation, docs and session checkpoints, and PDCA orchestration rewritten for Hermes tools. Not listed in the Claude Code marketplace |
 
 ---
 
@@ -1421,11 +1430,11 @@ plugins/lazy2work/rules/             ← Source of truth (distributed with plugi
 
 ### Using Rules in Other Projects
 
-After installing the plugin, create symlinks from the cached rules to your project:
+After installing the plugin, create symlinks from the cached rules to your project. Each plugin version gets its own cache directory and an update removes the old one, so re-point the links after `claude plugin update`:
 
 ```bash
-# Find the plugin cache path
-RULES_SRC=~/.claude/plugins/cache/hoosiki-marketplace/lazy2work/1.4.0/rules
+# Find the installed version's rules
+RULES_SRC=$(ls -d ~/.claude/plugins/cache/hoosiki-marketplace/lazy2work/*/rules | sort -V | tail -1)
 
 # Symlink into your project
 mkdir -p .claude/rules
@@ -1441,6 +1450,33 @@ Or apply globally (all projects):
 ln -s $RULES_SRC/python ~/.claude/rules/python
 ```
 
+---
+
+## sc
+
+> 36 workflow skills for [Hermes Agent](https://github.com/NousResearch/hermes-agent), adapted from [SuperClaude Framework](https://github.com/SuperClaude-Org/SuperClaude_Framework) 4.3.0. Full skill list and details: [plugins/sc/README.md](plugins/sc/README.md).
+
+`sc` is a portable Agent Plugins v1 package (`plugin.json` + `skills/*/SKILL.md`), installed with `hermes plugins install`. Hermes namespaces its skills under the plugin name, so they are typed `/sc:<name>`, the same names the commands have in Claude Code.
+
+```
+/sc:sc                                    # list the skills
+/sc:analyze src/ --focus security         # run one; the rest of the line is its instruction
+/sc:save  …  /sc:load                     # checkpoint and restore session context
+```
+
+| Topic | Detail |
+|-------|--------|
+| Install scope | Per profile (`HERMES_HOME/plugins`). Add `-p <profile>` to install into a named profile. Update with `hermes plugins update sc` |
+| Where commands work | Plugin skill slash commands work in the Hermes CLI, TUI and desktop app. Messaging gateways do not offer them as commands |
+| Session store | `/sc:save` and `/sc:load` write files under `~/.hermes/superclaude/projects/<slug>/`, keyed by the git root path |
+| Tool mapping | Claude Code tools become Hermes tools (`read_file`, `patch`, `terminal`, `delegate_task`, `todo_list`, `web_search`); Serena memory becomes the file store; MCP steps use `mcp_*` tools only when the profile has those servers |
+| Changed behavior | `/sc:pm` proposes context-file edits instead of making them; invented usage statistics in `/sc:recommend` were removed; `/sc:spec-panel` and `/sc:business-panel` state that their expert voices are simulated |
+| Not ported | SuperClaude's agents, behavioral modes and core rules |
+
+**Why it is not in the Claude Code marketplace.** Claude Code already has `/sc:*` from SuperClaude itself (`~/.claude/commands/sc/`), and a Claude Code plugin named `sc` would reuse those names. In a test on Claude Code 2.1.318, a plugin skill named `sc:load` was hidden by the existing command while a plugin skill with a new name was added, so listing `sc` in `marketplace.json` would mix the two sets. `tests/test_sc_plugin.py` keeps it out.
+
+**License and attribution.** MIT. [`plugins/sc/LICENSE`](plugins/sc/LICENSE) keeps the upstream notice (Copyright (c) 2024 SuperClaude Framework Contributors) and adds the port's own (Copyright (c) 2026 Junsang Park). The plugin is not affiliated with or endorsed by the SuperClaude Framework project or Anthropic.
+
 ## Repository Structure
 
 ```
@@ -1454,74 +1490,80 @@ hoosiki-marketplace/
 ├── .claude-plugin/
 │   └── marketplace.json                ← marketplace manifest
 ├── plugins/
-│   └── lazy2work/
-│       ├── .claude-plugin/
-│       │   └── plugin.json             ← plugin manifest
-│       ├── skills/
-│       │   ├── analyze-arxiv/
-│       │   │   ├── SKILL.md
-│       │   │   └── references/
-│       │   ├── constitution-generator/
-│       │   │   ├── SKILL.md
-│       │   │   └── references/
-│       │   ├── generate-optimized-spec-kit-prompt/
-│       │   │   ├── SKILL.md
-│       │   │   ├── references/           ← prompt guide, parallel-execution guide, impact-prediction guide, output format
-│       │   │   └── assets/               ← speckit_pipeline.sh, speckit_parallel.sh, wm_stage_runner.sh,
-│       │   │                                wm_pre_merge_gate.sh, speckit_waves.py, conflict-policy.toml,
-│       │   │                                workmux.yaml.template (copied into user projects)
-│       │   ├── pyright-setup/
-│       │   │   ├── SKILL.md
-│       │   │   └── scripts/
-│       │   ├── apply-all-sc-save/
-│       │   │   ├── SKILL.md
-│       │   │   └── scripts/
-│       │   ├── snapshot-tmux/
-│       │   │   ├── SKILL.md
-│       │   │   └── scripts/
-│       │   ├── fix-mermaid/
-│       │   │   ├── SKILL.md
-│       │   │   ├── scripts/
-│       │   │   └── references/
-│       │   ├── hamilton-harness/          ← scaffolds `hamilton_pipeline/` in user projects
-│       │   │   ├── SKILL.md
-│       │   │   ├── SPEC.md                ← YAML schema reference
-│       │   │   ├── LAYOUT.md              ← target layout (user's `hamilton_pipeline/`)
-│       │   │   ├── QUICKSTART.md          ← 10-minute onboarding
-│       │   │   ├── DEBUG.md               ← failure-mode decision tree
-│       │   │   ├── METRICS.md             ← session metrics schema
-│       │   │   ├── CHANGELOG.md           ← skill-independent SemVer
-│       │   │   ├── scripts/               ← viz.py, validate.py, yaml_to_*.py
-│       │   │   ├── templates/             ← JSON Schema + CI + project-layout
-│       │   │   ├── examples/              ← etl, ml-training, rag
-│       │   │   └── tests/
-│       │   ├── make-ppt-html/             ← document → reveal.js+Tailwind deck w/ light·dark toggle
-│       │   │   ├── SKILL.md
-│       │   │   ├── references/            ← design-guidelines.md (색상·폰트·배치 규격)
-│       │   │   └── assets/                ← template.html (browser-verified boilerplate)
-│       │   └── up2date/
-│       │       ├── SKILL.md
-│       │       ├── scripts/
-│       │       └── references/
-│       ├── commands/
-│       │   └── setup/
-│       │       └── (7 MCP install commands)
-│       ├── hooks/
-│       │   └── hooks.json
-│       ├── rules/                      ← coding rules (distributed with plugin)
-│       │   ├── python/
-│       │   ├── cpp/
-│       │   ├── js/
-│       │   └── html/
-│       ├── scripts/
-│       │   ├── webhook.py
-│       │   ├── log_prompt.py
-│       │   ├── notify_stop.py
-│       │   └── notify_waiting.py
-│       └── LICENSE
+│   ├── lazy2work/
+│   │   ├── .claude-plugin/
+│   │   │   └── plugin.json             ← plugin manifest
+│   │   ├── skills/
+│   │   │   ├── analyze-arxiv/
+│   │   │   │   ├── SKILL.md
+│   │   │   │   └── references/
+│   │   │   ├── constitution-generator/
+│   │   │   │   ├── SKILL.md
+│   │   │   │   └── references/
+│   │   │   ├── generate-optimized-spec-kit-prompt/
+│   │   │   │   ├── SKILL.md
+│   │   │   │   ├── references/           ← prompt guide, parallel-execution guide, impact-prediction guide, output format
+│   │   │   │   └── assets/               ← speckit_pipeline.sh, speckit_parallel.sh, wm_stage_runner.sh,
+│   │   │   │                                wm_pre_merge_gate.sh, speckit_waves.py, conflict-policy.toml,
+│   │   │   │                                workmux.yaml.template (copied into user projects)
+│   │   │   ├── pyright-setup/
+│   │   │   │   ├── SKILL.md
+│   │   │   │   └── scripts/
+│   │   │   ├── apply-all-sc-save/
+│   │   │   │   ├── SKILL.md
+│   │   │   │   └── scripts/
+│   │   │   ├── snapshot-tmux/
+│   │   │   │   ├── SKILL.md
+│   │   │   │   └── scripts/
+│   │   │   ├── fix-mermaid/
+│   │   │   │   ├── SKILL.md
+│   │   │   │   ├── scripts/
+│   │   │   │   └── references/
+│   │   │   ├── hamilton-harness/          ← scaffolds `hamilton_pipeline/` in user projects
+│   │   │   │   ├── SKILL.md
+│   │   │   │   ├── SPEC.md                ← YAML schema reference
+│   │   │   │   ├── LAYOUT.md              ← target layout (user's `hamilton_pipeline/`)
+│   │   │   │   ├── QUICKSTART.md          ← 10-minute onboarding
+│   │   │   │   ├── DEBUG.md               ← failure-mode decision tree
+│   │   │   │   ├── METRICS.md             ← session metrics schema
+│   │   │   │   ├── CHANGELOG.md           ← skill-independent SemVer
+│   │   │   │   ├── scripts/               ← viz.py, validate.py, yaml_to_*.py
+│   │   │   │   ├── templates/             ← JSON Schema + CI + project-layout
+│   │   │   │   ├── examples/              ← etl, ml-training, rag
+│   │   │   │   └── tests/
+│   │   │   ├── make-ppt-html/             ← document → reveal.js+Tailwind deck w/ light·dark toggle
+│   │   │   │   ├── SKILL.md
+│   │   │   │   ├── references/            ← design-guidelines.md (색상·폰트·배치 규격)
+│   │   │   │   └── assets/                ← template.html (browser-verified boilerplate)
+│   │   │   └── up2date/
+│   │   │       ├── SKILL.md
+│   │   │       ├── scripts/
+│   │   │       └── references/
+│   │   ├── commands/
+│   │   │   └── setup/
+│   │   │       └── (7 MCP install commands)
+│   │   ├── hooks/
+│   │   │   └── hooks.json
+│   │   ├── rules/                      ← coding rules (distributed with plugin)
+│   │   │   ├── python/
+│   │   │   ├── cpp/
+│   │   │   ├── js/
+│   │   │   └── html/
+│   │   ├── scripts/
+│   │   │   ├── webhook.py
+│   │   │   ├── log_prompt.py
+│   │   │   ├── notify_stop.py
+│   │   │   └── notify_waiting.py
+│   │   └── LICENSE
+│   └── sc/                             ← Hermes Agent plugin (not in marketplace.json)
+│       ├── plugin.json                 ← Agent Plugins v1 manifest
+│       ├── skills/                     ← 36 skills: <name>/SKILL.md (+ references/)
+│       ├── README.md
+│       └── LICENSE                     ← upstream SuperClaude Framework notice + port notice
 ├── tests/
 │   ├── test_log_prompt.py
 │   ├── test_save_all_claude.py    ← 14 tests
+│   ├── test_sc_plugin.py          ← 114 tests
 │   ├── test_snapshot_tmux.py      ← 61 tests
 │   ├── test_speckit_waves.py
 │   └── test_up2date.py            ← 93 tests (run from the repo root)
@@ -1535,7 +1577,7 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```json
 {
   "name": "your-plugin",
-  "source": "./your-plugin",
+  "source": "./plugins/your-plugin",
   "description": "What your plugin does",
   "version": "1.0.0",
   "category": "utilities"
@@ -1543,6 +1585,17 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 ```
 
 ## Changelog
+
+### v1.55.0 (2026-11-07)
+
+- **New Hermes plugin: sc 1.0.0** — the 30 commands and 6 skills of SuperClaude Framework 4.3.0, rewritten as 36 Hermes Agent skills and packaged as a portable Agent Plugins v1 plugin in `plugins/sc/`. Install it with `hermes plugins install hoosiki/hoosiki-marketplace#plugins/sc --enable`; the skills are `/sc:<name>`. Skill frontmatter keeps `metadata` as a flat map of strings (`author`, `version`, `upstream`, `source`), because Hermes silently skips a portable skill with nested metadata while `validate` and `install` still report success. Checked on a clone of this repository: `hermes plugins validate` passes, the install registers 36 commands, `hermes plugins doctor` reports OK, and Hermes' skills guard rates all 36 skills safe
+- **sc: license notice and attribution** — `plugins/sc/LICENSE` keeps upstream's MIT text and copyright line and adds `Copyright (c) 2026 Junsang Park (Hermes port and modifications)` under it. The file sits inside the plugin because a subdirectory install copies only that directory, and this repository has no root LICENSE. Every skill's author now reads `Junsang Park (adapted from SuperClaude Framework)` instead of naming only the upstream contributors, since the text was rewritten
+- **sc: the upstream name only credits the source** — MIT licenses the copyright, not trademarks, and "Claude" is Anthropic's mark. The plugin is named `sc`, and titles and headings that used "SuperClaude" as a product name (`SuperClaude Skills for Hermes`, `SuperClaude Integrated Recommendation Engine`, `SuperClaude Recommended Flow`, and others) read without it. The dispatcher skill, the plugin README and this README state that the plugin is not affiliated with or endorsed by the SuperClaude Framework project or Anthropic
+- **sc: simulated panels are labelled** — `/sc:spec-panel` and `/sc:business-panel` speak in the voices of real authors such as Karl Wiegers, Martin Fowler, Clayton Christensen and Michael Porter. Each now opens with a notice that its quotes and dialogue are invented examples, not statements by those people, and tells the agent to say once in its output that the panel is simulated
+- **sc: kept out of the Claude Code marketplace** — Claude Code already has `/sc:*` from SuperClaude itself. In a test on Claude Code 2.1.318, a plugin skill named `sc:load` was hidden by the existing `/sc:load`, while a plugin skill with a new name was added, so listing `sc` would mix the two sets and bring in skills that name Hermes tools
+- **tests: `tests/test_sc_plugin.py`** — 114 cases: manifest fields Hermes accepts, the LICENSE notice order, all 36 skills, portable frontmatter per skill, `/sc:` references that resolve to a skill, attribution-only use of the upstream name, the panel notices, and absence from `marketplace.json`. Full suite: 308 passed
+- **README: mirrors the changes** — the `sc` row in Available Plugins (with a new `For` column), the `sc` section, Hermes install in Quick Start, a Hermes Agent badge, and the repository and tests trees. Two stale passages are fixed: `Using Rules in Other Projects` pointed at the `lazy2work/1.4.0` cache path, which an update removes, and now finds the installed version; the `Adding More Plugins` example used `./your-plugin` as `source` instead of `./plugins/your-plugin`
+- **Version bump**: repository 1.54.0 → 1.55.0 (`marketplace.json` metadata and the badge). `lazy2work` has no changes and stays at 1.54.0, so Claude Code users get no plugin update. `sc` starts at 1.0.0
 
 ### v1.54.0 (2026-10-19)
 
@@ -2002,4 +2055,4 @@ To add a new plugin to this marketplace, create a directory under `plugins/` wit
 
 ## License
 
-Each plugin includes its own license. See individual plugin directories for details.
+Each plugin includes its own license. See individual plugin directories for details. `sc` is derived from SuperClaude Framework, so its [LICENSE](plugins/sc/LICENSE) keeps the upstream copyright notice next to the port's.
